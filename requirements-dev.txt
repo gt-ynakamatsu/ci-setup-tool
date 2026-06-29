@@ -1,0 +1,5 @@
+# 開発・テスト・exe ビルド用（配布 exe の実行には不要）
+pytest>=8.0
+coverage>=7.0
+pyinstaller>=6.0
+pyflakes>=3.0  # 未使用 import / 未定義参照などの静的チェック

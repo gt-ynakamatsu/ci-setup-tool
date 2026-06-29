@@ -1,0 +1,47 @@
+{
+  "project": {
+    "name": "YourProject",
+    "solutionFile": "YourProject.sln",
+    "publishProject": "src/YourProject/YourProject.csproj",
+    "testProject": "",
+    "artifactPrefix": "YourProject"
+  },
+  "storage": {
+    "basePath": "",
+    "logsDir": "logs",
+    "releasesDir": "releases",
+    "testsDir": "tests",
+    "useDateSubfolder": true,
+    "releaseUrl": "",
+    "analysisUrl": "",
+    "logsUrl": "",
+    "testsUrl": ""
+  },
+  "jenkins": {
+    "jobName": "CISetup-CI",
+    "agentLabel": "windows",
+    "cronSchedule": "0 0 * * *",
+    "pollSchedule": "H/5 * * * *",
+    "ciFileServer": "\\\\fileserver\\ci",
+    "teamsCredentialId": "teams-webhook-url",
+    "defaultConfiguration": "Release",
+    "buildTimeoutMinutes": 30,
+    "logRetentionCount": 30,
+    "timezone": "Asia/Tokyo"
+  },
+  "git": {
+    "repositoryUrl": "https://git.example.com/team/YourProject.git",
+    "branch": "main",
+    "credentialId": "internal-git"
+  },
+  "build": {
+    "preset": "dotnet",
+    "profile": "dotnet",
+    "buildCommand": "",
+    "lintCommand": "",
+    "analyzeCommand": "",
+    "publishCommand": "",
+    "testCommand": "",
+    "artifactGlob": ""
+  }
+}

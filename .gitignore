@@ -1,0 +1,20 @@
+dist/
+build/
+*.spec.bak
+__pycache__/
+htmlcov/
+.pytest_cache/
+.coverage
+
+# アイコン試作・デバッグ用の生成物（成果物ではないので push しない）
+assets/icon_candidates/
+assets/icon_sizes/
+assets/_debug_icons/
+assets/_*.ico
+
+# 個人 ID を含むローカル設定（万一混入しても push しない）
+cisetup.local.json
+cisetup.secrets.local.json
+
+# 同一リモートの入れ子クローン（プロジェクト本体ではない）
+ci-setup/

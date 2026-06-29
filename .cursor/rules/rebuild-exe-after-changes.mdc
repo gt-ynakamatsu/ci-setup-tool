@@ -1,0 +1,35 @@
+---
+description: CISetup Python の GUI/ランタイム修正後は dist の exe を必ず再ビルドする
+globs: cisetup/cisetup/**/*.py,cisetup/configure.py,cisetup/cisetup.spec,cisetup/bundled_templates/**/*
+alwaysApply: false
+---
+
+# exe 再ビルド（作業完了前に必須）
+
+`cisetup` の次を変更したら、**コミット・報告の前に** `dist\CISetup.exe` を再ビルドする。
+
+- `cisetup/`（GUI 含む）
+- `configure.py`
+- `cisetup.spec`
+- `bundled_templates/`
+
+## コマンド
+
+```bat
+cd cisetup
+python tools/rebuild_exe.py
+```
+
+または `tools\Build-Exe.bat /nopause`
+
+## 理由
+
+- `Setup-Project.bat` や配布 zip は exe を使う
+- ソースだけ新しくて exe が古いと、タブ UI など旧デザインが表示される
+- `tests/test_exe_freshness.py` が古い exe を検出して pytest を失敗させる
+
+## 作業の締め
+
+1. 関連 pytest を実行
+2. `python tools/rebuild_exe.py`
+3. pytest を再実行（`test_exe_freshness` が通ること）

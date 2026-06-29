@@ -1,93 +1,202 @@
-# CI Setup
+# CISetup Configure（開発者向け）
 
+社内 CI（Jenkins / Git / Teams / ファイルサーバー）の設定を GUI で行うツール。
+Python 製で、配布は **単一 exe**（利用者は Python 不要）。
 
+> 配布された exe を使うだけの方は、zip 内の `README.md`（= [docs/README-dist.md](docs/README-dist.md)）を参照してください。
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 1. 必要なもの
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- Windows
+- Python 3.10 以上（GUI は標準の `tkinter` を使用）
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin http://gt-2222/gitlab/genetec/gt-tools/ci-setup.git
-git branch -M main
-git push -uf origin main
+```powershell
+cd C:\workspace\tools\WindowsApp\cisetup
+python -m pip install -r requirements-dev.txt   # テスト/ビルド用
 ```
 
-## Integrate with your tools
+`requirements.txt` は実行時依存（標準ライブラリのみのため通常は空〜最小）、
+`requirements-dev.txt` は pytest / pytest-cov / PyInstaller などの開発用です。
 
-- [ ] [Set up project integrations](http://gt-2222/gitlab/genetec/gt-tools/ci-setup/-/settings/integrations)
+---
 
-## Collaborate with your team
+## 2. ディレクトリ構成
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+ルートには「エントリ・起動・ビルド設定の正本」だけを置き、補助スクリプトは `tools/`、
+ドキュメントは `docs/` に集約しています。生成物（exe・zip・キャッシュ）は `dist/` ほかに出力され、`.gitignore` 対象です。
 
-## Test and Deploy
+```
+cisetup/
+├── configure.py             … エントリポイント（GUI / --open / --bootstrap / --help）
+├── cisetup.spec          … PyInstaller 設定（exe に bundled_templates を同梱）
+├── start_configure.bat      … 開発用ランチャ(bat)。python 優先・無ければ exe
+├── Configure.ps1            … 開発用ランチャ(PowerShell)。configure.py を起動
+├── Setup-Project.bat        … 初回セットアップ（CI 配置＋GUI）。配布 zip にも同梱
+├── requirements.txt         … 実行時依存（標準ライブラリ中心）
+├── requirements-dev.txt     … 開発時依存（pytest / coverage / pyflakes / pyinstaller）
+├── .gitignore               … 生成物（dist/ build/ htmlcov/ __pycache__ 等）を除外
+├── .coveragerc              … カバレッジ計測設定（source=cisetup, branch）
+│
+├── cisetup/           … アプリ本体（package）
+│   ├── gui/                 … Tkinter GUI
+│   │   ├── app.py           … メインウィンドウ・全アクション
+│   │   ├── layout.py        … 配色・共通ウィジェット
+│   │   ├── commit_dialog.py … コミットメッセージ入力ダイアログ
+│   │   └── tooltip.py       … ヘルプ吹き出し
+│   ├── models.py            … 設定/シークレットのデータモデル + JSON 変換（camelCase）
+│   ├── config_repository.py … 設定の保存・読込（標準/旧レイアウト対応）
+│   ├── paths.py             … リポジトリルート探索・レイアウト判定
+│   ├── project_setup.py     … .sln 自動検出・CI ファイル配置
+│   ├── template_store.py    … bundled_templates の展開（exe では _MEIPASS から）
+│   ├── jenkinsfile_generator.py … Jenkinsfile 生成
+│   ├── ci_preset_catalog.py … ビルドプリセット定義（.NET / Python など）
+│   ├── jenkins_client.py    … Jenkins API（接続/認証情報/ジョブ/エージェント/ビルド）
+│   ├── teams_service.py     … Teams 通知カードの生成・送信
+│   ├── git_service.py       … Git push・secrets ステージ検出
+│   ├── environment_scan.py  … 開発環境スキャン（git/java 等）
+│   ├── recent_project.py    … 直近プロジェクトの記憶
+│   ├── help_texts.py        … GUI ヘルプ文言
+│   ├── app_paths.py         … 設定保存先などのアプリパス
+│   └── process_util.py      … サブプロセス実行ユーティリティ
+│
+├── bundled_templates/       … CI テンプレート正本（exe に同梱）
+│   ├── Jenkinsfile.template
+│   ├── JenkinsJob.config.template.xml
+│   ├── cisetup.config.example.json / cisetup.secrets.local.example.json
+│   └── scripts/             … Jenkins 各ステージの PowerShell（ci-*.ps1）+ TEAMS-WORKFLOW.md
+│
+├── assets/                  … アプリアイコン（exe・ウィンドウ用）
+│   ├── icon.ico             … exe / ウィンドウアイコン（マルチサイズ）
+│   ├── icon.png             … 透過 PNG（フォールバック用）
+│   └── icon_source.png      … 生成元画像（差し替え時はこれを置換）
+│
+├── tools/                   … ビルド・配布・保守スクリプト（開発者専用）
+│   ├── Build-Exe.bat        … exe ビルド（rebuild_exe.py を実行）
+│   ├── rebuild_exe.py       … PyInstaller で dist\CISetup.exe を生成
+│   ├── Package-Distribution.ps1 … exe ビルド + 社内配布 zip 作成
+│   ├── make_icon.py         … icon_source.png から icon.png / icon.ico を生成
+│   ├── smoke_test.py        … C# 版との JSON 互換などを素早く確認
+│   └── adapt_docs_from_legacy.py … 旧ドキュメント移行用（一回限り・通常不要）
+│
+├── tests/                   … pytest 一式（conftest.py + test_*.py）
+├── docs/                    … ドキュメント
+│   ├── README-dist.md       … 配布 zip に同梱する利用者向け README
+│   ├── CI-GUIDE.md          … CI 構築手順書
+│   ├── GUI.md               … GUI 操作
+│   └── CISetup-CI-Guide.marp.md … Marp プレゼン資料
+└── dist/                    … 【生成物】CISetup.exe + 配布 zip
+```
 
-Use the built-in continuous integration in GitLab.
+### ルート直下ファイルの役割
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+| ファイル | 区分 | 役割 |
+|----------|------|------|
+| `configure.py` | エントリ | GUI / CLI の起点。`cisetup.spec` が exe 化する対象 |
+| `cisetup.spec` | ビルド | PyInstaller 設定。`tools/rebuild_exe.py` が参照 |
+| `start_configure.bat` | 開発ランチャ | python 優先で GUI 起動、無ければ同じ場所の exe |
+| `Configure.ps1` | 開発ランチャ | PowerShell から `configure.py` を起動 |
+| `Setup-Project.bat` | 配布＋開発 | 初回セットアップ。**配布 zip に同梱**され exe の隣でも動く |
+| `requirements.txt` | 依存 | 実行時依存 |
+| `requirements-dev.txt` | 依存 | 開発・テスト・ビルド用 |
+| `.gitignore` / `.coveragerc` | 設定 | 除外設定 / カバレッジ設定 |
 
-***
+> 補足: 4 つのランチャ（`configure.py`・`Configure.ps1`・`start_configure.bat`・`Setup-Project.bat`）は
+> いずれも「自分と同じフォルダの `configure.py` / exe」を探す設計のため、ルートに据え置いています（移動するとビルド・配布・起動が壊れます）。
 
-# Editing this README
+---
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## 3. 開発フロー
 
-## Suggestions for a good README
+```powershell
+# GUI を起動して動作確認
+python configure.py
+python configure.py --open C:\work\MyApp
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+# テスト
+python -m pytest tests -q
 
-## Name
-Choose a self-explaining name for your project.
+# スモークテスト（C# 互換の素早い確認）
+python tools/smoke_test.py
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### exe の再ビルド（重要）
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+`cisetup/` ・ `configure.py` ・ `cisetup.spec` ・ `bundled_templates/` を変更したら、
+**作業完了前に必ず exe を再ビルド** してください。古い exe は `tests/test_exe_freshness.py` が検出して失敗させます。
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```powershell
+python tools\rebuild_exe.py
+# または
+.\tools\Build-Exe.bat
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## 4. 配布 zip の作成
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```powershell
+.\tools\Package-Distribution.ps1            # 既定バージョン 1.0.0
+.\tools\Package-Distribution.ps1 -Version 1.1.0
+# => dist\CISetup-<Version>.zip
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+zip の中身（利用者が受け取るもの）:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```
+CISetup-<Version>/
+├── CISetup.exe   ← これだけで GUI 起動（Python 不要）
+├── Setup-Project.bat          ← CI 配置 + GUI 起動（任意）
+├── README.md                  ← 利用者向け（docs/README-dist.md）
+└── docs/                      ← 手順書
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+`bundled_templates/` は exe に埋め込まれるため、zip には個別同梱しません。
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+---
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## 5. コマンドライン（exe / configure.py 共通）
 
-## License
-For open source projects, say how it is licensed.
+```
+configure.py                      # GUI
+configure.py --open <folder>      # フォルダを開いて GUI
+configure.py --bootstrap <folder> # CI ファイルのみ配置（GUI なし）
+configure.py --help
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+---
+
+## 6. ドキュメント索引（どのファイルに何が書いてあるか）
+
+### 6.1 ファイル別の内容
+
+| ファイル | 対象読者 | 主な内容 | こんなときに見る |
+|----------|----------|----------|------------------|
+| [README.md](README.md)（本ファイル） | 開発者 | リポジトリ構成・開発フロー・exe ビルド・配布手順・このドキュメント索引 | コードを直す/exe を作る/zip を配る |
+| [docs/README-dist.md](docs/README-dist.md) | 利用者（exe を使う人） | exe の起動方法・同梱物・初回セットアップ・困ったとき | 配布された exe をとりあえず動かしたい |
+| [docs/GUI.md](docs/GUI.md) | 利用者・開発者 | 設定 GUI の起動方法・操作の流れ・CLI 引数 | GUI の使い方をざっと知りたい |
+| [docs/CI-GUIDE.md](docs/CI-GUIDE.md) | 構築担当者 | **CI 構築の完全手順書**。ファイルサーバー/Teams/Jenkins/エージェント/プロジェクト設定、GATE A〜D、トラブルシューティング、設定値↔JSON 対応 | CI を一から構築する/エラーで詰まった |
+| [docs/CISetup-CI-Guide.marp.md](docs/CISetup-CI-Guide.marp.md) | 構築担当者・説明者 | CI-GUIDE.md をスライド化した Marp プレゼン資料（全体像の説明・勉強会向け） | 全体像を俯瞰したい/人に説明する |
+| [bundled_templates/scripts/TEAMS-WORKFLOW.md](bundled_templates/scripts/TEAMS-WORKFLOW.md) | 構築担当者 | Teams 通知（Power Automate ワークフロー）の設定とカードの形式 | Teams 通知を設定/カスタムしたい |
+
+> exe 本体や各設定項目の意味は、GUI 内の各項目ヘルプ（吹き出し）にも記載しています。
+
+### 6.2 目的別の参照先（知りたいこと → どのファイル）
+
+| 知りたいこと | 参照先 |
+|--------------|--------|
+| CI 全体の仕組み・構成図 | CI-GUIDE.md「1. 全体像」/ marp「1. CI の全体像」 |
+| 構築の最短手順（チェックリスト） | CI-GUIDE.md の GATE A〜D |
+| ファイルサーバー（共有フォルダ）の準備 | CI-GUIDE.md「4. Phase 1」 |
+| Teams Webhook の取得・通知設定 | CI-GUIDE.md「5. Phase 2」/ TEAMS-WORKFLOW.md |
+| Jenkins のインストール・初回セットアップ | CI-GUIDE.md「6.」 |
+| **Jenkins URL がどの画面の URL か** | CI-GUIDE.md「6.9」の注記 / GUI の ⑤ ヘルプ |
+| API Token の発行方法 | CI-GUIDE.md「6.9」 |
+| ポート番号の変更（8086 など） | CI-GUIDE.md「6.10」 |
+| ビルドエージェントの起動・サービス化 | CI-GUIDE.md「8.」 |
+| 設定 GUI の各項目の意味・保存先 | GUI 内ヘルプ / CI-GUIDE.md「9. 設定値↔JSON 対応」 |
+| 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（`CI_FILE_SERVER` は Jenkins 側で設定） |
+| エラー・トラブルの対処 | CI-GUIDE.md「15. トラブルシューティング」 |
+| 配布された exe の使い方（利用者向け） | docs/README-dist.md |
+| コードを直してから exe を再ビルド | README.md「3. 開発フロー」 |
