@@ -72,6 +72,22 @@ def test_build_test_card_payload_no_actions():
     assert "actions" not in card
 
 
+def test_build_test_card_payload_multiple_urls():
+    cfg = CISetupConfig()
+    cfg.project.name = "X"
+    cfg.storage.release_urls = ["https://r1", "https://r2"]
+    cfg.storage.analysis_urls = ["https://a"]
+    data = json.loads(teams_service.build_test_card_payload(cfg))
+    card = data["attachments"][0]["content"]
+    titles = [a["title"] for a in card["actions"]]
+    # 解析は 1 件 → 連番なし、成果物は 2 件 → 連番付き
+    assert "解析レポート (HTML)" in titles
+    assert "成果物フォルダを開く (1)" in titles
+    assert "成果物フォルダを開く (2)" in titles
+    urls = [a["url"] for a in card["actions"]]
+    assert "https://r1" in urls and "https://r2" in urls
+
+
 def test_error_hint_trigger_disabled():
     hint = teams_service._build_error_hint("error WorkflowTriggerIsNotEnabled")
     assert "オフ" in hint

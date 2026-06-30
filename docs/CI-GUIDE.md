@@ -285,6 +285,8 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 | **master / main へマージ（push）時** | pollSCM が変更を検知して自動ビルド（既定 約5分ごとに確認） |
 | **手動実行** | CISetup アプリの「今すぐビルド」ボタン、または Jenkins / API から任意に実行 |
 | ビルド後（毎回） | **静的解析でバグの可能性を自動検出し、危険度別にレポート化（HTML / Markdown / CSV）** |
+| ビルド後（毎回） | **ユニットテスト結果（TRX / サマリ / 失敗ログ）を専用トップレベル `tests/` へ保存（releases/logs と分離）** |
+| ビルド後（毎回・ON 時） | **開発環境一式（チェックアウト済みソース）を zip 化して `source/` へ保存（任意・既定 OFF）** |
 | ビルド成功時 | zip 成果物をファイルサーバーへ保存、Teams に成功通知 |
 | ビルド失敗時 | ログをファイルサーバーへ保存、Teams に失敗通知 |
 
@@ -302,6 +304,8 @@ GUI の「詳細設定 → ビルド種別」で選択します。
 |------|------|----------------------|
 | **.NET**（既定） | .NET ソリューション | `dotnet restore/build/format/publish` を自動実行。Roslyn 静的解析つき |
 | **カスタムコマンド** | FPGA（Vivado 等）・組み込み C/C++・Python など | 各ステップで入力した任意コマンドを PowerShell として実行 |
+
+> **.NET の Release 成果物について**: publish は **framework-dependent**（`*-win-x64.zip`、exe＋DLL のみ）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（ビルド側に .NET SDK が必要なのと同様）。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。
 
 カスタムコマンドで設定する項目（`cisetup.config.json` の `build` セクション）:
 
@@ -445,11 +449,19 @@ flowchart TB
 
 ```
 \\fileserver\ci\
-└── MyApp\
-    ├── releases\20260615\MyApp-42-win-x64.zip
-    ├── analysis\20260615\analysis-report.html
-    └── logs\20260615\build-42.log
+├── MyApp\                          # 成果物・ログ・解析・ソース（プロジェクト配下）
+│   ├── releases\20260615\MyApp-42-win-x64.zip
+│   ├── analysis\20260615\analysis-report.html
+│   ├── logs\20260615\build-42.log
+│   └── source\20260615\MyApp-42-src.zip   # 「開発環境一式を zip 保存」ON 時のみ（毎回）
+└── tests\                         # ユニットテスト結果は専用トップレベルに分離（毎回保存）
+    └── MyApp\20260615\MyApp-42-103000\
+        ├── test-results.trx
+        ├── test-summary.json
+        └── test-failures.log      # 失敗があれば
 ```
+
+> **開発環境一式の zip 保存（任意）:** ④ のチェックボックス「開発環境一式（pull した最新ソース）を zip 化して保存する」を ON にすると、CI が **チェックアウト済みのソースツリー**を毎回 zip 化し、各書き込み先の `source\[日付]\<プレフィックス>-<ビルド番号>-src.zip` へ格納します。zip からは `.git` / `artifacts` / `bin` / `obj` / `.vs` / `node_modules` / `packages` / `TestResults` / `*.user` を除外します。フォルダ名は詳細設定 →「ソースフォルダ名」(`storage.sourceDir`、既定 `source`) で変更できます。
 
 ### 4.3 ゲート（STEP A-1 完了判定）
 
@@ -1415,8 +1427,11 @@ cd C:\Jenkins
 | 欄 | 入力 |
 |----|------|
 | 書き込み先ベース / 保存先（共有フォルダ） | `FILE_SHARE`（例: `\\fileserver\ci`） |
+| 開発環境一式（pull した最新ソース）を zip 化して保存する | チェックで ON（任意・既定 OFF） |
 
-**ゲート:** 画面下部の「保存先プレビュー」に `\\fileserver\ci\プロジェクト名\releases\...` が表示される
+**ゲート:** 画面下部の「保存先プレビュー」に `\\fileserver\ci\プロジェクト名\releases\...` が表示される（ON 時は「開発環境 zip」行も表示）
+
+> **開発環境一式の zip 保存（任意）:** チェックを入れると、CI が毎回チェックアウト済みソースを zip 化して各書き込み先の `source\[日付]\<プレフィックス>-<ビルド番号>-src.zip` に保存します。`.git` / `artifacts` / `bin` / `obj` / `.vs` / `node_modules` / `packages` / `TestResults` / `*.user` は除外。フォルダ名は詳細設定 →「ソースフォルダ名」(`storage.sourceDir`) で変更可。
 
 ##### OneDrive / SharePoint を使う場合（パスと URL の使い分け）
 
@@ -1428,13 +1443,15 @@ cd C:\Jenkins
 | 成果物 / ログ / ユニットテスト / 解析 **URL** | Teams から開く**共有リンク（URL）** | `https://contoso.sharepoint.com/:f:/s/share/xxxx` |
 
 - Jenkins エージェントで OneDrive クライアントが対象ライブラリを同期している必要があります。ローカル同期フォルダへ書けば OneDrive がクラウドへ同期します。
-- 書き込み先ベースに共有 URL を入れると保存時にエラー（または CI で配置スキップ）になります。URL は各 URL 欄へ入れてください。
-- 書き込み先ベース・各 URL 欄ともに、パス/URL を自動判別して結合（`\` / `/`）します。
+- 書き込み先（パス欄）に共有 URL を入れると保存時にエラー（または CI で配置スキップ）になります。URL は各 URL 欄へ入れてください。
+- 書き込み先・各 URL 欄ともに、パス/URL を自動判別して結合（`\` / `/`）します。
 
-> **書き込み先の決め方（後勝ち・重要）:** ④「成果物・ログの保存先（`CI_FILE_SERVER`）」と **詳細設定 → 保存先の詳細 →「書き込み先ベース」(`storage.basePath`)** は **排他**です。**後から入力した方が使われ**、もう一方は GUI が自動でクリアします（書き込み先は常に1つだけ有効）。
-> `CI_FILE_SERVER` を入力した場合は、その下に `\<プロジェクト名>\...` を自動で作って書き込みます。
-> 「書き込み先ベース」を入力した場合は、プロジェクト名を付けずに指定パスへそのまま書き込みます。
-> （古いレガシー設定で両方に値が残っている場合のみ、決定的なタイブレークとして `CI_FILE_SERVER` を優先します。）
+> **書き込み先は「複数」設定できます（重要）:** ④「成果物・ログの保存先（`CI_FILE_SERVER`）」と **詳細設定 → 保存先の詳細 →「書き込み先ベース」(`storage.basePaths`)** は **併用でき**、各欄の右端「＋」で行を増やせます（「−」で削除）。デプロイ時は **設定した全ての書き込み先へコピー** します（相互排他ではありません）。
+> `CI_FILE_SERVER`（複数可）に入れた先は、その下に `\<プロジェクト名>\...` を自動で作って書き込みます。
+> 「書き込み先ベース」（複数可）に入れた先は、プロジェクト名を付けずに指定パスへそのまま書き込みます。
+> 同じパスを両方に入れても重複は 1 つにまとめて配置します。
+>
+> **閲覧用 URL も複数設定できます:** 「成果物 / ログ / ユニットテスト / 解析」の各 URL 欄も「＋」で複数指定でき、Teams 通知では全リンクを（2 件以上なら連番付きで）ボタン表示します。
 
 ##### 個人 ID を Git に push しない仕組み
 
@@ -1442,14 +1459,16 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 
 | 値 | 保存先 | Git に push |
 |----|--------|:-----------:|
-| 書き込み先ベース / `CI_FILE_SERVER` | `cisetup/cisetup.local.json`（**git 非追跡**） | ❌ されない |
+| 書き込み先ベース / `CI_FILE_SERVER`（複数可） | `cisetup/cisetup.local.json`（**git 非追跡**） | ❌ されない |
 | Git URL のユーザー名 | 保存時に自動除去し `cisetup.secrets.local.json` の `gitUsername` へ | ❌ されない |
 | Git URL 本体（ユーザー名なし） | `cisetup.config.json` | ✅ される |
 
-- 書き込み先は GUI のローカルファイルに保持され、`cisetup.config.json` と生成 `Jenkinsfile` には**空**で出力されます。
-- **CI 実行側は Jenkins の `CI_FILE_SERVER` から書き込み先を取得**します。次のいずれかで設定してください（いずれも Jenkins 側に保存され Git には乗りません）。
-  - ジョブの **ビルドパラメータ `CI_FILE_SERVER`** に値を入れて実行
-  - またはエージェント/グローバルの **環境変数 `CI_FILE_SERVER`** を設定（パラメータが空ならこれを使用）
+- 書き込み先（複数）は GUI のローカルファイル `cisetup.local.json`（`basePaths` / `ciFileServers` 配列）に保持され、`cisetup.config.json` と生成 `Jenkinsfile` には**空**で出力されます。
+- **CI 実行側の書き込み先は次の優先順で解決**します（いずれも Git には乗りません）。
+  - ジョブの **ビルドパラメータ `CI_FILE_SERVER`**（単一）を入れて実行 — 指定時はそれを単一の書き込み先として使用
+  - エージェント/グローバルの **環境変数 `CI_FILE_SERVER`**（単一・パラメータが空のとき）
+  - 上記が空なら、エージェント上に `cisetup.local.json` があれば **その全書き込み先（複数）** を使用
+  - ※ 複数先へ確実に配るには、エージェントにも `cisetup.local.json` を配置するのが確実です（Git には含めない運用）。
 - Git URL のユーザー名は除去され、認証は Jenkins 資格情報（`git.credentialId` ＋ secrets のユーザー/パスワード）で行います。
 
 #### ⑤ Jenkins への接続（STEP D-5）
@@ -1466,8 +1485,19 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 
 1. 画面最下部 **「セットアップを実行」** をクリック
 2. コミットメッセージを入力（既定のままで可）→ OK
-3. 進行: 保存 → Jenkins 反映 → Git push
+3. 進行: 保存 → （ローカル）→ Jenkins 反映 → Git push → （テストビルド）
 4. **ゲート:** 「セットアップが完了しました」→ テストビルドを **はい**
+
+> **push 前にローカルで検証したいとき:** 「ローカルでビルド＆テスト（push せず現在のコードを検証）」を ON にすると、
+> 配置済みの `cisetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**して手元のコードを確認できます。
+> **git 操作（fetch / pull / push）は一切行いません**。先に「設定を保存」しておくと最新スクリプトで検証できます。
+>
+> | 項目 | テストビルド | ローカルでビルド＆テスト |
+> |------|--------------|--------------------------|
+> | 実行場所 | Jenkins エージェント | 手元の PC |
+> | 対象コード | **リモート Git** のコード | **ローカルの作業コピー**（未 push 可） |
+> | git 操作 | あり（チェックアウト） | **なし** |
+> | 用途 | 本番経路の確認・Teams 通知 | push 前の素早い動作確認 |
 
 ### 9.2 詳細設定（通常は触らない）
 
@@ -1665,9 +1695,20 @@ Phase 6（exe ①〜⑥）だけ繰り返す。ジョブ名はフォルダを選
 | `jenkins.cronSchedule` | `0 0 * * *`（定期実行） |
 | `jenkins.pollSchedule` | `H/5 * * * *`（マージ検知のポーリング間隔。空で無効） |
 | `jenkins.agentLabel` | 空欄（`agent any`）または `windows` など（ノードの Labels と一致させる） |
-| `jenkins.ciFileServer` | `\\fileserver\ci` |
+| `storage.releaseUrls` / `analysisUrls` / `logsUrls` / `testsUrls` | 閲覧用 URL（配列・複数可）。Teams 通知のボタンに使用 |
+| `storage.archiveSource` | `true`/`false`。開発環境一式（ソース）を zip 化して保存するか（既定 `false`） |
+| `storage.sourceDir` | ソース zip の保存サブフォルダ名（既定 `source`） |
 | `git.repositoryUrl` | `https://git.../MyApp.git` |
 | `git.branch` | `master`（マージ検知の対象ブランチ） |
+
+> 書き込み先（`jenkins.ciFileServers` / `storage.basePaths`）は個人 ID を含みうるため `cisetup.config.json` には**空配列**で出力され、実値は `cisetup.local.json` に保持されます（下表）。旧単一キー（`ciFileServer` / `basePath` / `releaseUrl` …）も読み込み時に配列へ正規化されます。
+
+### cisetup.local.json（Git に入れない・書き込み先の実値）
+
+| キー | 内容 |
+|------|------|
+| `ciFileServers` | 書き込み先（配列）。各先の下に `\<プロジェクト名>\...` を作成 |
+| `basePaths` | 書き込み先（配列）。プロジェクト名を付けずそのまま使用 |
 
 ### cisetup.secrets.local.json（Git に入れない）
 
@@ -1767,6 +1808,20 @@ Console Output の先頭付近に `Waiting for next available executor` や `The
 - 設定アプリ③ Teams「テスト送信」
 - 設定アプリ 詳細設定「ファイルサーバー書き込みテスト」
 - Jenkins Console Output で Git エラー確認
+
+### Test ステージで「テスト ソース ファイルが見つかりません」
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| `指定されたテスト ソース ファイル "...Tests.dll" が見つかりませんでした` → `dotnet test failed (exit code 1)` | 旧 `ci-test.ps1` が `dotnet test --no-build` を使用。テストプロジェクトがビルド対象の `.sln` に含まれていないと DLL が生成されず VSTest が見つけられない | 最新の CISetup では `--no-build` を外し、`dotnet test` 自身に restore/build を任せるよう修正済み。**GUI から最新の config／scripts を再配置し、リモートへ push** すれば解消する（古いコミットのままだと再発） |
+
+### Post Actions の Teams 通知が「Argument types do not match」で失敗
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| `ci-notify-teams.ps1 : Argument types do not match`（`System.ArgumentException`） | Windows PowerShell 5.1 の不具合。関数内で要素を追加した `Generic.List` を `@(...)` で配列化するとこの例外になる | 最新の CISetup では該当箇所（`ci-notify-teams.ps1` のアクション配列、`ci-test.ps1` のテストサマリー）を `.ToArray()` に変更済み。**GUI から再配置 → push** で反映する |
+
+> 上記2件はいずれも「修正は最新スクリプトに入っているが、Jenkins がリモートの**古いコミット**を checkout していると再発する」パターンです。設定アプリでスクリプトを再配置し、push して初めて反映されます。
 
 ---
 

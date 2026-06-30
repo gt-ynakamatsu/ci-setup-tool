@@ -27,15 +27,60 @@ class ProjectConfig:
 
 @dataclass
 class StorageConfig:
-    base_path: str = ""
+    # 書き込み先（base_paths）と閲覧用 URL（*_urls）は複数指定できる（後方互換で単一文字列も読める）。
+    base_paths: list[str] = field(default_factory=list)
     logs_dir: str = "logs"
     releases_dir: str = "releases"
     tests_dir: str = "tests"
+    source_dir: str = "source"
     use_date_subfolder: bool = True
-    release_url: str = ""
-    analysis_url: str = ""
-    logs_url: str = ""
-    tests_url: str = ""
+    # pull した最新ソースツリーを zip 化して保存するか（個人 ID を含まない通常設定）。
+    archive_source: bool = False
+    release_urls: list[str] = field(default_factory=list)
+    analysis_urls: list[str] = field(default_factory=list)
+    logs_urls: list[str] = field(default_factory=list)
+    tests_urls: list[str] = field(default_factory=list)
+
+    # --- 後方互換アクセサ（旧コード/設定の単一文字列向け。先頭要素を見る/設定する）---
+    @property
+    def base_path(self) -> str:
+        return self.base_paths[0] if self.base_paths else ""
+
+    @base_path.setter
+    def base_path(self, value: str) -> None:
+        self.base_paths = _single_to_list(value)
+
+    @property
+    def release_url(self) -> str:
+        return self.release_urls[0] if self.release_urls else ""
+
+    @release_url.setter
+    def release_url(self, value: str) -> None:
+        self.release_urls = _single_to_list(value)
+
+    @property
+    def analysis_url(self) -> str:
+        return self.analysis_urls[0] if self.analysis_urls else ""
+
+    @analysis_url.setter
+    def analysis_url(self, value: str) -> None:
+        self.analysis_urls = _single_to_list(value)
+
+    @property
+    def logs_url(self) -> str:
+        return self.logs_urls[0] if self.logs_urls else ""
+
+    @logs_url.setter
+    def logs_url(self, value: str) -> None:
+        self.logs_urls = _single_to_list(value)
+
+    @property
+    def tests_url(self) -> str:
+        return self.tests_urls[0] if self.tests_urls else ""
+
+    @tests_url.setter
+    def tests_url(self, value: str) -> None:
+        self.tests_urls = _single_to_list(value)
 
 
 @dataclass
@@ -44,12 +89,21 @@ class JenkinsConfig:
     agent_label: str = ""
     cron_schedule: str = "0 0 * * *"
     poll_schedule: str = "H/5 * * * *"
-    ci_file_server: str = r"\\fileserver\ci"
+    # 書き込み先サーバーは複数指定できる（後方互換で単一文字列 ciFileServer も読める）。
+    ci_file_servers: list[str] = field(default_factory=lambda: [r"\\fileserver\ci"])
     teams_credential_id: str = "teams-webhook-url"
     default_configuration: str = "Release"
     build_timeout_minutes: int = 30
     log_retention_count: int = 30
     timezone: str = "Asia/Tokyo"
+
+    @property
+    def ci_file_server(self) -> str:
+        return self.ci_file_servers[0] if self.ci_file_servers else ""
+
+    @ci_file_server.setter
+    def ci_file_server(self, value: str) -> None:
+        self.ci_file_servers = _single_to_list(value)
 
 
 @dataclass
@@ -84,10 +138,56 @@ class CISetupLocal:
 
     OneDrive 等の書き込み先パスは個人名 ID を含むことがあるため、
     コミットされる cisetup.config.json には保存せず、このローカルファイルに保持する。
+    書き込み先は複数指定できる（後方互換で単一文字列キーも読める）。
     """
 
-    base_path: str = ""
-    ci_file_server: str = ""
+    base_paths: list[str] = field(default_factory=list)
+    ci_file_servers: list[str] = field(default_factory=list)
+
+    @property
+    def base_path(self) -> str:
+        return self.base_paths[0] if self.base_paths else ""
+
+    @base_path.setter
+    def base_path(self, value: str) -> None:
+        self.base_paths = _single_to_list(value)
+
+    @property
+    def ci_file_server(self) -> str:
+        return self.ci_file_servers[0] if self.ci_file_servers else ""
+
+    @ci_file_server.setter
+    def ci_file_server(self, value: str) -> None:
+        self.ci_file_servers = _single_to_list(value)
+
+
+# --- 複数値（リスト）ヘルパ：単一文字列⇔リストの正規化と後方互換読み込み ---
+
+def _single_to_list(value: str) -> list[str]:
+    s = (value or "").strip()
+    return [s] if s else []
+
+
+def _as_str_list(value: Any) -> list[str]:
+    """JSON 値（文字列 or 配列）を空要素を除いた文字列リストに正規化する。"""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        s = value.strip()
+        return [s] if s else []
+    if isinstance(value, (list, tuple)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
+
+
+def _coalesce_list(data: dict[str, Any], *camel_keys: str) -> list[str]:
+    """複数形→旧単数形の順にキーを探し、最初に値があるものをリストとして返す。"""
+    for key in camel_keys:
+        if key in data:
+            values = _as_str_list(data[key])
+            if values:
+                return values
+    return []
 
 
 # --- camelCase <-> snake_case 変換（C# 版 JSON と相互運用するため） ---
@@ -129,11 +229,30 @@ def _from_camel_dict(cls: type, data: dict[str, Any] | None) -> Any:
     return cls(**kwargs)
 
 
+def _storage_from_dict(data: dict[str, Any] | None) -> StorageConfig:
+    data = data or {}
+    storage = _from_camel_dict(StorageConfig, data)
+    # 書き込み先・閲覧 URL は複数対応（旧単一キーも読む）。
+    storage.base_paths = _coalesce_list(data, "basePaths", "basePath")
+    storage.release_urls = _coalesce_list(data, "releaseUrls", "releaseUrl")
+    storage.analysis_urls = _coalesce_list(data, "analysisUrls", "analysisUrl")
+    storage.logs_urls = _coalesce_list(data, "logsUrls", "logsUrl")
+    storage.tests_urls = _coalesce_list(data, "testsUrls", "testsUrl")
+    return storage
+
+
+def _jenkins_from_dict(data: dict[str, Any] | None) -> JenkinsConfig:
+    data = data or {}
+    jenkins = _from_camel_dict(JenkinsConfig, data)
+    jenkins.ci_file_servers = _coalesce_list(data, "ciFileServers", "ciFileServer")
+    return jenkins
+
+
 def config_from_dict(data: dict[str, Any]) -> CISetupConfig:
     return CISetupConfig(
         project=_from_camel_dict(ProjectConfig, data.get("project")),
-        storage=_from_camel_dict(StorageConfig, data.get("storage")),
-        jenkins=_from_camel_dict(JenkinsConfig, data.get("jenkins")),
+        storage=_storage_from_dict(data.get("storage")),
+        jenkins=_jenkins_from_dict(data.get("jenkins")),
         git=_from_camel_dict(GitConfig, data.get("git")),
         build=_from_camel_dict(BuildConfig, data.get("build")),
     )
@@ -152,7 +271,11 @@ def secrets_to_dict(secrets: CISetupSecrets) -> dict[str, Any]:
 
 
 def local_from_dict(data: dict[str, Any]) -> CISetupLocal:
-    return _from_camel_dict(CISetupLocal, data)
+    data = data or {}
+    local = CISetupLocal()
+    local.base_paths = _coalesce_list(data, "basePaths", "basePath")
+    local.ci_file_servers = _coalesce_list(data, "ciFileServers", "ciFileServer")
+    return local
 
 
 def local_to_dict(local: CISetupLocal) -> dict[str, Any]:
@@ -191,7 +314,7 @@ def migrate_from_legacy(data: dict[str, Any]) -> CISetupConfig:
     config.project.artifact_prefix = str(data.get("artifactPrefix", "") or "")
     storage = data.get("storage")
     if isinstance(storage, dict):
-        config.storage = _from_camel_dict(StorageConfig, storage)
+        config.storage = _storage_from_dict(storage)
     return config
 
 

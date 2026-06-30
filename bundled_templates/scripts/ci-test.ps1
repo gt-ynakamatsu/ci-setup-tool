@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Configuration = "Release"
 )
 
@@ -114,7 +114,10 @@ function Write-TestSummary {
         failed  = $Counters.Failed
         skipped = $Counters.Skipped
         trxFile = $TrxFile
-        tests   = @($Tests)
+        # NOTE: Windows PowerShell 5.1 では、関数内で要素を追加した List[object] を
+        # @(...) で配列化すると "Argument types do not match" になる既知の不具合がある。
+        # ToArray() を使って回避する。
+        tests   = $Tests.ToArray()
     } | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryPath -Encoding UTF8
 }
 
@@ -154,7 +157,10 @@ function Write-FailureLog {
 }
 
 Write-Host "==> dotnet test ($($ci.TestProject))"
-dotnet test $ci.TestProject -c $Configuration --no-build `
+# --no-build は付けない。テストプロジェクトがソリューション（ci-build.ps1 がビルドする .sln）
+# に含まれていないと bin\<TFM>\*.dll が存在せず VSTest が「テスト ソース ファイルが見つかりません」で
+# 失敗するため、dotnet test 自身にテストプロジェクトの restore/build を任せる。
+dotnet test $ci.TestProject -c $Configuration `
     --results-directory $testDir `
     --logger "trx;LogFileName=test-results.trx" `
     --logger "console;verbosity=normal"

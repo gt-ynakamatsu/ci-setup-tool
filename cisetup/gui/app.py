@@ -17,8 +17,15 @@ from ..jenkins_client import (
     apply_settings,
     test_file_server_write,
 )
+from ..local_ci import LocalCIError, run_local_ci
 from ..models import CISetupConfig, CISetupSecrets
-from ..project_setup import apply_auto_detection, deploy_ci_files, has_solution_file
+from ..project_setup import (
+    apply_auto_detection,
+    count_projects,
+    deploy_ci_files,
+    find_test_project,
+    has_solution_file,
+)
 from ..recent_project import RecentProjectStore
 from .commit_dialog import prompt_commit_message
 from .layout import (
@@ -106,6 +113,93 @@ def _enable_dpi_awareness() -> None:
         pass
 
 
+class MultiValueField:
+    """＋/− で行を増減できる複数入力欄グループ（パス／URL を複数指定するため）。
+
+    各行は [入力欄][参照...（任意）][＋][−]。＋ で空行を追加、− で行を削除する。
+    行が 1 つだけのときは − でクリアのみ（最低 1 行は常に表示）。空行は値取得時に無視。
+    """
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        *,
+        browse: str | None = None,
+        on_change=None,
+        entry_width: int | None = None,
+    ) -> None:
+        self._browse = browse
+        self._on_change = on_change
+        self._entry_width = entry_width
+        try:
+            self._bg = parent.cget("bg")
+        except tk.TclError:
+            self._bg = COLOR_CARD_BG
+        self.container = tk.Frame(parent, bg=self._bg)
+        self.container.pack(fill=tk.X)
+        self._rows: list[dict] = []
+        self._add_row("")
+
+    def _notify(self) -> None:
+        if self._on_change:
+            self._on_change()
+
+    def _add_row(self, value: str = "") -> dict:
+        frame = tk.Frame(self.container, bg=self._bg)
+        frame.pack(fill=tk.X, pady=2)
+        var = tk.StringVar(value=value)
+        var.trace_add("write", lambda *_: self._notify())
+        if self._entry_width:
+            entry = ttk.Entry(frame, textvariable=var, width=self._entry_width, font=font(12))
+        else:
+            entry = ttk.Entry(frame, textvariable=var, font=font(12))
+        entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
+        row = {"var": var, "frame": frame, "entry": entry}
+        if self._browse == "folder":
+            button(frame, "参照...", lambda v=var: self._browse_folder(v), padx=10).pack(
+                side=tk.LEFT, padx=(6, 0)
+            )
+        button(frame, "＋", lambda: self._on_add(), padx=8).pack(side=tk.LEFT, padx=(6, 0))
+        button(frame, "−", lambda r=row: self._on_remove(r), padx=8).pack(side=tk.LEFT, padx=(4, 0))
+        self._rows.append(row)
+        return row
+
+    def _browse_folder(self, var: tk.StringVar) -> None:
+        path = filedialog.askdirectory(title="フォルダを選択")
+        if path:
+            var.set(path)
+
+    def _on_add(self) -> None:
+        self._add_row("")
+        self._notify()
+
+    def _on_remove(self, row: dict) -> None:
+        if len(self._rows) <= 1:
+            row["var"].set("")
+            return
+        row["frame"].destroy()
+        self._rows.remove(row)
+        self._notify()
+
+    def get_values(self) -> list[str]:
+        return [r["var"].get().strip() for r in self._rows if r["var"].get().strip()]
+
+    def set_values(self, values: list[str]) -> None:
+        cleaned = [str(v) for v in (values or []) if str(v).strip()] or [""]
+        for row in self._rows:
+            row["frame"].destroy()
+        self._rows.clear()
+        for value in cleaned:
+            self._add_row(value)
+
+    def focus(self) -> None:
+        if self._rows:
+            try:
+                self._rows[0]["entry"].focus_set()
+            except tk.TclError:
+                pass
+
+
 class ConfigureApp(tk.Tk):
     def __init__(self, initial_repository_root: str | None = None) -> None:
         _enable_dpi_awareness()
@@ -132,12 +226,12 @@ class ConfigureApp(tk.Tk):
         self._loaded_default_configuration = "Release"
         self._fields: dict[str, tk.Variable] = {}
         self._field_widgets: dict[str, tk.Widget] = {}
+        self._multi_fields: dict[str, MultiValueField] = {}
         self._path_status: dict[str, tk.Label] = {}
         self._agent_command = tk.StringVar()
         self._server_log = tk.StringVar()
         self._env_result = tk.StringVar()
         self._loading = False
-        self._syncing_write_target = False
 
         self._build_ui()
         self._initial_load(initial_repository_root)
@@ -208,7 +302,6 @@ class ConfigureApp(tk.Tk):
         self._build_details_expander(content)
 
         self._build_statusbar(outer)
-        self._wire_write_target_exclusivity()
 
     def _build_beginner_card(self, parent: tk.Misc) -> None:
         frame = card(parent, bg=COLOR_BEGINNER_BG, border=COLOR_BEGINNER_BORDER)
@@ -456,16 +549,17 @@ class ConfigureApp(tk.Tk):
             frame,
             "Teams のボタンから開く共有 URL（OneDrive / SharePoint 等）。"
             "ファイルの書き込み先は ④ CI_FILE_SERVER または詳細設定の「書き込み先ベース」"
-            "（同期フォルダ等のパス。後勝ちでどちらか一方が有効）で、ここは閲覧用リンクです。"
+            "（同期フォルダ等のパス）で、ここは閲覧用リンクです。"
+            "各欄は右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します。"
             "テスト失敗時のみカードに失敗テスト名とログボタンが表示されます。",
         ).pack(anchor="w")
         for key, label, help_text in (
-            ("storage.analysis_url", "解析レポート URL", help_texts.ANALYSIS_URL),
-            ("storage.release_url", "成果物フォルダ URL", help_texts.RELEASE_URL),
-            ("storage.logs_url", "ログフォルダ URL", help_texts.LOGS_URL),
-            ("storage.tests_url", "ユニットテストログ URL", help_texts.TESTS_URL),
+            ("storage.analysis_urls", "解析レポート URL", help_texts.ANALYSIS_URL),
+            ("storage.release_urls", "成果物フォルダ URL", help_texts.RELEASE_URL),
+            ("storage.logs_urls", "ログフォルダ URL", help_texts.LOGS_URL),
+            ("storage.tests_urls", "ユニットテストログ URL", help_texts.TESTS_URL),
         ):
-            self._add_field(frame, key, label, help_text, label_width=16)
+            self._add_multi_field(frame, key, label, help_text)
         button(
             frame,
             "テスト送信",
@@ -480,22 +574,30 @@ class ConfigureApp(tk.Tk):
             frame,
             "ビルドした zip や失敗ログを置く共有フォルダです。この下にプロジェクト名のフォルダが自動で作られます。",
         ).pack(anchor="w", pady=(0, 10))
-        row = tk.Frame(frame, bg=COLOR_CARD_BG)
-        row.pack(fill=tk.X, pady=(0, 2))
-        self._register_field("jenkins.ci_file_server")
-        ttk.Entry(row, textvariable=self._fields["jenkins.ci_file_server"], width=64, font=font(12)).pack(
-            side=tk.LEFT, ipady=2
-        )
-        button(
-            row,
-            "参照...",
-            lambda: self._browse_folder("jenkins.ci_file_server"),
-        ).pack(side=tk.LEFT, padx=(8, 0))
+        self._add_multi_field(frame, "jenkins.ci_file_servers", browse="folder")
         hint_label(
             frame,
             "例: \\\\fileserver\\ci（この下に自動でプロジェクト名フォルダを作成）。"
-            "書き込み先は1つだけ有効です。ここに入力すると詳細設定の『書き込み先ベース』は"
-            "自動でクリアされます（後勝ち）。",
+            "右端の「＋」で書き込み先を追加でき、設定した全先に成果物をコピーします。"
+            "「−」で行を削除します。個人 ID を含むパスは Git に push されません。",
+        ).pack(anchor="w")
+        self._archive_source_var = tk.BooleanVar(value=False)
+        cb = tk.Checkbutton(
+            frame,
+            text="開発環境一式（pull した最新ソース）を zip 化して保存する",
+            variable=self._archive_source_var,
+            command=self._on_field_changed,
+            font=font(12),
+            bg=COLOR_CARD_BG,
+            activebackground=COLOR_CARD_BG,
+            anchor="w",
+        )
+        cb.pack(anchor="w", pady=(8, 0))
+        attach_tooltip(cb, help_texts.ARCHIVE_SOURCE)
+        hint_label(
+            frame,
+            "チェックすると CI が .git / artifacts / bin / obj 等を除外してソースツリーを zip 化し、"
+            "保存先の「source」フォルダ（詳細設定で名称変更可）へ格納します。",
         ).pack(anchor="w")
 
     def _build_step_jenkins(self, parent: tk.Misc) -> None:
@@ -531,13 +633,48 @@ class ConfigureApp(tk.Tk):
         section_title(frame, "⑥ セットアップを実行", COLOR_RUN_TITLE).pack(anchor="w", pady=(0, 6))
         tk.Label(
             frame,
-            text="ボタンを押すと「設定の保存 → Jenkins への登録 → Git への push」を順番に自動で行います。完了後、そのままテストビルドもできます。",
+            text="チェックした処理だけを上から順番に実行します。\n"
+            "「テストビルド」は Jenkins がリモート Git のコードをビルドするため、"
+            "最新の変更を確認するときは「Git push」も一緒に有効にしてください"
+            "（push してからビルドする順で実行します）。\n"
+            "「ローカルでビルド＆テスト」は push せずに現在のローカルコードを検証します"
+            "（git 操作なし。push 前の動作確認に便利）。\n"
+            "まず 保存 → Jenkins 反映 だけで設定を反映し、準備ができたら push＋テストビルドで確認する運用がおすすめです。",
             font=font(12),
             fg="#555555",
             bg=COLOR_RUN_BG,
             anchor="w",
+            justify=tk.LEFT,
             wraplength=self._px(860),
         ).pack(anchor="w", pady=(0, 12))
+
+        self._step_save_var = tk.BooleanVar(value=True)
+        self._step_local_var = tk.BooleanVar(value=False)
+        self._step_jenkins_var = tk.BooleanVar(value=True)
+        self._step_push_var = tk.BooleanVar(value=False)
+        self._step_build_var = tk.BooleanVar(value=False)
+        options = tk.Frame(frame, bg=COLOR_RUN_BG)
+        options.pack(anchor="w", pady=(0, 12))
+        for text, var in (
+            ("1. 設定を保存", self._step_save_var),
+            ("ローカルでビルド＆テスト（push せず現在のコードを検証）", self._step_local_var),
+            ("2. Jenkins に反映", self._step_jenkins_var),
+            ("3. Git push", self._step_push_var),
+            ("4. テストビルドを実行", self._step_build_var),
+        ):
+            cb = tk.Checkbutton(
+                options,
+                text=text,
+                variable=var,
+                font=font(12),
+                bg=COLOR_RUN_BG,
+                activebackground=COLOR_RUN_BG,
+                anchor="w",
+            )
+            cb.pack(anchor="w")
+            if var is self._step_local_var:
+                attach_tooltip(cb, help_texts.LOCAL_BUILD_TEST)
+
         row = tk.Frame(frame, bg=COLOR_RUN_BG)
         row.pack(anchor="w")
         primary_button(
@@ -562,6 +699,18 @@ class ConfigureApp(tk.Tk):
             activebackground=COLOR_RUN_BG,
             anchor="w",
         ).pack(anchor="w", pady=(12, 0))
+        tk.Label(
+            frame,
+            text="ローカルビルド＆テストの実行ログ",
+            font=font(12, bold=True),
+            bg=COLOR_RUN_BG,
+            anchor="w",
+        ).pack(anchor="w", pady=(12, 2))
+        self._run_log_text = tk.Text(
+            frame, height=8, wrap=tk.WORD, font=mono_font(12), relief=tk.SOLID, borderwidth=1,
+            highlightthickness=0, background="#FFFFFF",
+        )
+        self._run_log_text.pack(fill=tk.X)
 
     def _build_details_expander(self, parent: ttk.Frame) -> None:
         exp = Expander(parent, "詳細設定（ふだんは開かなくて OK・自動入力されています）")
@@ -652,7 +801,8 @@ class ConfigureApp(tk.Tk):
             )
         hint_label(
             frame,
-            "テスト対象を空にすると CI の Test ステージはスキップされます。*Tests.csproj がある場合はフォルダ選択時に自動入力されます。"
+            "テスト対象を空にすると CI の Test ステージはスキップされます。"
+            "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます。"
             "（各欄の右側に実在チェックを表示します）",
         ).pack(anchor="w")
         btn_row = tk.Frame(frame, bg=COLOR_CARD_BG)
@@ -680,17 +830,22 @@ class ConfigureApp(tk.Tk):
     def _build_details_storage(self, parent: tk.Frame) -> None:
         frame = card(parent)
         step_title(frame, "保存先の詳細").pack(anchor="w", pady=(0, 8))
-        self._add_field(
+        self._add_multi_field(
             frame,
-            "storage.base_path",
-            "書き込み先ベース (任意・後勝ち)",
+            "storage.base_paths",
+            "書き込み先ベース (任意・複数可)",
             help_texts.STORAGE_BASE_PATH,
-            label_width=22,
             browse="folder",
         )
+        hint_label(
+            frame,
+            "④ CI_FILE_SERVER と併用でき、両方に入れた全先へコピーします（相互排他ではありません）。"
+            "「＋」で追加、「−」で削除。個人 ID を含むパスは Git に push されません。",
+        ).pack(anchor="w")
         self._add_field(frame, "storage.logs_dir", "ログフォルダ名", help_texts.LOGS_DIR, label_width=22)
         self._add_field(frame, "storage.releases_dir", "成果物フォルダ名", help_texts.RELEASES_DIR, label_width=22)
         self._add_field(frame, "storage.tests_dir", "テスト成果物フォルダ名", help_texts.TESTS_DIR, label_width=22)
+        self._add_field(frame, "storage.source_dir", "ソースフォルダ名", help_texts.SOURCE_DIR, label_width=22)
         row = tk.Frame(frame, bg=COLOR_CARD_BG)
         row.pack(fill=tk.X, pady=4)
         self._use_date_var = tk.BooleanVar(value=True)
@@ -712,13 +867,41 @@ class ConfigureApp(tk.Tk):
         self._preview_logs = tk.StringVar()
         self._preview_releases = tk.StringVar()
         self._preview_tests = tk.StringVar()
+        self._preview_source = tk.StringVar()
+        tk.Label(
+            preview,
+            text="レイアウト例（先頭の書き込み先・他の先も同じ構造）",
+            font=font(11),
+            bg=COLOR_CARD_BG,
+            fg=COLOR_DESC,
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 4))
         for title, var in (
             ("失敗時（ログ）", self._preview_logs),
             ("成功時（成果物 zip）", self._preview_releases),
-            ("失敗時（テスト成果物）", self._preview_tests),
+            ("毎回（テスト成果物）", self._preview_tests),
+            ("毎回（開発環境 zip・有効時）", self._preview_source),
         ):
             tk.Label(preview, text=title, font=font(12, bold=True), bg=COLOR_CARD_BG, anchor="w").pack(anchor="w")
             ttk.Entry(preview, textvariable=var, state="readonly", font=font(12)).pack(fill=tk.X, pady=(4, 8))
+        tk.Label(
+            preview,
+            text="全書き込み先（この全てにコピー / ④はプロジェクト名を付与）",
+            font=font(12, bold=True),
+            bg=COLOR_CARD_BG,
+            anchor="w",
+        ).pack(anchor="w")
+        self._preview_targets = tk.StringVar()
+        tk.Label(
+            preview,
+            textvariable=self._preview_targets,
+            font=mono_font(11),
+            bg=COLOR_CARD_BG,
+            fg=COLOR_DESC,
+            anchor="w",
+            justify=tk.LEFT,
+            wraplength=self._px(820),
+        ).pack(anchor="w", pady=(4, 0))
 
     def _build_details_ci_job(self, parent: tk.Frame) -> None:
         frame = card(parent)
@@ -840,39 +1023,27 @@ class ConfigureApp(tk.Tk):
             self._fields[key] = var
         return self._fields[key]
 
-    def _wire_write_target_exclusivity(self) -> None:
-        """④ CI_FILE_SERVER と詳細設定の書き込み先ベースを相互排他にする（後勝ち）。"""
-        self._fields["jenkins.ci_file_server"].trace_add(
-            "write",
-            lambda *_: self._on_write_target_edited(
-                "jenkins.ci_file_server", "storage.base_path"
-            ),
-        )
-        self._fields["storage.base_path"].trace_add(
-            "write",
-            lambda *_: self._on_write_target_edited(
-                "storage.base_path", "jenkins.ci_file_server"
-            ),
-        )
-
-    def _on_write_target_edited(self, edited: str, other: str) -> None:
-        if self._loading or self._syncing_write_target:
-            return
-        if not self._fields[edited].get().strip():
-            return
-        if not self._fields[other].get().strip():
-            return
-        self._syncing_write_target = True
+    def _add_multi_field(
+        self,
+        parent: tk.Misc,
+        key: str,
+        label: str = "",
+        help_text: str = "",
+        browse: str | None = None,
+    ) -> MultiValueField:
+        """＋/− で増減できる複数入力欄グループを追加する（書き込み先・閲覧 URL 用）。"""
         try:
-            self._fields[other].set("")
-        finally:
-            self._syncing_write_target = False
-        label = (
-            "詳細設定の『書き込み先ベース』"
-            if other == "storage.base_path"
-            else "④ CI_FILE_SERVER"
-        )
-        self._set_status(f"後勝ち: {label} をクリアしました（書き込み先は1つだけ有効です）")
+            bg = parent.cget("bg")
+        except tk.TclError:
+            bg = COLOR_CARD_BG
+        if label:
+            lbl = tk.Label(parent, text=label, anchor="w", bg=bg, font=font(12))
+            lbl.pack(anchor="w", pady=(6, 0))
+            if help_text:
+                attach_tooltip(lbl, help_text)
+        field = MultiValueField(parent, browse=browse, on_change=self._on_field_changed)
+        self._multi_fields[key] = field
+        return field
 
     def _add_field(
         self,
@@ -980,7 +1151,7 @@ class ConfigureApp(tk.Tk):
         self._set_status("CI ファイルを再配置しました。")
 
     def _redetect_project(self) -> None:
-        """空欄・プレースホルダだけを .sln から再検出して補完する（既存入力は保持）。"""
+        """.sln から再検出して補完・修正する（実在しないパスも探し直す。有効な入力は保持）。"""
         root = self._ensure_repo()
         self._form_to_config()
         before = (
@@ -1000,10 +1171,17 @@ class ConfigureApp(tk.Tk):
         )
         self._config_to_form()
         self._update_preview()
-        if before == after:
-            self._set_status("再検出: 補完できる空欄はありませんでした。")
+        if before != after:
+            self._set_status("再検出: 値を自動入力・修正しました（有効な入力は保持）。")
+            return
+        # 変化なし。csproj が見つからない場合は、選択フォルダがリポジトリルートか確認を促す。
+        if count_projects(root) == 0:
+            self._set_status(
+                "再検出: .sln 内のプロジェクトも .csproj も見つかりません。"
+                "選択フォルダがリポジトリのルート（.sln と同じ階層）か確認してください。"
+            )
         else:
-            self._set_status("再検出: 空欄を自動入力しました（既存の入力は保持）。")
+            self._set_status("再検出: 変更点はありませんでした（既に有効な値です）。")
 
     def _load_repository(self, repository_root: Path) -> None:
         self._loading = True
@@ -1040,19 +1218,14 @@ class ConfigureApp(tk.Tk):
             "project.publish_project": c.project.publish_project,
             "project.test_project": c.project.test_project,
             "project.artifact_prefix": c.project.artifact_prefix,
-            "storage.base_path": c.storage.base_path,
             "storage.logs_dir": c.storage.logs_dir,
             "storage.releases_dir": c.storage.releases_dir,
             "storage.tests_dir": c.storage.tests_dir,
-            "storage.release_url": c.storage.release_url,
-            "storage.analysis_url": c.storage.analysis_url,
-            "storage.logs_url": c.storage.logs_url,
-            "storage.tests_url": c.storage.tests_url,
+            "storage.source_dir": c.storage.source_dir,
             "jenkins.job_name": c.jenkins.job_name,
             "jenkins.agent_label": c.jenkins.agent_label,
             "jenkins.cron_schedule": c.jenkins.cron_schedule,
             "jenkins.poll_schedule": c.jenkins.poll_schedule,
-            "jenkins.ci_file_server": c.jenkins.ci_file_server,
             "jenkins.teams_credential_id": c.jenkins.teams_credential_id,
             "jenkins.timezone": c.jenkins.timezone,
             "jenkins.build_timeout_minutes": str(c.jenkins.build_timeout_minutes),
@@ -1077,7 +1250,20 @@ class ConfigureApp(tk.Tk):
             if key in self._fields:
                 self._fields[key].set(value or "")
 
+        multi_values = {
+            "jenkins.ci_file_servers": c.jenkins.ci_file_servers,
+            "storage.base_paths": c.storage.base_paths,
+            "storage.release_urls": c.storage.release_urls,
+            "storage.analysis_urls": c.storage.analysis_urls,
+            "storage.logs_urls": c.storage.logs_urls,
+            "storage.tests_urls": c.storage.tests_urls,
+        }
+        for key, values in multi_values.items():
+            if key in self._multi_fields:
+                self._multi_fields[key].set_values(list(values))
+
         self._use_date_var.set(c.storage.use_date_subfolder)
+        self._archive_source_var.set(c.storage.archive_source)
         is_custom = c.build.profile.lower() == "custom"
         self._profile_var.set(
             "カスタムコマンド（FPGA・C/C++・Python など任意）"
@@ -1095,6 +1281,10 @@ class ConfigureApp(tk.Tk):
         def get(key: str) -> str:
             return self._fields[key].get().strip()
 
+        def get_multi(key: str) -> list[str]:
+            field = self._multi_fields.get(key)
+            return field.get_values() if field else []
+
         c = self._config
         c.project.name = get("project.name")
         c.project.solution_file = self._normalize_rel(get("project.solution_file"))
@@ -1102,21 +1292,23 @@ class ConfigureApp(tk.Tk):
         c.project.test_project = self._normalize_rel(get("project.test_project"))
         c.project.artifact_prefix = get("project.artifact_prefix")
 
-        c.storage.base_path = get("storage.base_path")
+        c.storage.base_paths = get_multi("storage.base_paths")
         c.storage.logs_dir = get("storage.logs_dir") or "logs"
         c.storage.releases_dir = get("storage.releases_dir") or "releases"
         c.storage.tests_dir = get("storage.tests_dir") or "tests"
-        c.storage.release_url = get("storage.release_url")
-        c.storage.analysis_url = get("storage.analysis_url")
-        c.storage.logs_url = get("storage.logs_url")
-        c.storage.tests_url = get("storage.tests_url")
+        c.storage.source_dir = get("storage.source_dir") or "source"
+        c.storage.release_urls = get_multi("storage.release_urls")
+        c.storage.analysis_urls = get_multi("storage.analysis_urls")
+        c.storage.logs_urls = get_multi("storage.logs_urls")
+        c.storage.tests_urls = get_multi("storage.tests_urls")
         c.storage.use_date_subfolder = bool(self._use_date_var.get())
+        c.storage.archive_source = bool(self._archive_source_var.get())
 
         c.jenkins.job_name = get("jenkins.job_name")
         c.jenkins.agent_label = get("jenkins.agent_label")
         c.jenkins.cron_schedule = get("jenkins.cron_schedule")
         c.jenkins.poll_schedule = get("jenkins.poll_schedule")
-        c.jenkins.ci_file_server = get("jenkins.ci_file_server")
+        c.jenkins.ci_file_servers = get_multi("jenkins.ci_file_servers")
         c.jenkins.teams_credential_id = get("jenkins.teams_credential_id")
         c.jenkins.timezone = get("jenkins.timezone")
         c.jenkins.build_timeout_minutes = _safe_int(get("jenkins.build_timeout_minutes"), 30)
@@ -1161,6 +1353,21 @@ class ConfigureApp(tk.Tk):
             self._preview_logs.set(logs)
             self._preview_releases.set(releases)
             self._preview_tests.set(tests)
+            source_path = self._repo.build_source_preview(self._config)
+            self._preview_source.set(
+                source_path
+                if self._config.storage.archive_source
+                else f"（無効）{source_path}"
+            )
+            target_roots = self._repo.build_target_roots(self._config)
+            if target_roots:
+                lines = [
+                    base if base == root else f"{base}  →  {root}"
+                    for base, root in target_roots
+                ]
+                self._preview_targets.set("\n".join(lines))
+            else:
+                self._preview_targets.set("(未設定 — ④ か『書き込み先ベース』を入力)")
         except (ValueError, KeyError):
             pass
         self._update_path_statuses()
@@ -1313,6 +1520,28 @@ class ConfigureApp(tk.Tk):
         ):
             raise ValueError("Jenkins URL / ユーザー名 / API Token を入力してください。")
 
+    def _confirm_test_project(self) -> bool:
+        """テスト対象が未設定なのにリポジトリにテスト csproj がある場合、警告して続行確認する。
+
+        戻り値 True で続行、False で中断（呼び出し側は処理を中止する）。
+        """
+        if self._config.build.profile.lower() == "custom":
+            return True
+        if self._config.project.test_project.strip():
+            return True
+        if self._repository_root is None:
+            return True
+        found = find_test_project(self._repository_root, self._config.project.name)
+        if not found:
+            return True
+        return self._ask(
+            "テスト対象が未設定です",
+            "「テスト対象 (.csproj)」が未設定のため、CI ではユニットテストがスキップされます。\n\n"
+            f"リポジトリにテストプロジェクトが見つかりました:\n  {found}\n\n"
+            "このまま続行しますか？\n"
+            "（「いいえ」で中断 →「自動入力をやり直す（再検出）」で設定できます）",
+        )
+
     def _sync_saved_fields(self) -> None:
         """save_all 後、無害化された Git URL と移動済みユーザー名を画面へ反映する。"""
         if "git.repository_url" in self._fields:
@@ -1323,6 +1552,9 @@ class ConfigureApp(tk.Tk):
     def _save_only(self) -> None:
         root = self._ensure_repo()
         self._form_to_config()
+        if not self._confirm_test_project():
+            self._set_status("保存を中断しました（テスト対象を設定してください）")
+            return
         self._repo.save_all(root, self._config, self._secrets)
         self._sync_saved_fields()
         self._info(
@@ -1344,6 +1576,9 @@ class ConfigureApp(tk.Tk):
         root = self._ensure_repo()
         self._form_to_config()
         self._require_jenkins_secrets()
+        if not self._confirm_test_project():
+            self._set_status("反映を中断しました（テスト対象を設定してください）")
+            return
         self._repo.save_all(root, self._config, self._secrets)
         self._sync_saved_fields()
         apply_settings(self._config, self._secrets)
@@ -1358,13 +1593,21 @@ class ConfigureApp(tk.Tk):
 
     def _test_file_server(self) -> None:
         self._form_to_config()
-        unc = self._config.jenkins.ci_file_server.strip() or self._config.storage.base_path.strip()
-        message = test_file_server_write(unc)
-        self._info("ファイルサーバー", message)
-        self._set_status("ファイルサーバー書き込み OK")
+        targets = self._repo.effective_write_targets(self._config)
+        if not targets:
+            raise ValueError("書き込み先を入力してください（④ CI_FILE_SERVER、または詳細設定の書き込み先ベース）。")
+        messages = []
+        for unc in targets:
+            messages.append(f"[{unc}]\n{test_file_server_write(unc)}")
+        self._info("ファイルサーバー", "\n\n".join(messages))
+        self._set_status(f"ファイルサーバー書き込み OK（{len(targets)} 件）")
 
     def _git_push(self) -> None:
         root = self._ensure_repo()
+        self._form_to_config()
+        if not self._confirm_test_project():
+            self._set_status("push を中断しました（テスト対象を設定してください）")
+            return
         if not self._ask(
             "Git push",
             "CI 関連ファイルだけ commit / push します。\n"
@@ -1374,7 +1617,6 @@ class ConfigureApp(tk.Tk):
         commit_message = self._prompt_commit()
         if commit_message is None:
             return
-        self._form_to_config()
         self._repo.save_all(root, self._config, self._secrets)
         self._sync_saved_fields()
         staged = git_service.push_ci_files(root, commit_message)
@@ -1384,27 +1626,84 @@ class ConfigureApp(tk.Tk):
     def _run_setup(self) -> None:
         root = self._ensure_repo()
         self._form_to_config()
-        self._require_jenkins_secrets()
-        if not self._config.git.repository_url.strip():
-            raise ValueError("Git リポジトリ URL を入力してください。")
-        if not self._ask(
-            "一括セットアップ",
-            "次を順番に実行します。\n\n  1. 設定を保存\n  2. Jenkins に反映\n  3. Git push\n\n続行しますか？",
-        ):
+
+        do_save = self._step_save_var.get()
+        do_local = self._step_local_var.get()
+        do_jenkins = self._step_jenkins_var.get()
+        do_build = self._step_build_var.get()
+        do_push = self._step_push_var.get()
+        if not (do_save or do_local or do_jenkins or do_build or do_push):
+            raise ValueError("実行する処理を 1 つ以上選んでください。")
+        # 「Jenkins に反映」「Git push」は最新のローカル保存（config.json / Jenkinsfile / scripts 再生成）が
+        # 前提。単独の各ボタンと同様に必ず保存してから実行する（保存をスキップすると古い定義のまま
+        # push / 反映されてしまうため）。「ローカルでビルド＆テスト」は配置済みスクリプトをそのまま
+        # 実行する純粋なローカル処理のため、保存は強制しない（git 操作も Jenkins も使わない）。
+        if do_jenkins or do_push:
+            do_save = True
+
+        if (do_save or do_local or do_jenkins or do_build) and not self._confirm_test_project():
+            self._set_status("セットアップを中断しました（テスト対象を設定してください）")
             return
-        commit_message = self._prompt_commit()
-        if commit_message is None:
+        if do_jenkins or do_build:
+            self._require_jenkins_secrets()
+        if do_push and not self._config.git.repository_url.strip():
+            raise ValueError("Git リポジトリ URL を入力してください。")
+
+        steps: list[tuple[str, str]] = []
+        if do_save:
+            steps.append(("save", "設定を保存"))
+        if do_local:
+            steps.append(("local", "ローカルでビルド＆テスト"))
+        if do_jenkins:
+            steps.append(("jenkins", "Jenkins に反映"))
+        if do_push:
+            steps.append(("push", "Git push"))
+        if do_build:
+            steps.append(("build", "テストビルドを実行"))
+
+        plan = "\n".join(f"  {i}. {label}" for i, (_, label) in enumerate(steps, 1))
+        if not self._ask("セットアップを実行", f"次を順番に実行します。\n\n{plan}\n\n続行しますか？"):
             return
 
-        self._set_status("1/3 設定を保存しています...")
-        self._repo.save_all(root, self._config, self._secrets)
-        self._sync_saved_fields()
-        self._set_status("2/3 Jenkins に反映しています...")
-        apply_settings(self._config, self._secrets)
-        self._set_status("3/3 Git に push しています...")
-        git_service.push_ci_files(root, commit_message)
+        commit_message = None
+        if do_push:
+            commit_message = self._prompt_commit()
+            if commit_message is None:
+                return
+
+        total = len(steps)
+        for index, (kind, label) in enumerate(steps, 1):
+            self._set_status(f"{index}/{total} {label}...")
+            if kind == "save":
+                self._repo.save_all(root, self._config, self._secrets)
+                self._sync_saved_fields()
+            elif kind == "local":
+                self._run_local_build_test(root)
+            elif kind == "jenkins":
+                apply_settings(self._config, self._secrets)
+            elif kind == "build":
+                self._build_now()
+            elif kind == "push":
+                git_service.push_ci_files(root, commit_message)
+
         self._set_status("セットアップが完了しました。")
-        self._info("一括セットアップ", "セットアップが完了しました。\n「今すぐビルド」でビルドと Teams 通知を確認できます。")
+        done = "\n".join(f"・{label}" for _, label in steps)
+        suffix = "" if do_push else "\n\nGit push は実行していません。動作確認後に「Git push」を付けて再実行してください。"
+        self._info("セットアップ", f"選択した処理が完了しました:\n\n{done}{suffix}")
+
+    def _run_local_build_test(self, root: Path) -> None:
+        """配置済み ci-build.ps1 → ci-test.ps1 をローカルで実行する（git 操作なし）。
+
+        出力はバックグラウンドスレッドから ``after`` 経由で実行ログ欄へ流し込み、
+        UI を固めないようにする（他のアクションと同じスレッド方式）。
+        """
+        configuration = self._loaded_default_configuration or "Release"
+        self.after(0, lambda: self._set_text(self._run_log_text, ""))
+
+        def emit(line: str) -> None:
+            self.after(0, lambda value=line: self._append_text(self._run_log_text, value))
+
+        run_local_ci(root, configuration=configuration, on_output=emit)
 
     def _build_now(self) -> None:
         self._form_to_config()
@@ -1499,6 +1798,10 @@ class ConfigureApp(tk.Tk):
         widget.delete("1.0", tk.END)
         widget.insert("1.0", text)
 
+    def _append_text(self, widget: tk.Text, text: str) -> None:
+        widget.insert(tk.END, text + "\n")
+        widget.see(tk.END)
+
     def _set_status(self, text: str) -> None:
         self.after(0, lambda: self._status.configure(text=text))
 
@@ -1507,18 +1810,15 @@ class ConfigureApp(tk.Tk):
         exp = getattr(self, "_details_expander", None)
         if exp is not None:
             exp.open()
-        widget = self._field_widgets.get("storage.base_path")
-        if widget is not None:
-            try:
-                widget.focus_set()
-            except tk.TclError:
-                pass
+        field = self._multi_fields.get("storage.base_paths")
+        if field is not None:
+            field.focus()
 
     def _run_async(self, func) -> None:
         def worker() -> None:
             try:
                 func()
-            except (ValueError, JenkinsError, git_service.GitError, OSError) as exc:
+            except (ValueError, JenkinsError, LocalCIError, git_service.GitError, OSError) as exc:
                 msg = str(exc)
                 # 「書き込み先ベース」に残った URL が原因のときは詳細設定を開いて気づけるようにする。
                 if "書き込み先ベース" in msg:

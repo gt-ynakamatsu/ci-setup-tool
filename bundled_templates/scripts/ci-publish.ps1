@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Configuration = "Release",
     [string]$Version = ""
 )
@@ -91,6 +91,30 @@ if (Test-Path $releaseDir) {
 
 New-Item -ItemType Directory -Force -Path $publishDir, $releaseDir | Out-Null
 
+# publishProject はリポジトリルートからの相対パス想定。存在しない場合は MSB1009 になる前に
+# 明確なエラーを出し、リポジトリ内の .csproj 候補を提示して設定修正を促す。
+$publishProjectPath = if ([System.IO.Path]::IsPathRooted($ci.PublishProject)) {
+    $ci.PublishProject
+} else {
+    Join-Path $ci.Root $ci.PublishProject
+}
+if (-not (Test-Path $publishProjectPath)) {
+    $candidates = Get-ChildItem -Path $ci.Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.FullName.Substring($ci.Root.Length).TrimStart('\', '/') }
+    $list = if ($candidates) { ($candidates | ForEach-Object { "  - $_" }) -join [Environment]::NewLine } else { "  (.csproj が見つかりません)" }
+    throw @"
+Publish 対象のプロジェクトが見つかりません: $($ci.PublishProject)
+（探索パス: $publishProjectPath）
+
+リポジトリ内の .csproj 候補:
+$list
+
+GUI の『公開プロジェクト (publishProject)』を、リポジトリルートからの正しい相対パスに修正してください。
+"@
+}
+
+# framework-dependent publish（.NET ランタイムは同梱しない）。
+# 実行 PC 側に対応する .NET ランタイムが入っている前提の運用。
 $publishArgs = @(
     "publish",
     $ci.PublishProject,
@@ -106,6 +130,9 @@ if ($Version) {
 
 Write-Host "==> Publish"
 dotnet @publishArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "dotnet publish failed (exit code $LASTEXITCODE)."
+}
 
 $prefix = $ci.ArtifactPrefix
 $zipName = if ($Version) { "$prefix-$Version-win-x64.zip" } else { "$prefix-win-x64.zip" }

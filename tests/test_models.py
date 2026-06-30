@@ -29,12 +29,74 @@ def test_split_repository_url():
 
 
 def test_local_roundtrip():
-    local = CISetupLocal(base_path=r"C:\OneDrive\CI", ci_file_server=r"\\srv\ci")
+    local = CISetupLocal(base_paths=[r"C:\OneDrive\CI"], ci_file_servers=[r"\\srv\ci"])
     data = local_to_dict(local)
-    assert data["basePath"] == r"C:\OneDrive\CI"
-    assert data["ciFileServer"] == r"\\srv\ci"
+    assert data["basePaths"] == [r"C:\OneDrive\CI"]
+    assert data["ciFileServers"] == [r"\\srv\ci"]
     assert local_from_dict(data) == local
     assert local_from_dict({}) == CISetupLocal()
+    # 旧単一キー（basePath / ciFileServer）も読める（後方互換）
+    legacy = local_from_dict({"basePath": r"C:\X", "ciFileServer": r"\\s\c"})
+    assert legacy.base_paths == [r"C:\X"]
+    assert legacy.ci_file_servers == [r"\\s\c"]
+
+
+def test_storage_multi_value_roundtrip_and_legacy():
+    # 配列キーは配列のまま、旧単一キーは 1 要素リストへ正規化される
+    cfg = config_from_dict(
+        {
+            "storage": {
+                "basePaths": [r"C:\A", r"\\srv\b"],
+                "releaseUrls": ["https://r1", "https://r2"],
+            },
+            "jenkins": {"ciFileServers": [r"\\s1\ci", r"\\s2\ci"]},
+        }
+    )
+    assert cfg.storage.base_paths == [r"C:\A", r"\\srv\b"]
+    assert cfg.storage.release_urls == ["https://r1", "https://r2"]
+    assert cfg.jenkins.ci_file_servers == [r"\\s1\ci", r"\\s2\ci"]
+    # 出力は配列キー
+    out = config_to_dict(cfg)
+    assert out["storage"]["basePaths"] == [r"C:\A", r"\\srv\b"]
+    assert out["jenkins"]["ciFileServers"] == [r"\\s1\ci", r"\\s2\ci"]
+
+    # 旧単一キー（string）も読める
+    legacy = config_from_dict(
+        {
+            "storage": {"basePath": r"C:\Only", "analysisUrl": "https://a"},
+            "jenkins": {"ciFileServer": r"\\srv\only"},
+        }
+    )
+    assert legacy.storage.base_paths == [r"C:\Only"]
+    assert legacy.storage.analysis_urls == ["https://a"]
+    assert legacy.jenkins.ci_file_servers == [r"\\srv\only"]
+    # 後方互換プロパティ（先頭要素）
+    assert legacy.storage.base_path == r"C:\Only"
+    assert legacy.jenkins.ci_file_server == r"\\srv\only"
+
+
+def test_storage_singular_property_setter():
+    cfg = config_from_dict({})
+    cfg.storage.base_path = r"C:\Set"
+    assert cfg.storage.base_paths == [r"C:\Set"]
+    cfg.storage.base_path = ""
+    assert cfg.storage.base_paths == []
+
+
+def test_archive_source_roundtrip_and_default():
+    # 既定値（旧設定に無いケース）
+    cfg = config_from_dict({})
+    assert cfg.storage.archive_source is False
+    assert cfg.storage.source_dir == "source"
+    # camelCase で round-trip
+    cfg.storage.archive_source = True
+    cfg.storage.source_dir = "src-snapshot"
+    out = config_to_dict(cfg)
+    assert out["storage"]["archiveSource"] is True
+    assert out["storage"]["sourceDir"] == "src-snapshot"
+    restored = config_from_dict(out)
+    assert restored.storage.archive_source is True
+    assert restored.storage.source_dir == "src-snapshot"
 
 EXAMPLE = (
     Path(__file__).resolve().parent.parent

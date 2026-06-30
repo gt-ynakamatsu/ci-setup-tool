@@ -52,39 +52,78 @@ def test_config_to_form(app):
 
 
 def test_update_preview(app):
-    app._fields["jenkins.ci_file_server"].set(r"\\srv\ci")
-    app._fields["storage.base_path"].set("")
+    app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\srv\ci"])
+    app._multi_fields["storage.base_paths"].set_values([])
     app._fields["project.name"].set("Demo")
     app._update_preview()
     assert r"\\srv\ci\Demo" in app._preview_logs.get()
 
 
-def test_write_target_ci_file_server_clears_base_path(app):
-    # base_path が入っている状態で ④ を入力 → base_path が自動クリア（後勝ち）
-    app._fields["storage.base_path"].set(r"C:\local\CI")
-    app._fields["jenkins.ci_file_server"].set(r"\\srv\ci")
-    assert app._fields["storage.base_path"].get() == ""
-    assert app._fields["jenkins.ci_file_server"].get() == r"\\srv\ci"
+def test_multi_field_add_remove(app):
+    # ＋ で行追加、− で行削除。get_values は空行を無視する。
+    mf = app._multi_fields["jenkins.ci_file_servers"]
+    mf.set_values([r"\\srv1\ci"])
+    mf._on_add()  # ＋ 相当
+    assert len(mf._rows) == 2
+    mf._rows[1]["var"].set(r"\\srv2\ci")
+    assert mf.get_values() == [r"\\srv1\ci", r"\\srv2\ci"]
+    mf._on_remove(mf._rows[1])  # − 相当
+    assert mf.get_values() == [r"\\srv1\ci"]
 
 
-def test_write_target_base_path_clears_ci_file_server(app):
-    # ④ が入っている状態で base_path を入力 → ④ が自動クリア（後勝ち・逆方向）
-    app._fields["jenkins.ci_file_server"].set(r"\\srv\ci")
-    app._fields["storage.base_path"].set(r"C:\local\CI")
-    assert app._fields["jenkins.ci_file_server"].get() == ""
-    assert app._fields["storage.base_path"].get() == r"C:\local\CI"
+def test_multi_field_remove_last_row_clears(app):
+    # 行が 1 つのときの − はクリアのみ（最低 1 行は残す）
+    mf = app._multi_fields["storage.base_paths"]
+    mf.set_values([r"C:\local\CI"])
+    mf._on_remove(mf._rows[0])
+    assert len(mf._rows) == 1
+    assert mf.get_values() == []
 
 
-def test_write_target_not_cleared_while_loading(app):
-    # ロード中は相互排他を発火させない（両方そのまま保持）
-    app._loading = True
-    try:
-        app._fields["storage.base_path"].set(r"C:\local\CI")
-        app._fields["jenkins.ci_file_server"].set(r"\\srv\ci")
-    finally:
-        app._loading = False
-    assert app._fields["storage.base_path"].get() == r"C:\local\CI"
-    assert app._fields["jenkins.ci_file_server"].get() == r"\\srv\ci"
+def test_both_write_targets_used_in_preview(app):
+    # ④ と書き込み先ベースは併用でき、全書き込み先プレビューに両方表示される
+    app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\srv\ci"])
+    app._multi_fields["storage.base_paths"].set_values([r"C:\local\CI"])
+    app._fields["project.name"].set("Demo")
+    app._update_preview()
+    targets = app._preview_targets.get()
+    assert r"\\srv\ci" in targets
+    assert r"C:\local\CI" in targets
+
+
+def test_form_to_config_reads_multi_urls(app):
+    app._multi_fields["storage.release_urls"].set_values(["https://r1", "https://r2"])
+    app._form_to_config()
+    assert app._config.storage.release_urls == ["https://r1", "https://r2"]
+
+
+def test_archive_source_form_roundtrip(app):
+    # チェックボックス＋ソースフォルダ名がフォーム往復で保存・復元される
+    app._archive_source_var.set(True)
+    app._fields["storage.source_dir"].set("src-snap")
+    app._form_to_config()
+    assert app._config.storage.archive_source is True
+    assert app._config.storage.source_dir == "src-snap"
+    # 空欄なら "source" にフォールバック
+    app._fields["storage.source_dir"].set("")
+    app._form_to_config()
+    assert app._config.storage.source_dir == "source"
+    # config -> form の復元
+    app._config.storage.archive_source = True
+    app._config.storage.source_dir = "mysrc"
+    app._config_to_form()
+    assert app._archive_source_var.get() is True
+    assert app._fields["storage.source_dir"].get() == "mysrc"
+
+
+def test_archive_source_preview(app):
+    app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\srv\ci"])
+    app._multi_fields["storage.base_paths"].set_values([])
+    app._fields["project.name"].set("Demo")
+    app._archive_source_var.set(True)
+    app._fields["storage.source_dir"].set("source")
+    app._update_preview()
+    assert r"\\srv\ci\Demo\source" in app._preview_source.get()
 
 
 def test_normalize_rel(app):

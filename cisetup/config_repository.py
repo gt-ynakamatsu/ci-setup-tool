@@ -41,12 +41,12 @@ class ConfigRepository:
         else:
             return default_config()
 
-        # 個人 ID を含みうる書き込み先は git 非追跡のローカルファイルから復元する。
+        # 個人 ID を含みうる書き込み先（複数可）は git 非追跡のローカルファイルから復元する。
         local = self.load_local(repository_root)
-        if local.base_path.strip():
-            config.storage.base_path = local.base_path
-        if local.ci_file_server.strip():
-            config.jenkins.ci_file_server = local.ci_file_server
+        if local.base_paths:
+            config.storage.base_paths = list(local.base_paths)
+        if local.ci_file_servers:
+            config.jenkins.ci_file_servers = list(local.ci_file_servers)
         return config
 
     def load_local(self, repository_root: Path) -> CISetupLocal:
@@ -82,10 +82,10 @@ class ConfigRepository:
         # 最新の scripts / テンプレートを cisetup/ 以下へ上書き配置
         extract_to_repository(repository_root, overwrite=True)
 
-        # 個人 ID / マシン固有の書き込み先は git 非追跡のローカルファイルへ。
+        # 個人 ID / マシン固有の書き込み先（複数可）は git 非追跡のローカルファイルへ。
         local = CISetupLocal(
-            base_path=config.storage.base_path,
-            ci_file_server=config.jenkins.ci_file_server,
+            base_paths=list(config.storage.base_paths),
+            ci_file_servers=list(config.jenkins.ci_file_servers),
         )
         paths.local_path(repository_root).write_text(
             json.dumps(local_to_dict(local), indent=2, ensure_ascii=False) + "\n",
@@ -95,8 +95,8 @@ class ConfigRepository:
 
         # コミットされる config.json / Jenkinsfile には書き込み先を残さない（空にする）。
         committed = copy.deepcopy(config)
-        committed.storage.base_path = ""
-        committed.jenkins.ci_file_server = ""
+        committed.storage.base_paths = []
+        committed.jenkins.ci_file_servers = []
 
         paths.config_path(repository_root).write_text(
             json.dumps(config_to_dict(committed), indent=2, ensure_ascii=False) + "\n",
@@ -112,16 +112,34 @@ class ConfigRepository:
         template = read_template("Jenkinsfile.template")
         generate_jenkinsfile(template, paths.jenkinsfile_path(repository_root), committed)
 
+    def effective_write_targets(self, config: CISetupConfig) -> list[str]:
+        """実際にコピーされる全書き込み先（重複除去）。
+
+        ④ CI_FILE_SERVER（複数可・プロジェクト名を付与）と詳細設定の
+        書き込み先ベース（複数可・そのまま使用）の和集合。デプロイ時はこの全先へコピーする。
+        """
+        targets: list[str] = []
+        for value in list(config.jenkins.ci_file_servers) + list(config.storage.base_paths):
+            v = value.strip()
+            if v and v not in targets:
+                targets.append(v)
+        return targets
+
     def build_preview_paths(
         self, config: CISetupConfig, date_folder: str = "YYYYMMDD"
     ) -> tuple[str, str, str]:
-        """GUI の保存先プレビュー用。
+        """GUI の保存先プレビュー用（代表＝先頭の書き込み先のレイアウト）。
 
-        書き込み先は後勝ち（GUI 上で ④ CI_FILE_SERVER と base_path は相互排他のため、
-        実効値は常にどちらか1つだけ）。④ CI_FILE_SERVER があればその下に
-        プロジェクト名を付けて使い、無ければ base_path を「そのまま」使う。
-        両方非空になるのはレガシー設定のロード直後だけで、その決定的タイブレークとして
-        file_server を優先する。
+        書き込み先は複数指定でき（④ CI_FILE_SERVER 群と書き込み先ベース群は併用可）、
+        デプロイ時は全先へコピーする。本メソッドは代表として、先頭の CI_FILE_SERVER
+        （無ければ先頭の base_path）を根にレイアウト例を返す。各先の実効ルートは
+        build_target_roots() を参照（CI_FILE_SERVER 系はプロジェクト名を付与、base_path 系は
+        そのまま）。
+
+        ユニットテスト成果物は releases / logs / analysis と混ざらない「専用トップレベル」
+        に分離する（ci-deploy-fileserver.ps1 の Get-TestsDest と一致）。
+          - CI_FILE_SERVER 指定時 : <fileServer>/<testsDir>/<project>/[date]
+          - base_path のみ指定時   : <base>/<testsDir>/[date]
 
         戻り値は (logs, releases, tests) の順。
         """
@@ -129,19 +147,72 @@ class ConfigRepository:
         base = config.storage.base_path.strip()
         if file_server:
             root = paths.join_location(file_server, config.project.name)
+            tests_root = paths.join_location(
+                file_server, config.storage.tests_dir, config.project.name
+            )
         else:
             root = base
+            tests_root = paths.join_location(base, config.storage.tests_dir)
 
         def build(category_dir: str) -> str:
             if config.storage.use_date_subfolder:
                 return paths.join_location(root, category_dir, date_folder)
             return paths.join_location(root, category_dir)
 
+        def build_tests() -> str:
+            if config.storage.use_date_subfolder:
+                return paths.join_location(tests_root, date_folder)
+            return tests_root
+
         return (
             build(config.storage.logs_dir),
             build(config.storage.releases_dir),
-            build(config.storage.tests_dir),
+            build_tests(),
         )
+
+    def build_source_preview(
+        self, config: CISetupConfig, date_folder: str = "YYYYMMDD"
+    ) -> str:
+        """開発環境一式 zip の保存先プレビュー（代表＝先頭の書き込み先）。
+
+        releases / logs と同じ category 構造で <root>/<sourceDir>[/date] に配置する
+        （ci-deploy-fileserver.ps1 の Source タイプ = Get-CategoryDest と一致）。
+        デプロイ時は build_target_roots() の全先へ同様に配置する。
+        """
+        file_server = config.jenkins.ci_file_server.strip()
+        base = config.storage.base_path.strip()
+        root = paths.join_location(file_server, config.project.name) if file_server else base
+        source_dir = config.storage.source_dir or "source"
+        if config.storage.use_date_subfolder:
+            return paths.join_location(root, source_dir, date_folder)
+        return paths.join_location(root, source_dir)
+
+    def build_target_roots(self, config: CISetupConfig) -> list[tuple[str, str]]:
+        """各書き込み先と、その実効ルート（成果物が配置される基点）の組を返す。
+
+        デプロイ（ci-deploy-fileserver.ps1）と同じ規則:
+          - ④ CI_FILE_SERVER 系 : <base>/<project>（プロジェクト名を付与）
+          - 書き込み先ベース系   : <base>（そのまま）
+        重複ルートは除外。戻り値は (入力された書き込み先, 実効ルート) のリスト。
+        """
+        seen: set[str] = set()
+        out: list[tuple[str, str]] = []
+        for value in config.jenkins.ci_file_servers:
+            base = value.strip()
+            if not base:
+                continue
+            root = paths.join_location(base, config.project.name)
+            if root.lower() not in seen:
+                seen.add(root.lower())
+                out.append((base, root))
+        for value in config.storage.base_paths:
+            base = value.strip()
+            if not base:
+                continue
+            if base.lower() not in seen:
+                seen.add(base.lower())
+                out.append((base, base))
+        return out
 
     def validate(self, config: CISetupConfig, repository_root: Path) -> None:
         if not config.project.name.strip():
@@ -164,9 +235,9 @@ class ConfigRepository:
         if not config.jenkins.cron_schedule.strip():
             raise ValueError("cron スケジュールを入力してください。")
 
-        base_path = config.storage.base_path.strip()
-        file_server = config.jenkins.ci_file_server.strip()
-        if not base_path and not file_server:
+        file_servers = [v.strip() for v in config.jenkins.ci_file_servers if v.strip()]
+        base_paths = [v.strip() for v in config.storage.base_paths if v.strip()]
+        if not file_servers and not base_paths:
             raise ValueError(
                 "成果物の書き込み先を入力してください（④ CI_FILE_SERVER、または詳細設定の格納ベース）。"
             )
@@ -176,20 +247,19 @@ class ConfigRepository:
             "\nOneDrive/SharePoint を使う場合は同期済みのローカルフォルダのパスを指定し、"
             "共有 URL は『成果物／ログ／ユニットテスト／解析』の各 URL 欄に入力してください。"
         )
-        # 書き込み先は後勝ち（GUI で実効値は常に1つ）。実際に使われる書き込み先だけ検証する。
-        # 両方非空になるのはレガシー設定のロード直後だけで、その決定的タイブレークとして
-        # file_server を優先する（④ が有効なら base_path に古い URL が残っていてもエラーにしない）。
-        if file_server:
-            if paths.is_url(file_server):
+        # 複数書き込み先に対応（全先へコピーするため、いずれの欄も URL は不可）。空行は無視。
+        for value in file_servers:
+            if paths.is_url(value):
                 raise ValueError(
                     "『④ 成果物・ログの保存先（CI_FILE_SERVER）』に URL が入っています。"
                     "ここには UNC またはローカルパスを指定してください。" + url_guide
                 )
-        elif paths.is_url(base_path):
-            raise ValueError(
-                "『詳細設定 → 保存先の詳細 → 書き込み先ベース』に URL が入っています。"
-                "ここには UNC またはローカルパスを指定してください。" + url_guide
-            )
+        for value in base_paths:
+            if paths.is_url(value):
+                raise ValueError(
+                    "『詳細設定 → 保存先の詳細 → 書き込み先ベース』に URL が入っています。"
+                    "ここには UNC またはローカルパスを指定してください。" + url_guide
+                )
 
         if is_custom:
             return

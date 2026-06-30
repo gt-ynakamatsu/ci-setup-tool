@@ -67,8 +67,19 @@ pipeline {
         stage('Prepare') {
             steps {
                 powershell '''
+                    # 再利用ワークスペースで前回ビルドの成果物（test/source/release/analysis）が
+                    # 残ったまま再配置されるのを防ぐため、毎ビルド開始時に artifacts を作り直す。
+                    if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force }
                     New-Item -ItemType Directory -Force -Path artifacts\\logs | Out-Null
                     Start-Transcript -Path artifacts\\logs\\build.log -Force
+                '''
+            }
+        }
+
+        stage('Archive Source') {
+            steps {
+                powershell '''
+                    .\\cisetup\\scripts\\ci-archive-source.ps1
                 '''
             }
         }
@@ -155,6 +166,16 @@ pipeline {
                     powershell '.\\cisetup\\scripts\\ci-deploy-fileserver.ps1 -Type Analysis'
                 }
             }
+            catchError(buildResult: null, stageResult: null) {
+                withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
+                    powershell '.\\cisetup\\scripts\\ci-deploy-fileserver.ps1 -Type Test'
+                }
+            }
+            catchError(buildResult: null, stageResult: null) {
+                withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
+                    powershell '.\\cisetup\\scripts\\ci-deploy-fileserver.ps1 -Type Source'
+                }
+            }
         }
         success {
             powershell '''
@@ -200,11 +221,6 @@ pipeline {
                 catchError(buildResult: null, stageResult: null) {
                     withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
                         powershell '.\\cisetup\\scripts\\ci-deploy-fileserver.ps1 -Type Logs'
-                    }
-                }
-                catchError(buildResult: null, stageResult: null) {
-                    withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        powershell '.\\cisetup\\scripts\\ci-deploy-fileserver.ps1 -Type Test'
                     }
                 }
                 catchError(buildResult: null, stageResult: null) {

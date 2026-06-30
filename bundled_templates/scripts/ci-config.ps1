@@ -1,4 +1,4 @@
-# CI パイプライン共通設定ローダー
+﻿# CI パイプライン共通設定ローダー
 # cisetup/cisetup.config.json を読む（旧: リポジトリ直下の cisetup.config.json も後方互換）。
 # Jenkins 各ステージ（ci-build.ps1 等）から dot-source される。
 
@@ -7,6 +7,42 @@ function Test-StorageUrl {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
     return ($Value.Trim() -match '^(?i)https?://')
+}
+
+function ConvertTo-StringArray {
+    # JSON 値（単一文字列 or 配列）を空要素を除いた文字列配列へ正規化する。
+    param($Value)
+    $out = @()
+    if ($null -eq $Value) { return $out }
+    if ($Value -is [string]) {
+        $s = $Value.Trim()
+        if ($s) { $out += $s }
+        return $out
+    }
+    if ($Value -is [System.Collections.IEnumerable]) {
+        foreach ($item in $Value) {
+            $s = "$item".Trim()
+            if ($s) { $out += $s }
+        }
+        return $out
+    }
+    $s = "$Value".Trim()
+    if ($s) { $out += $s }
+    return $out
+}
+
+function Get-ConfigList {
+    # 複数形→旧単数形の順にキーを探し、最初に値がある列を配列で返す（後方互換）。
+    param($Container, [string[]]$Names)
+    if ($null -eq $Container) { return @() }
+    $props = @($Container.PSObject.Properties.Name)
+    foreach ($name in $Names) {
+        if ($props -contains $name) {
+            $list = ConvertTo-StringArray $Container.$name
+            if ($list.Count -gt 0) { return $list }
+        }
+    }
+    return @()
 }
 
 function Join-StorageChild {
@@ -142,18 +178,37 @@ function Get-CiSettings {
     }
 
     $storage = $config.storage
-    $storageBasePath = if ($storage -and $storage.basePath) { $storage.basePath.Trim() } else { '' }
     $logsDir = if ($storage -and $storage.logsDir) { $storage.logsDir.Trim() } else { 'logs' }
     $releasesDir = if ($storage -and $storage.releasesDir) { $storage.releasesDir.Trim() } else { 'releases' }
     $useDateSubfolder = if ($storage -and $null -ne $storage.useDateSubfolder) { [bool]$storage.useDateSubfolder } else { $true }
-    $releaseUrl = if ($storage -and $storage.releaseUrl) { $storage.releaseUrl.Trim() } else { '' }
-    $analysisUrl = if ($storage -and $storage.analysisUrl) { $storage.analysisUrl.Trim() } else { '' }
-    $logsUrl = if ($storage -and $storage.logsUrl) { $storage.logsUrl.Trim() } else { '' }
-    $testsUrl = if ($storage -and $storage.testsUrl) { $storage.testsUrl.Trim() } else { '' }
     $testsDir = if ($storage -and $storage.testsDir) { $storage.testsDir.Trim() } else { 'tests' }
+    $sourceDir = if ($storage -and $storage.sourceDir) { $storage.sourceDir.Trim() } else { 'source' }
+    $archiveSource = if ($storage -and $null -ne $storage.archiveSource) { [bool]$storage.archiveSource } else { $false }
+
+    # 書き込み先・閲覧 URL は複数対応（配列。旧単一キーも読む）。
+    $basePaths = Get-ConfigList $storage @('basePaths', 'basePath')
+    $releaseUrls = Get-ConfigList $storage @('releaseUrls', 'releaseUrl')
+    $analysisUrls = Get-ConfigList $storage @('analysisUrls', 'analysisUrl')
+    $logsUrls = Get-ConfigList $storage @('logsUrls', 'logsUrl')
+    $testsUrls = Get-ConfigList $storage @('testsUrls', 'testsUrl')
 
     $jenkins = $config.jenkins
-    $ciFileServer = if ($jenkins -and $jenkins.ciFileServer) { $jenkins.ciFileServer.Trim() } else { '' }
+    $ciFileServers = Get-ConfigList $jenkins @('ciFileServers', 'ciFileServer')
+
+    # 個人 ID を含む書き込み先は git 非追跡の cisetup.local.json に保持される（あれば優先）。
+    $localPath = if ($layout.Layout -eq 'cisetup') { Join-Path $layout.CiDir 'cisetup.local.json' } else { Join-Path $root 'cisetup.local.json' }
+    if (Test-Path $localPath) {
+        try {
+            $local = Get-Content $localPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $localBasePaths = Get-ConfigList $local @('basePaths', 'basePath')
+            $localCiFileServers = Get-ConfigList $local @('ciFileServers', 'ciFileServer')
+            if ($localBasePaths.Count -gt 0) { $basePaths = $localBasePaths }
+            if ($localCiFileServers.Count -gt 0) { $ciFileServers = $localCiFileServers }
+        }
+        catch {
+            Write-Warning "Failed to read cisetup.local.json: $_"
+        }
+    }
 
     return [PSCustomObject]@{
         ProjectName = $config.project.name
@@ -168,16 +223,24 @@ function Get-CiSettings {
         PublishCommand = $publishCommand
         TestCommand = $testCommand
         ArtifactGlob = $artifactGlob
-        StorageBasePath = $storageBasePath
+        StorageBasePaths = $basePaths
+        StorageBasePath = if ($basePaths.Count -gt 0) { $basePaths[0] } else { '' }
         LogsDir = ($logsDir -replace '/', '\')
         ReleasesDir = ($releasesDir -replace '/', '\')
         TestsDir = ($testsDir -replace '/', '\')
+        SourceDir = ($sourceDir -replace '/', '\')
+        ArchiveSource = $archiveSource
         UseDateSubfolder = $useDateSubfolder
-        ReleaseUrl = $releaseUrl
-        AnalysisUrl = $analysisUrl
-        LogsUrl = $logsUrl
-        TestsUrl = $testsUrl
-        CiFileServer = $ciFileServer
+        ReleaseUrls = $releaseUrls
+        AnalysisUrls = $analysisUrls
+        LogsUrls = $logsUrls
+        TestsUrls = $testsUrls
+        ReleaseUrl = if ($releaseUrls.Count -gt 0) { $releaseUrls[0] } else { '' }
+        AnalysisUrl = if ($analysisUrls.Count -gt 0) { $analysisUrls[0] } else { '' }
+        LogsUrl = if ($logsUrls.Count -gt 0) { $logsUrls[0] } else { '' }
+        TestsUrl = if ($testsUrls.Count -gt 0) { $testsUrls[0] } else { '' }
+        CiFileServers = $ciFileServers
+        CiFileServer = if ($ciFileServers.Count -gt 0) { $ciFileServers[0] } else { '' }
         Root = $root
         CiDir = $layout.CiDir
     }

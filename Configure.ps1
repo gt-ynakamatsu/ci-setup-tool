@@ -1,4 +1,4 @@
-# CISetup 設定 GUI（Python 正式版）
+﻿# CISetup 設定 GUI（Python 正式版）
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path

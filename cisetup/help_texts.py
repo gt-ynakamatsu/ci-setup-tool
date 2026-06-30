@@ -35,8 +35,8 @@ ARTIFACT_PREFIX = (
 
 STORAGE_BASE_PATH = (
     "【何を】書き込み先を『プロジェクト名を付けずにそのまま』指定したいときのパス（UNC/ローカル）\n"
-    "【後勝ち】④ CI_FILE_SERVER と排他です。後から入力した方が使われ、もう一方は自動でクリアされます"
-    "（書き込み先は常に1つだけ有効）\n"
+    "【複数可】右端の「＋」で複数指定でき、④ CI_FILE_SERVER と併用した全先へコピーします"
+    "（相互排他ではありません）\n"
     "【OneDrive/SharePoint】同期済みのローカルフォルダのパスを指定します"
     "（例: C:\\Users\\you\\OneDrive - 会社\\CI\\MyApp）。共有 URL ではありません\n"
     "【共有リンク】Teams から開く URL は下の『成果物／ログ／ユニットテスト／解析 URL』欄へ\n"
@@ -67,36 +67,56 @@ USE_DATE_SUBFOLDER = (
 RELEASE_URL = (
     "【何を】成果物フォルダを開くための共有 URL（SharePoint / Web 等）\n"
     "【どこで使う】Teams 通知の「成果物フォルダを開く」ボタン\n"
+    "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
     "【例】https://contoso.sharepoint.com/:f:/s/share/xxxxx\n"
-    "【保存先】cisetup.config.json → storage.releaseUrl"
+    "【保存先】cisetup.config.json → storage.releaseUrls"
 )
 
 ANALYSIS_URL = (
     "【何を】解析レポートフォルダを開くための共有 URL（SharePoint / Web 等）\n"
     "【どこで使う】Teams 通知の「解析レポート (HTML)」ボタン\n"
+    "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
-    "【保存先】cisetup.config.json → storage.analysisUrl"
+    "【保存先】cisetup.config.json → storage.analysisUrls"
 )
 
 LOGS_URL = (
     "【何を】ログフォルダを開くための共有 URL（SharePoint / Web 等）\n"
     "【どこで使う】Teams 通知（失敗時）の「ログフォルダを開く」ボタン\n"
+    "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ボタンは表示されません\n"
-    "【保存先】cisetup.config.json → storage.logsUrl"
+    "【保存先】cisetup.config.json → storage.logsUrls"
 )
 
 TESTS_URL = (
     "【何を】ユニットテストログを開くための共有 URL（SharePoint / Web 等）\n"
     "【どこで使う】Teams 通知でユニットテスト失敗時の「ユニットテストログを開く」ボタン\n"
+    "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ファイルサーバーへ配置したログへのリンク（同一 PC のみ有効）にフォールバック\n"
-    "【保存先】cisetup.config.json → storage.testsUrl"
+    "【保存先】cisetup.config.json → storage.testsUrls"
 )
 
 TESTS_DIR = (
-    "【何を】テスト失敗時に TRX / ログを置くフォルダ名\n"
+    "【何を】ユニットテスト結果（TRX / サマリ / 失敗ログ）を毎回置く専用トップレベルフォルダ名\n"
+    "【ポイント】releases / logs / analysis とは混ざらない独立フォルダに分離して保存\n"
+    "【保存先パス】CI_FILE_SERVER 指定時: <保存先>/<このフォルダ名>/<プロジェクト>/[日付]\n"
     "【デフォルト】tests\n"
     "【保存先】cisetup.config.json → storage.testsDir"
+)
+
+ARCHIVE_SOURCE = (
+    "【何を】pull した最新の開発環境一式（チェックアウト済みソースツリー）を zip 化して保存先へ格納するか\n"
+    "【除外】.git / artifacts / bin / obj / .vs / node_modules / packages / TestResults / *.user\n"
+    "【デフォルト】OFF\n"
+    "【保存先】cisetup.config.json → storage.archiveSource"
+)
+
+SOURCE_DIR = (
+    "【何を】開発環境一式 zip を毎回置くフォルダ名（releases / logs / tests と同列）\n"
+    "【保存先パス】<保存先>/<このフォルダ名>/[日付]/<プレフィックス>-<ビルド番号>-src.zip\n"
+    "【デフォルト】source\n"
+    "【保存先】cisetup.config.json → storage.sourceDir"
 )
 
 JENKINS_URL = (
@@ -154,16 +174,6 @@ POLL_SCHEDULE = (
     "【保存先】cisetup.config.json + Jenkinsfile 自動生成"
 )
 
-CI_FILE_SERVER = (
-    "【何を】成果物/ログの書き込み先ルート（UNC・ローカル／OneDrive 同期フォルダ）\n"
-    "【例】\\\\fileserver\\ci\n"
-    "【後勝ち】詳細設定の『書き込み先ベース』と排他です。後から入力した方が使われ、"
-    "もう一方は自動でクリアされます（書き込み先は常に1つだけ有効）\n"
-    "【push されません】個人 ID を含みうるため cisetup.local.json（git 非追跡）に保存。"
-    "CI 側は Jenkins の CI_FILE_SERVER（パラメータ/環境変数）を使用します\n"
-    "【保存先】cisetup.local.json → ciFileServer"
-)
-
 TEAMS_CREDENTIAL_ID = (
     "【何を】Jenkins Credentials に登録する Teams Webhook の ID\n"
     "【例】teams-webhook-url（変更不要なことが多い）\n"
@@ -174,11 +184,6 @@ TIMEZONE = (
     "【何を】cron 実行時刻の基準タイムゾーン\n"
     "【例】Asia/Tokyo\n"
     "【注意】Jenkins 本体の System 設定も同じ TZ に揃えてください"
-)
-
-BUILD_TIMEOUT = (
-    "【ビルドタイムアウト】1 回のビルドが打ち切られるまでの最大時間（分）。例: 30\n"
-    "【ログ保持数】Jenkins が保持するビルド履歴の件数。例: 30"
 )
 
 GIT_REPOSITORY_URL = (
@@ -212,8 +217,13 @@ JENKINS_AGENT_ROOT = (
     "【注意】エージェント PC 上に存在するパスを指定"
 )
 
-BUILD_PROFILE = (
-    "【何を】ビルド種別\n"
-    "【dotnet】dotnet build / format / publish を自動実行\n"
-    "【custom】各ステップのコマンドを自分で入力（FPGA / C++ / Python など）"
+LOCAL_BUILD_TEST = (
+    "【何を】配置済みの ci-build.ps1 / ci-test.ps1 をこの PC でそのまま実行し、"
+    "現在のローカルコード（作業コピー）をビルド＆テストします\n"
+    "【git 操作なし】fetch / pull / push を一切行いません。push 前に手元の変更を確認する用途です\n"
+    "【テストビルドとの違い】「テストビルド」は Jenkins がリモート Git のコードをビルド。"
+    "こちらは push せずにローカルのコードを検証します\n"
+    "【おすすめ】先に「設定を保存」を実行すると最新のスクリプトで検証できます\n"
+    "【実行内容】cisetup\\scripts\\ci-build.ps1 → ci-test.ps1"
+    "（ビルドが失敗したらテストは実行しません）"
 )

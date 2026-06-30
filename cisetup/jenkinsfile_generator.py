@@ -11,6 +11,8 @@ def build_agent_declaration(agent_label: str | None) -> str:
 
 
 def generate_jenkinsfile(template: str, output_path: Path, config) -> None:
+    # CI_FILE_SERVER パラメータは単一文字列。複数書き込み先のうち先頭を既定値に使う
+    # （個人 ID 入りの値はコミット前に空へ退避されるため通常は空になる）。
     ci_server = config.jenkins.ci_file_server.replace("\\", "\\\\")
     poll = config.jenkins.poll_schedule.strip()
     poll_trigger = (

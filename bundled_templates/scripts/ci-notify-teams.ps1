@@ -45,6 +45,26 @@ function ConvertTo-FileUri {
     return 'file:///' + ($Path -replace '\\', '/')
 }
 
+function Add-LinkActions {
+    # 複数の閲覧 URL をそれぞれボタン化する。2 件以上なら連番を付ける。
+    # URL が無ければ Fallback（配置先の file: URI など）を 1 つだけボタン化する。
+    param($Actions, [string]$Title, $Urls, [string]$Fallback)
+    $list = ConvertTo-StringArray $Urls
+    if ($list.Count -eq 0) {
+        if (-not [string]::IsNullOrWhiteSpace($Fallback)) {
+            $Actions.Add(@{ type = 'Action.OpenUrl'; title = $Title; url = $Fallback }) | Out-Null
+        }
+        return
+    }
+    if ($list.Count -eq 1) {
+        $Actions.Add(@{ type = 'Action.OpenUrl'; title = $Title; url = $list[0] }) | Out-Null
+        return
+    }
+    for ($i = 0; $i -lt $list.Count; $i++) {
+        $Actions.Add(@{ type = 'Action.OpenUrl'; title = "$Title ($($i + 1))"; url = $list[$i] }) | Out-Null
+    }
+}
+
 if ([string]::IsNullOrWhiteSpace($WebhookUrl) -and [string]::IsNullOrWhiteSpace($OutFile)) {
     Write-Warning 'TEAMS_WEBHOOK_URL is not set. Skipping Teams notification.'
     exit 0
@@ -80,8 +100,10 @@ $body = @(
     @{ type = 'FactSet'; facts = $facts }
 )
 
-$reportUrl = ''
-$testReportUrl = ''
+$hasAnalysis = $false
+$analysisFallback = ''
+$hasTestFailure = $false
+$testFallback = ''
 
 # ---- 静的解析サマリー ----
 $summaryPath = Join-Path $ci.Root 'artifacts\analysis\analysis-summary.json'
@@ -96,8 +118,8 @@ if (Test-Path $summaryPath) {
             wrap   = $true
             text   = "静的解析  高 $($summary.high) ・ 中 $($summary.medium) ・ 低 $($summary.low)"
         }
-        if ($ci.AnalysisUrl) { $reportUrl = $ci.AnalysisUrl }
-        elseif ($deploy -and $deploy.analysisReport) { $reportUrl = ConvertTo-FileUri $deploy.analysisReport }
+        $hasAnalysis = $true
+        if ($deploy -and $deploy.analysisReport) { $analysisFallback = ConvertTo-FileUri $deploy.analysisReport }
     }
     catch {
         Write-Warning "Failed to read analysis summary: $_"
@@ -122,9 +144,9 @@ if (Test-Path $testSummaryPath) {
         $failed = @($items | Where-Object { $_.outcome -eq 'Failed' })
 
         if ($failed.Count -gt 0) {
-            if ($ci.TestsUrl) { $testReportUrl = $ci.TestsUrl }
-            elseif ($deploy -and $deploy.testFailureLog) { $testReportUrl = ConvertTo-FileUri $deploy.testFailureLog }
-            elseif ($deploy -and $deploy.testDir) { $testReportUrl = ConvertTo-FileUri $deploy.testDir }
+            $hasTestFailure = $true
+            if ($deploy -and $deploy.testFailureLog) { $testFallback = ConvertTo-FileUri $deploy.testFailureLog }
+            elseif ($deploy -and $deploy.testDir) { $testFallback = ConvertTo-FileUri $deploy.testDir }
 
             $testLines = [System.Collections.Generic.List[string]]::new()
             $maxShow = 40
@@ -176,19 +198,18 @@ if (-not $isSuccess) {
     }
 }
 
-$actions = @()
-if ($reportUrl) {
-    $actions += @{ type = 'Action.OpenUrl'; title = '解析レポート (HTML)'; url = $reportUrl }
+$actions = New-Object System.Collections.Generic.List[object]
+if ($hasAnalysis) {
+    Add-LinkActions -Actions $actions -Title '解析レポート (HTML)' -Urls $ci.AnalysisUrls -Fallback $analysisFallback
 }
-if ($testReportUrl) {
-    $actions += @{ type = 'Action.OpenUrl'; title = 'ユニットテストログを開く'; url = $testReportUrl }
+if ($hasTestFailure) {
+    Add-LinkActions -Actions $actions -Title 'ユニットテストログを開く' -Urls $ci.TestsUrls -Fallback $testFallback
 }
 if ($deploy -and $deploy.artifactDir) {
-    $artifactUrl = if ($ci.ReleaseUrl) { $ci.ReleaseUrl } else { ConvertTo-FileUri $deploy.artifactDir }
-    $actions += @{ type = 'Action.OpenUrl'; title = '成果物フォルダを開く'; url = $artifactUrl }
+    Add-LinkActions -Actions $actions -Title '成果物フォルダを開く' -Urls $ci.ReleaseUrls -Fallback (ConvertTo-FileUri $deploy.artifactDir)
 }
-if (-not $isSuccess -and $ci.LogsUrl) {
-    $actions += @{ type = 'Action.OpenUrl'; title = 'ログフォルダを開く'; url = $ci.LogsUrl }
+if (-not $isSuccess -and $ci.LogsUrls.Count -gt 0) {
+    Add-LinkActions -Actions $actions -Title 'ログフォルダを開く' -Urls $ci.LogsUrls -Fallback ''
 }
 
 $card = @{
@@ -198,7 +219,10 @@ $card = @{
     body      = $body
     msteams   = @{ width = 'Full' }
 }
-if ($actions.Count -gt 0) { $card.actions = $actions }
+# NOTE: Windows PowerShell 5.1 では、関数内で要素を追加した List[object] を
+# @(...) で配列化すると "Argument types do not match" になる既知の不具合がある。
+# ToArray() を使って回避する。
+if ($actions.Count -gt 0) { $card.actions = $actions.ToArray() }
 
 $payloadObj = [ordered]@{
     type        = 'message'

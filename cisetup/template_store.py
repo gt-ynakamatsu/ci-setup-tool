@@ -15,6 +15,7 @@ BUNDLED_FILES: tuple[str, ...] = (
     "cisetup.config.example.json",
     "cisetup.secrets.local.example.json",
     "scripts/ci-analyze.ps1",
+    "scripts/ci-archive-source.ps1",
     "scripts/ci-build.ps1",
     "scripts/ci-config.ps1",
     "scripts/ci-deploy-fileserver.ps1",

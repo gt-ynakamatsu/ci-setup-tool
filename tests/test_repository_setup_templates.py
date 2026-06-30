@@ -10,9 +10,12 @@ from cisetup.config_repository import ConfigRepository
 from cisetup.models import CISetupConfig, CISetupSecrets, default_config
 from cisetup.project_setup import (
     apply_auto_detection,
+    count_projects,
     deploy_ci_files,
+    find_test_project,
     has_solution_file,
     looks_like_test_project,
+    parse_solution_projects,
 )
 
 
@@ -63,6 +66,151 @@ def test_apply_auto_detection_no_sln(tmp_path: Path):
     assert out is cfg
 
 
+def test_apply_auto_detection_redetects_invalid_publish(sln_repo: Path):
+    # 実在しない publish/未設定 test は再検出で差し替え・補完される
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.project.solution_file = "MyApp.sln"
+    cfg.project.artifact_prefix = "MyApp"
+    cfg.project.publish_project = "IpuTestApp/IpuTestApp.csproj"  # 存在しない
+    cfg.project.test_project = ""
+    out = apply_auto_detection(sln_repo, cfg)
+    assert out.project.publish_project.endswith("MyApp.csproj")
+    assert "IpuTestApp" not in out.project.publish_project
+    assert out.project.test_project.endswith("MyApp.Tests.csproj")
+
+
+def test_apply_auto_detection_keeps_valid_publish(sln_repo: Path):
+    # 実在する publish は再検出でも保持される
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.project.solution_file = "MyApp.sln"
+    cfg.project.artifact_prefix = "MyApp"
+    cfg.project.publish_project = "src/MyApp/MyApp.csproj"  # 実在
+    out = apply_auto_detection(sln_repo, cfg)
+    assert out.project.publish_project == "src/MyApp/MyApp.csproj"
+
+
+def _sln_with_projects(*entries: tuple[str, str]) -> str:
+    """(プロジェクト名, sln相対csprojパス) から .sln テキストを生成。"""
+    lines = ["Microsoft Visual Studio Solution File, Format Version 12.00"]
+    for name, path in entries:
+        lines.append(
+            'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = '
+            f'"{name}", "{path}", '
+            '"{11111111-2222-3333-4444-555555555555}"'
+        )
+        lines.append("EndProject")
+    return "\n".join(lines) + "\n"
+
+
+def test_parse_solution_projects():
+    text = _sln_with_projects(
+        ("App", r"deep\nested\App.csproj"),
+        ("App.Tests", r"qa\App.Tests.csproj"),
+    )
+    # ソリューションフォルダ（csproj でない）は無視される
+    text += (
+        'Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = '
+        '"SolutionItems", "SolutionItems", "{AAAA}"\nEndProject\n'
+    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sln = Path(tmp) / "App.sln"
+        sln.write_text(text, encoding="utf-8")
+        got = parse_solution_projects(sln)
+    assert got == [r"deep\nested\App.csproj", r"qa\App.Tests.csproj"]
+
+
+def test_apply_auto_detection_uses_sln_for_nonadjacent_csproj(tmp_path: Path):
+    # csproj が .sln と別階層にある構成。.sln 解析で正しいパスを特定する。
+    (tmp_path / "deep" / "nested").mkdir(parents=True)
+    (tmp_path / "deep" / "nested" / "IpuTestApp.csproj").write_text("<Project/>", encoding="utf-8")
+    (tmp_path / "qa").mkdir()
+    (tmp_path / "qa" / "IpuTestAppCore.Tests.csproj").write_text("<Project/>", encoding="utf-8")
+    (tmp_path / "IpuTestApp.sln").write_text(
+        _sln_with_projects(
+            ("IpuTestApp", r"deep\nested\IpuTestApp.csproj"),
+            ("IpuTestAppCore.Tests", r"qa\IpuTestAppCore.Tests.csproj"),
+        ),
+        encoding="utf-8",
+    )
+    cfg = default_config()
+    cfg.project.name = "IpuTestApp"
+    cfg.project.solution_file = "IpuTestApp.sln"
+    cfg.project.artifact_prefix = "IpuTestApp"
+    cfg.project.publish_project = "IpuTestApp/IpuTestApp.csproj"  # 旧・実在しない
+    cfg.project.test_project = ""
+    out = apply_auto_detection(tmp_path, cfg)
+    assert out.project.publish_project == "deep/nested/IpuTestApp.csproj"
+    assert out.project.test_project == "qa/IpuTestAppCore.Tests.csproj"
+
+
+def test_publish_detection_is_name_independent_prefers_executable(tmp_path: Path):
+    # ソリューション名・プロジェクト名が一致しなくても、実行アプリ(WinExe)を選ぶ。
+    (tmp_path / "App").mkdir()
+    (tmp_path / "App" / "CoreLib.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup></Project>',
+        encoding="utf-8",
+    )
+    (tmp_path / "Main").mkdir()
+    (tmp_path / "Main" / "IpuTestAppCore.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+        "<OutputType>WinExe</OutputType></PropertyGroup></Project>",
+        encoding="utf-8",
+    )
+    (tmp_path / "IpuTestApp.sln").write_text(
+        _sln_with_projects(
+            ("CoreLib", r"App\CoreLib.csproj"),
+            ("IpuTestAppCore", r"Main\IpuTestAppCore.csproj"),
+        ),
+        encoding="utf-8",
+    )
+    cfg = default_config()
+    cfg.project.name = "IpuTestApp"  # 名前は publish と一致しない
+    cfg.project.solution_file = "IpuTestApp.sln"
+    cfg.project.artifact_prefix = "IpuTestApp"
+    cfg.project.publish_project = ""
+    out = apply_auto_detection(tmp_path, cfg)
+    # ライブラリ(CoreLib)が先頭でも、実行アプリ(IpuTestAppCore)が選ばれる
+    assert out.project.publish_project == "Main/IpuTestAppCore.csproj"
+
+
+def test_count_projects(sln_repo: Path):
+    # dummy sln（Project 行なし）なので rglob フォールバックで 2 件
+    assert count_projects(sln_repo) == 2
+
+
+def test_find_publish_project_skips_test_project(tmp_path: Path):
+    # 非テストの csproj が無くテストのみの場合を除き、publish にはテストを選ばない
+    (tmp_path / "App.sln").write_text("x", encoding="utf-8")
+    app = tmp_path / "App"
+    app.mkdir()
+    (app / "App.csproj").write_text("<Project/>", encoding="utf-8")
+    tst = tmp_path / "App.Tests"
+    tst.mkdir()
+    (tst / "App.Tests.csproj").write_text("<Project/>", encoding="utf-8")
+    cfg = default_config()
+    cfg.project.publish_project = ""  # 強制再検出
+    cfg.project.name = "App"
+    out = apply_auto_detection(tmp_path, cfg)
+    assert out.project.publish_project.endswith("App.csproj")
+    assert "Tests" not in out.project.publish_project
+
+
+def test_find_test_project(sln_repo: Path):
+    found = find_test_project(sln_repo, "MyApp")
+    assert found is not None
+    assert found.endswith("MyApp.Tests.csproj")
+
+
+def test_find_test_project_none(tmp_path: Path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "App.csproj").write_text("<Project/>", encoding="utf-8")
+    assert find_test_project(tmp_path) is None
+
+
 # ----------------------------------------------------------- template_store
 
 def test_extract_to_repository(tmp_path: Path):
@@ -76,6 +224,55 @@ def test_extract_to_repository(tmp_path: Path):
     gi = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert "cisetup/cisetup.secrets.local.json" in gi
     assert "cisetup.secrets.local.json" in gi
+
+
+def test_bundled_ps1_sources_are_utf8_bom():
+    # Windows PowerShell 5.1 は BOM なし UTF-8 を Shift-JIS 扱いして日本語を文字化け/構文崩れさせる。
+    # 同梱ソースの .ps1 はすべて UTF-8 BOM 付きで統一しておく（配置時の付与に依存しない正本側の保証）。
+    scripts_dir = template_store.bundled_template_dir() / "scripts"
+    ps1_files = sorted(scripts_dir.glob("*.ps1"))
+    assert ps1_files, "同梱スクリプトが見つかりません"
+    missing = [p.name for p in ps1_files if not p.read_bytes().startswith(b"\xef\xbb\xbf")]
+    assert not missing, f"BOM なしの .ps1 があります: {missing}"
+
+
+def test_notify_teams_uses_toarray_for_actions_list():
+    # Windows PowerShell 5.1 では、関数内で要素を追加した List[object] を
+    # @(...) で配列化すると "Argument types do not match" になる既知の不具合がある。
+    # ci-notify-teams.ps1 の actions は ToArray() で配列化していること（@($actions) は禁止）。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-notify-teams.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "@($actions)" not in text, "List[object] を @(...) で配列化すると 5.1 でクラッシュする"
+    assert "$actions.ToArray()" in text, "actions は ToArray() で配列化すること"
+
+
+def test_bundled_ps1_no_array_op_on_generic_lists():
+    # New-Object / ::new() で作った Generic.List 変数を @(...) で配列化していないことを保証する。
+    import re
+
+    scripts_dir = template_store.bundled_template_dir() / "scripts"
+    list_decl = re.compile(
+        r"\$(\w+)\s*=\s*(?:New-Object\s+System\.Collections\.Generic\.List"
+        r"|\[System\.Collections\.Generic\.List\[[^\]]+\]\]::new)",
+        re.IGNORECASE,
+    )
+    offenders: list[str] = []
+    for ps1 in sorted(scripts_dir.glob("*.ps1")):
+        text = ps1.read_text(encoding="utf-8-sig")
+        list_vars = set(list_decl.findall(text))
+        # パラメータとして List 型を受け取る変数も対象に含める。
+        list_vars |= set(
+            re.findall(
+                r"\[System\.Collections\.Generic\.List\[[^\]]+\]\]\$(\w+)",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        for var in list_vars:
+            # @($var) はクラッシュ要因。@($var | ...) のようなパイプライン化は安全なので除外する。
+            if re.search(r"@\(\s*\$" + re.escape(var) + r"\s*\)", text):
+                offenders.append(f"{ps1.name}: @(${var})")
+    assert not offenders, f"Generic.List を @(...) で配列化しています: {offenders}"
 
 
 def test_extract_no_overwrite(tmp_path: Path):
@@ -165,7 +362,8 @@ def test_build_preview_paths_ci_file_server_wins_over_base(sln_repo: Path):
     logs, releases, tests = repo.build_preview_paths(cfg)
     assert logs == r"\\fileserver\ci\MyApp\logs"
     assert releases == r"\\fileserver\ci\MyApp\releases"
-    assert tests == r"\\fileserver\ci\MyApp\tests"
+    # ユニットテストは専用トップレベル <fileServer>/<testsDir>/<project>
+    assert tests == r"\\fileserver\ci\tests\MyApp"
 
 
 def test_build_preview_paths_without_base(sln_repo: Path):
@@ -177,7 +375,57 @@ def test_build_preview_paths_without_base(sln_repo: Path):
     logs, releases, tests = repo.build_preview_paths(cfg)
     assert logs == r"\\fileserver\ci\MyApp\logs"
     assert releases == r"\\fileserver\ci\MyApp\releases"
-    assert tests == r"\\fileserver\ci\MyApp\tests"
+    # ユニットテストは releases/logs と分離した専用トップレベル
+    assert tests == r"\\fileserver\ci\tests\MyApp"
+
+
+def test_build_preview_tests_separated_with_date(sln_repo: Path):
+    # 専用トップレベル＋日付サブフォルダ: <fileServer>/<testsDir>/<project>/<date>
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
+    cfg.storage.use_date_subfolder = True
+    _, releases, tests = repo.build_preview_paths(cfg, date_folder="20260101")
+    # releases は従来どおりプロジェクト配下、tests は専用トップレベルで混在しない
+    assert releases == r"\\fileserver\ci\MyApp\releases\20260101"
+    assert tests == r"\\fileserver\ci\tests\MyApp\20260101"
+    assert r"\MyApp\releases" not in tests  # releases と同じ階層に混ざらない
+
+
+def test_build_source_preview(sln_repo: Path):
+    # 開発環境 zip は releases / logs と同じ category 構造（<root>/<sourceDir>[/date]）
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
+    cfg.storage.use_date_subfolder = True
+    cfg.storage.source_dir = "source"
+    assert repo.build_source_preview(cfg, date_folder="20260101") == (
+        r"\\fileserver\ci\MyApp\source\20260101"
+    )
+    # base_path のみ・日付なし・カスタムフォルダ名
+    cfg.jenkins.ci_file_server = ""
+    cfg.storage.base_path = r"\\srv\share\MyApp"
+    cfg.storage.use_date_subfolder = False
+    cfg.storage.source_dir = "src-snap"
+    assert repo.build_source_preview(cfg) == r"\\srv\share\MyApp\src-snap"
+
+
+def test_build_target_roots_multiple_mixed(sln_repo: Path):
+    # ④ CI_FILE_SERVER 群はプロジェクト名を付与、書き込み先ベース群はそのまま。重複ルートは除外。
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = [r"\\fileserver\ci", r"\\fs2\ci"]
+    cfg.storage.base_paths = [r"D:\onedrive\MyApp", r"\\fileserver\ci\MyApp"]
+    roots = repo.build_target_roots(cfg)
+    assert (r"\\fileserver\ci", r"\\fileserver\ci\MyApp") in roots
+    assert (r"\\fs2\ci", r"\\fs2\ci\MyApp") in roots
+    assert (r"D:\onedrive\MyApp", r"D:\onedrive\MyApp") in roots
+    # base_path が ④ の実効ルートと重複する場合は除外される
+    resolved = [root for _, root in roots]
+    assert resolved.count(r"\\fileserver\ci\MyApp") == 1
 
 
 def test_build_preview_paths_url_base(sln_repo: Path):
@@ -212,14 +460,33 @@ def test_validate_rejects_url_in_ci_file_server(sln_repo: Path):
         repo.validate(cfg, sln_repo)
 
 
-def test_validate_ci_file_server_wins_over_stale_base_path_url(sln_repo: Path):
-    # 後勝ちのレガシータイブレーク: 両方非空なら file_server が実効値となり、
-    # base_path に古い URL が残っていても使われないためエラーにならない。
+def test_validate_rejects_url_in_any_target(sln_repo: Path):
+    # 複数書き込み先は全先へコピーするため、いずれの欄でも URL は拒否される
+    # （旧「後勝ち」のように URL を黙って無視しない）。
     repo = ConfigRepository()
     cfg = _valid_config(sln_repo)
-    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
-    cfg.storage.base_path = "https://contoso.sharepoint.com/sites/team/MyApp"
-    repo.validate(cfg, sln_repo)  # 例外が出ないこと（④ が優先）
+    cfg.jenkins.ci_file_servers = [r"\\fileserver\ci"]
+    cfg.storage.base_paths = ["https://contoso.sharepoint.com/sites/team/MyApp"]
+    with pytest.raises(ValueError, match="UNC またはローカルパス"):
+        repo.validate(cfg, sln_repo)
+
+
+def test_validate_accepts_multiple_write_targets(sln_repo: Path):
+    # ④ CI_FILE_SERVER と書き込み先ベースは併用でき、全てがローカル/UNC なら通る
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.jenkins.ci_file_servers = [r"\\srv1\ci", r"\\srv2\ci"]
+    cfg.storage.base_paths = [r"C:\Users\me\OneDrive - Co\CI\MyApp"]
+    repo.validate(cfg, sln_repo)  # 例外が出ないこと
+
+
+def test_effective_write_targets_union_and_dedup(sln_repo: Path):
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.jenkins.ci_file_servers = [r"\\srv1\ci", r"\\srv2\ci"]
+    cfg.storage.base_paths = [r"C:\local\CI", r"\\srv1\ci"]  # 重複は1つに
+    targets = repo.effective_write_targets(cfg)
+    assert targets == [r"\\srv1\ci", r"\\srv2\ci", r"C:\local\CI"]
 
 
 def test_validate_names_ci_file_server_when_url(sln_repo: Path):
@@ -278,15 +545,15 @@ def test_save_all_keeps_personal_paths_out_of_git(sln_repo: Path):
 
     # コミットされる config.json には個人 ID 入りの書き込み先・URL ユーザー名を残さない
     saved = json.loads(paths.config_path(sln_repo).read_text(encoding="utf-8"))
-    assert saved["storage"]["basePath"] == ""
-    assert saved["jenkins"]["ciFileServer"] == ""
+    assert saved["storage"]["basePaths"] == []
+    assert saved["jenkins"]["ciFileServers"] == []
     assert saved["git"]["repositoryUrl"] == "http://172.29.162.37/kallithea/x/ipu-test-app"
     assert "taro" not in json.dumps(saved)
 
     # ローカルファイル（git 非追跡）に書き込み先が保存される
     local = json.loads(paths.local_path(sln_repo).read_text(encoding="utf-8"))
-    assert local["basePath"] == r"C:\Users\taro\OneDrive - Co\CI\MyApp"
-    assert local["ciFileServer"] == r"\\fileserver\ci"
+    assert local["basePaths"] == [r"C:\Users\taro\OneDrive - Co\CI\MyApp"]
+    assert local["ciFileServers"] == [r"\\fileserver\ci"]
 
     # ユーザー名は secrets に移動
     saved_sec = json.loads(paths.secrets_path(sln_repo).read_text(encoding="utf-8"))

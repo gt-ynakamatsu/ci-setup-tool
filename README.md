@@ -55,6 +55,7 @@ cisetup/
 │   ├── jenkins_client.py    … Jenkins API（接続/認証情報/ジョブ/エージェント/ビルド）
 │   ├── teams_service.py     … Teams 通知カードの生成・送信
 │   ├── git_service.py       … Git push・secrets ステージ検出
+│   ├── local_ci.py          … ローカルでビルド＆テスト（ci-build/ci-test を実行・git 操作なし）
 │   ├── environment_scan.py  … 開発環境スキャン（git/java 等）
 │   ├── recent_project.py    … 直近プロジェクトの記憶
 │   ├── help_texts.py        … GUI ヘルプ文言
@@ -174,6 +175,7 @@ configure.py --help
 | ファイル | 対象読者 | 主な内容 | こんなときに見る |
 |----------|----------|----------|------------------|
 | [README.md](README.md)（本ファイル） | 開発者 | リポジトリ構成・開発フロー・exe ビルド・配布手順・このドキュメント索引 | コードを直す/exe を作る/zip を配る |
+| [docs/DESIGN.md](docs/DESIGN.md) | 開発者 | **設計仕様書**。全体像・データモデル・各処理フロー（Mermaid）・CI パイプライン挙動・ビルド/配布を網羅 | 設計を把握する/同等品を再実装する |
 | [docs/README-dist.md](docs/README-dist.md) | 利用者（exe を使う人） | exe の起動方法・同梱物・初回セットアップ・困ったとき | 配布された exe をとりあえず動かしたい |
 | [docs/GUI.md](docs/GUI.md) | 利用者・開発者 | 設定 GUI の起動方法・操作の流れ・CLI 引数 | GUI の使い方をざっと知りたい |
 | [docs/CI-GUIDE.md](docs/CI-GUIDE.md) | 構築担当者 | **CI 構築の完全手順書**。ファイルサーバー/Teams/Jenkins/エージェント/プロジェクト設定、GATE A〜D、トラブルシューティング、設定値↔JSON 対応 | CI を一から構築する/エラーで詰まった |
@@ -196,7 +198,8 @@ configure.py --help
 | ポート番号の変更（8086 など） | CI-GUIDE.md「6.10」 |
 | ビルドエージェントの起動・サービス化 | CI-GUIDE.md「8.」 |
 | 設定 GUI の各項目の意味・保存先 | GUI 内ヘルプ / CI-GUIDE.md「9. 設定値↔JSON 対応」 |
-| 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（`CI_FILE_SERVER` は Jenkins 側で設定） |
+| 保存先・閲覧 URL を「複数」設定する（＋/− 行追加） | CI-GUIDE.md「④ 保存先」の注記 / GUI の ④・③ の各「＋」ボタン |
+| 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（書き込み先は `cisetup.local.json`、CI 側は `CI_FILE_SERVER`） |
 | エラー・トラブルの対処 | CI-GUIDE.md「15. トラブルシューティング」 |
 | 配布された exe の使い方（利用者向け） | docs/README-dist.md |
 | コードを直してから exe を再ビルド | README.md「3. 開発フロー」 |

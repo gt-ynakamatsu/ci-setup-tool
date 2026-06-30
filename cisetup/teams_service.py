@@ -39,6 +39,16 @@ def _open_url(title: str, url: str) -> dict:
     return {"type": "Action.OpenUrl", "title": title, "url": url}
 
 
+def _open_url_actions(title: str, urls: list[str]) -> list[dict]:
+    """複数 URL をそれぞれボタン化する。2 件以上なら連番を付けて区別する。"""
+    cleaned = [u.strip() for u in urls if u and u.strip()]
+    if not cleaned:
+        return []
+    if len(cleaned) == 1:
+        return [_open_url(title, cleaned[0])]
+    return [_open_url(f"{title} ({i})", url) for i, url in enumerate(cleaned, start=1)]
+
+
 def build_test_card_payload(config: CISetupConfig) -> str:
     """本番通知と同じ見た目のテストカードを生成する（C# BuildTestCardPayload 相当）。"""
     project_name = config.project.name.strip() or "CISetup"
@@ -104,15 +114,14 @@ def build_test_card_payload(config: CISetupConfig) -> str:
         },
     ]
 
-    actions = []
-    if config.storage.analysis_url.strip():
-        actions.append(_open_url("解析レポート (HTML)", config.storage.analysis_url.strip()))
-    if config.storage.release_url.strip():
-        actions.append(_open_url("成果物フォルダを開く", config.storage.release_url.strip()))
-    if config.storage.tests_url.strip():
-        actions.append(_open_url("ユニットテストログを開く", config.storage.tests_url.strip()))
-    if config.storage.logs_url.strip():
-        actions.append(_open_url("ログフォルダを開く", config.storage.logs_url.strip()))
+    actions: list[dict] = []
+    for title, urls in (
+        ("解析レポート (HTML)", config.storage.analysis_urls),
+        ("成果物フォルダを開く", config.storage.release_urls),
+        ("ユニットテストログを開く", config.storage.tests_urls),
+        ("ログフォルダを開く", config.storage.logs_urls),
+    ):
+        actions.extend(_open_url_actions(title, urls))
 
     card: dict = {
         "type": "AdaptiveCard",

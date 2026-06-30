@@ -7,22 +7,24 @@
     "artifactPrefix": "YourProject"
   },
   "storage": {
-    "basePath": "",
+    "basePaths": [],
     "logsDir": "logs",
     "releasesDir": "releases",
     "testsDir": "tests",
+    "sourceDir": "source",
     "useDateSubfolder": true,
-    "releaseUrl": "",
-    "analysisUrl": "",
-    "logsUrl": "",
-    "testsUrl": ""
+    "archiveSource": false,
+    "releaseUrls": [],
+    "analysisUrls": [],
+    "logsUrls": [],
+    "testsUrls": []
   },
   "jenkins": {
     "jobName": "CISetup-CI",
     "agentLabel": "windows",
     "cronSchedule": "0 0 * * *",
     "pollSchedule": "H/5 * * * *",
-    "ciFileServer": "\\\\fileserver\\ci",
+    "ciFileServers": ["\\\\fileserver\\ci"],
     "teamsCredentialId": "teams-webhook-url",
     "defaultConfiguration": "Release",
     "buildTimeoutMinutes": 30,
