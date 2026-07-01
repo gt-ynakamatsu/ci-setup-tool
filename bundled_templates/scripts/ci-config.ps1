@@ -1,6 +1,27 @@
 ﻿# CI パイプライン共通設定ローダー
 # cisetup/cisetup.config.json を読む（旧: リポジトリ直下の cisetup.config.json も後方互換）。
 # Jenkins 各ステージ（ci-build.ps1 等）から dot-source される。
+#
+# Windows PowerShell 5.1 / PowerShell 7+ (pwsh, Linux 含む) の両方で動く前提。
+# パス連結は必ず Join-Path / Join-PathMulti を使い、"\" 決め打ちの文字列連結はしないこと
+# （Linux では "\" はディレクトリ区切りではなく通常の1文字として扱われるため）。
+
+function Join-PathMulti {
+    # PowerShell 5.1 では Join-Path の -AdditionalChildPath（PS 6+ 限定）が使えないため、
+    # 複数セグメントを順に Join-Path して連結する自前のヘルパー。
+    param([string]$Base, [string[]]$ChildPaths)
+    $result = $Base
+    foreach ($child in $ChildPaths) { $result = Join-Path $result $child }
+    return $result
+}
+
+function ConvertTo-PlatformPath {
+    # 設定ファイル（JSON）は "/" 区切りで保存される想定だが、旧設定や Windows 由来の値は
+    # "\" 区切りのこともある。実行 OS に応じたセパレーターへ正規化する。
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $Value }
+    return ($Value -replace '[\\/]', [System.IO.Path]::DirectorySeparatorChar)
+}
 
 function Test-StorageUrl {
     # 格納先が http(s) URL（OneDrive/SharePoint 等）かどうか。
@@ -47,14 +68,15 @@ function Get-ConfigList {
 
 function Join-StorageChild {
     # 格納先（UNC/ローカルパス または URL）にサブパスを連結する。
-    # URL なら "/"、パスなら "\" で連結する。
+    # URL なら "/"、パスなら実行 OS のセパレーター（Windows: "\" / Linux: "/"）で連結する。
     param([string]$Base, [string]$Child)
     if ([string]::IsNullOrWhiteSpace($Base)) { return $Child }
     if ([string]::IsNullOrWhiteSpace($Child)) { return $Base }
     if (Test-StorageUrl $Base) {
         return ($Base.TrimEnd('/')) + '/' + ($Child.Trim('/', '\'))
     }
-    return ($Base.TrimEnd('\', '/')) + '\' + ($Child.Trim('\', '/'))
+    $sep = [System.IO.Path]::DirectorySeparatorChar
+    return ($Base.TrimEnd('\', '/')) + $sep + ($Child.Trim('\', '/'))
 }
 
 function Get-CISetupLayout {
@@ -160,7 +182,7 @@ function Get-CiSettings {
     $publishCommand = if ($build) { [string]$build.publishCommand } else { '' }
     $testCommand = if ($build) { [string]$build.testCommand } else { '' }
     $artifactGlob = if ($build) { [string]$build.artifactGlob } else { '' }
-    $testProject = if ($config.project.testProject) { ($config.project.testProject -replace '/', '\').Trim() } else { '' }
+    $testProject = if ($config.project.testProject) { (ConvertTo-PlatformPath $config.project.testProject).Trim() } else { '' }
 
     if ([string]::IsNullOrWhiteSpace($config.project.name)) {
         throw "cisetup.config.json: project.name is required."
@@ -213,7 +235,7 @@ function Get-CiSettings {
     return [PSCustomObject]@{
         ProjectName = $config.project.name
         SolutionFile = $config.project.solutionFile
-        PublishProject = ($config.project.publishProject -replace '/', '\')
+        PublishProject = (ConvertTo-PlatformPath $config.project.publishProject)
         TestProject = $testProject
         ArtifactPrefix = if ([string]::IsNullOrWhiteSpace($config.project.artifactPrefix)) { $config.project.name } else { $config.project.artifactPrefix }
         Profile = $buildProfile
@@ -225,10 +247,10 @@ function Get-CiSettings {
         ArtifactGlob = $artifactGlob
         StorageBasePaths = $basePaths
         StorageBasePath = if ($basePaths.Count -gt 0) { $basePaths[0] } else { '' }
-        LogsDir = ($logsDir -replace '/', '\')
-        ReleasesDir = ($releasesDir -replace '/', '\')
-        TestsDir = ($testsDir -replace '/', '\')
-        SourceDir = ($sourceDir -replace '/', '\')
+        LogsDir = (ConvertTo-PlatformPath $logsDir)
+        ReleasesDir = (ConvertTo-PlatformPath $releasesDir)
+        TestsDir = (ConvertTo-PlatformPath $testsDir)
+        SourceDir = (ConvertTo-PlatformPath $sourceDir)
         ArchiveSource = $archiveSource
         UseDateSubfolder = $useDateSubfolder
         ReleaseUrls = $releaseUrls

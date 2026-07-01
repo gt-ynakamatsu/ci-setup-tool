@@ -264,15 +264,17 @@ class ConfigRepository:
         if is_custom:
             return
 
-        sln = repository_root / config.project.solution_file.replace("/", "\\")
+        # 保存値は "/" 区切り。pathlib は Windows でも "/" を解釈できるため置換不要
+        # （置換すると Linux では単一ファイル名として誤解釈されてしまう）。
+        sln = repository_root / config.project.solution_file
         if not sln.is_file():
             raise ValueError(f"ソリューションファイルが見つかりません: {config.project.solution_file}")
 
-        pub = repository_root / config.project.publish_project.replace("/", "\\")
+        pub = repository_root / config.project.publish_project
         if not pub.is_file():
             raise ValueError(f"Publish 対象 csproj が見つかりません: {config.project.publish_project}")
 
         if config.project.test_project.strip():
-            test = repository_root / config.project.test_project.replace("/", "\\")
+            test = repository_root / config.project.test_project
             if not test.is_file():
                 raise ValueError(f"テスト csproj が見つかりません: {config.project.test_project}")

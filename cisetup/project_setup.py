@@ -100,7 +100,9 @@ def _needs_redetect(value: str, repository_root: Path) -> bool:
         return True
     if "yourproject" in v.lower():
         return True
-    target = repository_root / v.replace("/", "\\")
+    # 保存値は "/" 区切り（_normalize_rel）。pathlib は Windows でも "/" を解釈できるため
+    # 置換不要（置換すると Linux では単一ファイル名として誤解釈されてしまう）。
+    target = repository_root / v
     return not target.is_file()
 
 

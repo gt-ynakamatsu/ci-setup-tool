@@ -1,4 +1,8 @@
-"""dist/CISetup.exe を PyInstaller で再ビルドする。"""
+"""dist/CISetup(.exe) を PyInstaller で再ビルドする。
+
+PyInstaller は実行中の OS 向けにネイティブバイナリを生成する（クロスコンパイル不可）。
+Windows では `CISetup.exe`、Linux/macOS では拡張子なしの `CISetup` が出力される。
+"""
 
 from __future__ import annotations
 
@@ -8,7 +12,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "cisetup.spec"
-EXE = ROOT / "dist" / "CISetup.exe"
+
+
+def exe_name(platform: str = sys.platform) -> str:
+    """PyInstaller が出力する実行ファイル名（OS 依存）。"""
+    return "CISetup.exe" if platform == "win32" else "CISetup"
+
+
+EXE = ROOT / "dist" / exe_name()
 
 # exe に影響するソース（鮮度チェックと同期）
 EXE_SOURCE_GLOBS = (

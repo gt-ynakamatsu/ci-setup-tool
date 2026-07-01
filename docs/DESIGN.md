@@ -172,14 +172,38 @@ flowchart TB
 | 実行時依存 | 標準ライブラリ中心（`requirements.txt` は最小限）。HTTP は `urllib` を使用 |
 | 開発時依存 | `pytest>=8` / `coverage>=7` / `pyinstaller>=6` / `pyflakes>=3`（`requirements-dev.txt`） |
 | 配布 | PyInstaller 単一 exe（`cisetup.spec`、`console=False` の windowed exe） |
-| CI 実行側 | Jenkins エージェント（Windows）+ **Windows PowerShell 5.1 互換**の `ci-*.ps1` |
-| .NET ビルド | エージェントに .NET SDK 8 が必要（`dotnet build/test/format/publish`） |
+| CI 実行側 | Jenkins エージェント（Windows / Linux）+ **Windows PowerShell 5.1 / PowerShell 7 (pwsh) 両対応**の `ci-*.ps1` |
+| .NET ビルド | エージェントに .NET SDK 8 が必要（`dotnet build/test/format/publish`）。Linux でも同じ SDK で可 |
 | 文字コード | `.ps1` は **UTF-8 BOM 付き**、その他テキストは UTF-8（改行 `\n`）。詳細は [12 章](#12-エンコーディング互換性方針) |
-| OS | Windows（高 DPI 対応・`CREATE_NO_WINDOW` での子プロセス起動など Windows 固有処理あり） |
+| OS（CISetup アプリ本体） | Windows / Linux（`tkinter` ベースでクロスプラットフォーム。高 DPI 対応・`CREATE_NO_WINDOW`・コンソール割り当てなど Windows 固有処理は `sys.platform` でガード） |
+| OS（生成される CI パイプライン） | Windows / Linux 両対応。`Jenkinsfile` が `isUnix()` でエージェント OS を判定し、Windows は `powershell`（5.1）、Linux は `pwsh`（PowerShell 7+、要インストール）で同一の `ci-*.ps1` を実行する（[4.1 章](#41-ci-パイプラインの-linux-対応)） |
 | Jenkins 認証 | ユーザー名 + API Token（Basic 認証）+ CSRF Crumb |
 
 前提となる外部要素: 起動済みの Jenkins、アクセス可能な Git リモート、書き込み可能な共有フォルダ、
 Teams の受信 Webhook。これらの構築自体は [docs/CI-GUIDE.md](CI-GUIDE.md) を参照。
+
+### 4.1 CI パイプラインの Linux 対応
+
+`ci-*.ps1` は Windows PowerShell 5.1 と PowerShell 7 (`pwsh`, Windows/Linux 両対応) の
+どちらでも同じスクリプトファイルが動くように書かれている。ポイントは次の3点。
+
+1. **パス連結は `Join-Path` / 自前ヘルパー `Join-PathMulti` のみを使う。**
+   `"artifacts\test"` のような `\` 決め打ちのリテラル連結は禁止。Linux では `\` は
+   ディレクトリ区切りではなく通常の1文字として扱われるため、そのまま使うと
+   `artifacts\test` という奇妙な名前の1ファイル/ディレクトリを指してしまう。
+   `ci-config.ps1` の `ConvertTo-PlatformPath`（`/`・`\` を実行 OS のセパレーターへ正規化）と
+   `Join-StorageChild`（`[System.IO.Path]::DirectorySeparatorChar` を使用）も同じ理由。
+2. **`. "$PSScriptRoot\ci-config.ps1"` ではなく `. (Join-Path $PSScriptRoot 'ci-config.ps1')`。**
+   前者は Linux で dot-source 対象のパスが解決できず全スクリプトが即失敗する。
+3. **`Jenkinsfile` 側は `isUnix()` でエージェント OS を実行時判定し、呼び出すステップを
+   `powershell`（Windows）/ `pwsh`（Linux）で切り替える。** 既存の Windows PowerShell 5.1
+   環境（`pwsh` 未インストール）を壊さないよう、Windows 側は従来どおり `powershell` ステップの
+   ままにしてある。切り替えは `Jenkinsfile.template` 冒頭の `runPs()` ヘルパー1箇所に集約。
+
+Linux エージェント側の追加要件: PowerShell 7 以降（`pwsh`）、および build プロファイルが
+要求するツールチェイン（dotnet プロファイルなら .NET SDK）。Windows Forms/WPF など
+Windows 専用フレームワークを使う .NET プロジェクト自体は Linux でビルドできないため、
+そのようなプロジェクトは引き続き Windows エージェント専用となる。
 
 ---
 
@@ -970,7 +994,12 @@ CISetup-<Version>/
   個人 ID 入りの値はコミット前に空へ退避されるため、通常は空（= `cisetup.local.json` / Jenkins 側から取得）。
 - **`cisetup.local.json` は `.gitignore` 未登録**: push 時にステージから自動除外する設計のため、
   別経路で誤って add すると理屈上は追跡されうる（push 経路では `push_ci_files` が常に外す）。
-- **Windows 専用**: 高 DPI・`CREATE_NO_WINDOW`・UNC など Windows 前提の処理が多い。
+- **アプリ本体・CI パイプラインとも Windows/Linux 両対応**: CISetup 自体（GUI・Jenkins/Git/Teams
+  設定）は `tkinter` + 標準ライブラリのみで Linux でも動作し、生成・配置する `ci-*.ps1` も
+  Windows PowerShell 5.1 / PowerShell 7 (`pwsh`) の両方で動く。`Jenkinsfile` が `isUnix()` で
+  エージェント OS を判定してステップを切り替えるため、Linux エージェントには別途 `pwsh` の
+  インストールが必要（[4.1 章](#41-ci-パイプラインの-linux-対応)）。Windows Forms/WPF など
+  Windows 専用フレームワークを使う .NET プロジェクトはそもそも Linux でビルドできないため対象外。
 - 拡張余地: プリセットの追加（`ci_preset_catalog.PRESETS`）、解析ルールのカスタム、複数ジョブ対応、
   共有 URL への Graph 連携アップロードなど。
 

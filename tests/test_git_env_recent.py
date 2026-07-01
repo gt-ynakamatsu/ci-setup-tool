@@ -260,6 +260,50 @@ def test_scan_handles_missing_commands(monkeypatch):
     assert all(not r.found for r in results)
 
 
+def test_check_jenkins_service_linux_active(monkeypatch):
+    # Linux では sc の代わりに systemctl is-active で検出する。
+    monkeypatch.setattr(environment_scan.sys, "platform", "linux")
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory({"systemctl": (0, "active", "")}))
+    result = environment_scan._check_jenkins_service()
+    assert result.found
+    assert "active" in result.detail
+
+
+def test_check_jenkins_service_linux_inactive(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "linux")
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory({"systemctl": (3, "inactive", "")}))
+    result = environment_scan._check_jenkins_service()
+    assert result.found  # インストール済みだが停止中、として検出扱い
+    assert "停止中" in result.detail
+
+
+def test_check_jenkins_service_linux_not_found(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "linux")
+
+    def boom(cmd, **kwargs):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    result = environment_scan._check_jenkins_service()
+    assert not result.found
+
+
+def test_check_git_name_and_url_linux(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "linux")
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory({"git": (0, "git version 2.43.0", "")}))
+    result = environment_scan._check_git()
+    assert result.name == "Git"
+    assert "download/win" not in result.download_url
+
+
+def test_check_git_name_and_url_windows(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "win32")
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory({"git": (0, "git version 2.43.0", "")}))
+    result = environment_scan._check_git()
+    assert result.name == "Git for Windows"
+    assert result.download_url.endswith("/win")
+
+
 # ----------------------------------------------------------- recent project
 
 def test_recent_project_save_and_get(tmp_path: Path):

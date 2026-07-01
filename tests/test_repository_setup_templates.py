@@ -310,6 +310,14 @@ def test_read_template_missing():
         template_store.read_template("nope.template")
 
 
+def test_read_template_nested_forward_slash_path():
+    # BUNDLED_FILES は "/" 区切り。バックスラッシュへ変換せずそのまま渡しても
+    # サブフォルダ内のファイルを解決できること（Linux では変換すると単一ファイル名に
+    # 誤解釈されて壊れるため、変換しないことが正しい実装）。
+    text = template_store.read_template("scripts/ci-build.ps1")
+    assert text.strip()
+
+
 # --------------------------------------------------------- config_repository
 
 def _valid_config(sln_repo: Path) -> CISetupConfig:

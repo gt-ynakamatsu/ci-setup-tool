@@ -38,7 +38,9 @@ def bundled_template_dir() -> Path:
 
 
 def read_template(relative_path: str) -> str:
-    path = bundled_template_dir() / relative_path.replace("/", "\\")
+    # BUNDLED_FILES は "/" 区切りで定義。pathlib は Windows でも "/" をセパレータとして
+    # 解釈するため、置換せずそのまま渡せば Windows/Linux 両方で正しく解決できる。
+    path = bundled_template_dir() / relative_path
     if not path.is_file():
         raise FileNotFoundError(f"テンプレートが見つかりません: {relative_path}")
     return path.read_text(encoding="utf-8-sig")
@@ -49,11 +51,11 @@ def extract_to_repository(repository_root: Path, overwrite: bool = True) -> list
     written: list[str] = []
 
     for rel in BUNDLED_FILES:
-        src = source / rel.replace("/", "\\")
+        src = source / rel
         if not src.is_file():
             raise FileNotFoundError(f"同梱テンプレートが見つかりません: {rel}")
 
-        target = paths.ci_dir(repository_root) / rel.replace("/", "\\")
+        target = paths.ci_dir(repository_root) / rel
         if target.is_file() and not overwrite:
             continue
 

@@ -19,13 +19,13 @@ if ([string]::IsNullOrWhiteSpace($FailOn)) { $FailOn = "None" }
 if ($FailOn -notin @('None', 'High', 'Medium')) {
     throw "FailOn は None / High / Medium のいずれかを指定してください (指定値: '$FailOn')。"
 }
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
 $env:CI = "true"
 
-$analysisDir = Join-Path $ci.Root 'artifacts\analysis'
+$analysisDir = Join-PathMulti $ci.Root @('artifacts', 'analysis')
 if (Test-Path $analysisDir) {
     Remove-Item $analysisDir -Recurse -Force
 }

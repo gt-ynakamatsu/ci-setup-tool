@@ -915,6 +915,13 @@ Jenkins サーバーは「指揮官」、エージェントは「作業員」で
 
 CISetup は **パターン A または B** を想定しています（設定アプリが JNLP エージェントを登録します）。
 
+> **Linux エージェントを使いたい場合:** このガイド自体は Windows エージェントを前提に書いていますが、
+> 生成される `ci-*.ps1` / `Jenkinsfile` は Linux ビルドエージェントにも対応しています（`Jenkinsfile` が
+> `isUnix()` でエージェント OS を判定し、Windows は `powershell`、Linux は `pwsh` を自動選択）。
+> Linux エージェントには Java 11+ / Git / 対象プロジェクトのビルドツール（.NET SDK 等）に加えて
+> **PowerShell 7 (`pwsh`)** のインストールが必要です。詳細は
+> [DESIGN.md 4.1 章](DESIGN.md#41-ci-パイプラインの-linux-対応) を参照してください。
+
 ### 8.3 エージェント PC に入れるソフト
 
 | ソフト | 確認コマンド | 備考 |

@@ -19,7 +19,15 @@ def _program_name() -> str:
 
 
 def _attach_console_for_cli(argv: list[str]) -> None:
-    """windowed exe でも --bootstrap / --help がターミナルで動くようにする。"""
+    """windowed exe でも --bootstrap / --help がターミナルで動くようにする（Windows のみ）。
+
+    Linux の PyInstaller windowed ビルドには Windows の GUI/コンソール
+    サブシステム分離がなく、frozen 実行ファイルも通常どおり呼び出し元の
+    ターミナルに出力されるため、この対応は不要（かつ ctypes.windll が
+    存在せず AttributeError になる）。
+    """
+    if sys.platform != "win32":
+        return
     if not getattr(sys, "frozen", False):
         return
     if not any(arg in argv for arg in ("--bootstrap", "--help", "-h")):

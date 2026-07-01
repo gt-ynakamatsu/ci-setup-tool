@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet build -c` の引数が欠落し MSB4126 になるため既定値で補う。
 if ([string]::IsNullOrWhiteSpace($Configuration)) { $Configuration = "Release" }
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
@@ -17,7 +17,7 @@ $env:CI = "true"
 Write-Host "==> Project: $($ci.ProjectName)"
 
 if ($ci.Profile -eq 'custom') {
-    $releaseDir = Join-Path $ci.Root 'artifacts\release'
+    $releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
     if (Test-Path $releaseDir) { Remove-Item -Recurse -Force $releaseDir }
     New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
@@ -48,7 +48,7 @@ if ($ci.Profile -eq 'custom') {
     $regexes = $patterns | ForEach-Object { Convert-GlobToRegex $_ }
 
     $allFiles = Get-ChildItem -Path $ci.Root -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '\\artifacts\\release\\' }
+        Where-Object { $_.FullName -notmatch '[\\/]artifacts[\\/]release[\\/]' }
 
     $matched = @()
     foreach ($file in $allFiles) {
@@ -78,8 +78,8 @@ if ($ci.Profile -eq 'custom') {
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"
 
-$publishDir = Join-Path $ci.Root "artifacts\publish"
-$releaseDir = Join-Path $ci.Root "artifacts\release"
+$publishDir = Join-PathMulti $ci.Root @('artifacts', 'publish')
+$releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
 
 if (Test-Path $publishDir) {
     Remove-Item -Recurse -Force $publishDir
@@ -134,8 +134,10 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed (exit code $LASTEXITCODE)."
 }
 
+# OS 判定は PS 5.1 に無い $IsWindows/$IsLinux ではなく、両エディションで使える環境変数 OS を使う。
+$platformTag = if ($env:OS -eq 'Windows_NT') { 'win-x64' } else { 'linux-x64' }
 $prefix = $ci.ArtifactPrefix
-$zipName = if ($Version) { "$prefix-$Version-win-x64.zip" } else { "$prefix-win-x64.zip" }
+$zipName = if ($Version) { "$prefix-$Version-$platformTag.zip" } else { "$prefix-$platformTag.zip" }
 $zipPath = Join-Path $releaseDir $zipName
 
 Write-Host "==> Archive $zipName"

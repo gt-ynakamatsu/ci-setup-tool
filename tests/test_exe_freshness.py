@@ -7,6 +7,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_exe_name_per_platform():
+    from tools.rebuild_exe import exe_name
+
+    assert exe_name("win32") == "CISetup.exe"
+    assert exe_name("linux") == "CISetup"
+    assert exe_name("darwin") == "CISetup"
+
+
 def test_dist_exe_exists_and_is_fresh():
     """GUI/同梱物を直したあと exe が古いまま残っていないか確認する。"""
     from tools.rebuild_exe import EXE, exe_is_stale, newest_source_mtime

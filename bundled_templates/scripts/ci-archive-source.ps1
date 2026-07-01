@@ -7,7 +7,7 @@
 # 出力: artifacts\source\<ArtifactPrefix>-<BUILD_NUMBER|日時>-src.zip
 # PowerShell 5.1 互換（三項演算子不可、System.IO.Compression を使用）。
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
@@ -16,7 +16,7 @@ if (-not $ci.ArchiveSource) {
     exit 0
 }
 
-$sourceOut = Join-Path $ci.Root 'artifacts\source'
+$sourceOut = Join-PathMulti $ci.Root @('artifacts', 'source')
 New-Item -ItemType Directory -Force -Path $sourceOut | Out-Null
 # 再利用ワークスペースで過去ビルドの zip が残ると Source デプロイで全件コピーされるため、
 # 出力先の既存 zip を一掃してから当該ビルドの zip だけを作る。
@@ -31,8 +31,8 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 $excludeDirs = @('.git', 'artifacts', 'bin', 'obj', '.vs', 'node_modules', 'packages', 'TestResults')
 $excludeFilePatterns = @('*.user')
 
-$rootFull = (Resolve-Path $ci.Root).Path.TrimEnd('\')
-$rootPrefix = $rootFull + '\'
+$rootFull = (Resolve-Path $ci.Root).Path.TrimEnd('\', '/')
+$rootPrefix = $rootFull + [System.IO.Path]::DirectorySeparatorChar
 
 function Test-SourceExcluded {
     param([string]$FullPath)

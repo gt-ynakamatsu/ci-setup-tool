@@ -14,7 +14,7 @@
 # 書き込み先が共有 URL の場合は直接アップロード未対応のため各先ごとにスキップする
 # （共有 URL は storage.*Urls で Teams リンクに使用）。
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
@@ -25,7 +25,7 @@ $testsDir = if ($ci.TestsDir) { $ci.TestsDir } else { 'tests' }
 
 # 配置先パスを Teams 通知へ引き継ぐためのマニフェスト。
 # 同一ビルド内（Analysis → Artifact → notify）で追記し、別ビルドの残骸は buildNumber で無効化する。
-$manifestPath = Join-Path $ci.Root 'artifacts\deploy-manifest.json'
+$manifestPath = Join-PathMulti $ci.Root @('artifacts', 'deploy-manifest.json')
 
 function Update-DeployManifest {
     param([hashtable]$Entries)
@@ -124,7 +124,7 @@ function Get-TestsDest {
 }
 
 if ($Type -eq 'Logs') {
-    $logFile = Join-Path $ci.Root 'artifacts\logs\build.log'
+    $logFile = Join-PathMulti $ci.Root @('artifacts', 'logs', 'build.log')
     if (-not (Test-Path $logFile)) {
         Write-Warning "Log file not found: $logFile"
         exit 0
@@ -142,7 +142,7 @@ if ($Type -eq 'Logs') {
 }
 
 if ($Type -eq 'Analysis') {
-    $analysisDir = Join-Path $ci.Root 'artifacts\analysis'
+    $analysisDir = Join-PathMulti $ci.Root @('artifacts', 'analysis')
     if (-not (Test-Path $analysisDir)) {
         Write-Warning "Analysis directory not found: $analysisDir"
         exit 0
@@ -178,7 +178,7 @@ if ($Type -eq 'Analysis') {
 }
 
 if ($Type -eq 'Test') {
-    $testDir = Join-Path $ci.Root 'artifacts\test'
+    $testDir = Join-PathMulti $ci.Root @('artifacts', 'test')
     if (-not (Test-Path $testDir)) {
         Write-Warning "Test directory not found: $testDir"
         exit 0
@@ -221,7 +221,7 @@ if ($Type -eq 'Source') {
         Write-Host 'Source archive disabled (storage.archiveSource = false). Skipping source deploy.'
         exit 0
     }
-    $sourceDirLocal = Join-Path $ci.Root 'artifacts\source'
+    $sourceDirLocal = Join-PathMulti $ci.Root @('artifacts', 'source')
     if (-not (Test-Path $sourceDirLocal)) {
         Write-Warning "Source directory not found: $sourceDirLocal"
         exit 0
@@ -254,7 +254,7 @@ if ($Type -eq 'Source') {
 }
 
 # ---- Artifact（リリース zip）----
-$releaseDir = Join-Path $ci.Root 'artifacts\release'
+$releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
 if (-not (Test-Path $releaseDir)) {
     Write-Warning "Release directory not found: $releaseDir"
     exit 0

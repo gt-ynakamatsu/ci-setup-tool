@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet build -c` の引数が欠落し MSB4126 になるため既定値で補う。
 if ([string]::IsNullOrWhiteSpace($Configuration)) { $Configuration = "Release" }
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 

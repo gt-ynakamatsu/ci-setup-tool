@@ -9,7 +9,7 @@ Python 製で、配布は **単一 exe**（利用者は Python 不要）。
 
 ## 1. 必要なもの
 
-- Windows
+- Windows または Linux
 - Python 3.10 以上（GUI は標準の `tkinter` を使用）
 
 ```powershell
@@ -19,6 +19,33 @@ python -m pip install -r requirements-dev.txt   # テスト/ビルド用
 
 `requirements.txt` は実行時依存（標準ライブラリのみのため通常は空〜最小）、
 `requirements-dev.txt` は pytest / pytest-cov / PyInstaller などの開発用です。
+
+### Linux での実行
+
+CISetup 本体は標準ライブラリ + `tkinter` のみで実装されており、ソースから起動する分には
+Windows 専用の依存はありません（Windows 固有 API 呼び出しは `sys.platform` でガード済み）。
+
+```bash
+sudo apt install python3-tk   # tkinter が同梱されていないディストリビューションの場合
+python3 configure.py
+```
+
+配布用バイナリ（PyInstaller）も同じ `cisetup.spec` から Linux 上でビルドできますが、
+PyInstaller は実行環境向けのバイナリしか生成できない（クロスコンパイル不可）ため、
+Linux 用バイナイルが必要な場合は **Linux 上で** `python tools/rebuild_exe.py` を実行してください
+（`dist/CISetup`（拡張子なし）が生成されます）。
+
+**生成される CI パイプライン（`ci-*.ps1` + `Jenkinsfile`）も Windows / Linux 両対応です。**
+`Jenkinsfile` はエージェントが Windows か Linux/Unix かを実行時に `isUnix()` で判定し、
+Windows では `powershell`（Windows PowerShell 5.1）、Linux では `pwsh`（PowerShell 7+）で
+同じ `ci-*.ps1` を実行します。Linux エージェントには以下が必要です。
+
+- PowerShell 7 以降（`pwsh`）… [公式手順](https://learn.microsoft.com/powershell/scripting/install/installing-powershell-on-linux) でインストール
+- `dotnet` SDK（dotnet プロファイルの場合。custom プロファイルなら `build.buildCommand` 等が
+  必要とするツールチェイン）
+
+Windows Forms / WPF など Windows 専用フレームワークを使う .NET プロジェクトは、そもそも
+Linux 上でビルド・実行できないため対象外です（対象プロジェクトが cross-platform であることが前提）。
 
 ---
 

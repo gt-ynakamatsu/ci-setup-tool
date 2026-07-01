@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet test -c` の引数が欠落し MSB4126 になるため既定値で補う。
 if ([string]::IsNullOrWhiteSpace($Configuration)) { $Configuration = "Release" }
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
@@ -32,7 +32,7 @@ if ([string]::IsNullOrWhiteSpace($ci.TestProject)) {
     exit 0
 }
 
-$testDir = Join-Path $ci.Root 'artifacts\test'
+$testDir = Join-PathMulti $ci.Root @('artifacts', 'test')
 New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $trxPath = Join-Path $testDir 'test-results.trx'
 $summaryPath = Join-Path $testDir 'test-summary.json'

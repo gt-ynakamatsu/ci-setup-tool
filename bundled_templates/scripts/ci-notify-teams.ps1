@@ -20,12 +20,12 @@
 # TEAMS_WEBHOOK_URL は Jenkins Credentials から注入。
 # ユニットテスト失敗時のみ、失敗したテスト名とユニットテストログへのリンクボタンをカードに載せる。
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot\ci-config.ps1"
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 $ci = Get-CiSettings
 
 # ---- ファイルサーバー配置先（ci-deploy-fileserver.ps1 が出力したマニフェスト）----
 $deploy = $null
-$manifestPath = Join-Path $ci.Root 'artifacts\deploy-manifest.json'
+$manifestPath = Join-PathMulti $ci.Root @('artifacts', 'deploy-manifest.json')
 if (Test-Path $manifestPath) {
     try {
         $m = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -40,7 +40,12 @@ function ConvertTo-FileUri {
     param([string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
     if ($Path -like '\\*') {
+        # UNC パス（\\server\share\...）
         return 'file:' + ($Path -replace '\\', '/')
+    }
+    if ($Path -like '/*') {
+        # Linux 等の絶対パス（先頭が "/"）はそのまま file:// を付与する。
+        return 'file://' + $Path
     }
     return 'file:///' + ($Path -replace '\\', '/')
 }
@@ -106,7 +111,7 @@ $hasTestFailure = $false
 $testFallback = ''
 
 # ---- 静的解析サマリー ----
-$summaryPath = Join-Path $ci.Root 'artifacts\analysis\analysis-summary.json'
+$summaryPath = Join-PathMulti $ci.Root @('artifacts', 'analysis', 'analysis-summary.json')
 if (Test-Path $summaryPath) {
     try {
         $summary = Get-Content $summaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -127,7 +132,7 @@ if (Test-Path $summaryPath) {
 }
 
 # ---- ユニットテスト（失敗時のみテスト名とログリンク） ----
-$testSummaryPath = Join-Path $ci.Root 'artifacts\test\test-summary.json'
+$testSummaryPath = Join-PathMulti $ci.Root @('artifacts', 'test', 'test-summary.json')
 if (Test-Path $testSummaryPath) {
     try {
         $ts = Get-Content $testSummaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -194,7 +199,7 @@ if (-not $isSuccess) {
         type  = 'TextBlock'
         color = 'Attention'
         wrap  = $true
-        text  = "ビルドログ: 社内ファイルサーバー \\…\\$($ci.ProjectName)\logs\ を確認してください。"
+        text  = "ビルドログ: 設定済みの書き込み先（$($ci.ProjectName) の logs フォルダ）を確認してください。"
     }
 }
 

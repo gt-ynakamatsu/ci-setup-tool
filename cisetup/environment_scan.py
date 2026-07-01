@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import dataclass
 
 from .process_util import no_window_kwargs
@@ -40,10 +41,11 @@ def _first_line(text: str) -> str:
 
 
 def _check_git() -> EnvironmentCheckResult:
+    is_windows = sys.platform == "win32"
     result = EnvironmentCheckResult(
-        name="Git for Windows",
+        name="Git for Windows" if is_windows else "Git",
         guidance="社内 Git から clone / push するために必要です（設定 PC・エージェント PC の両方）。",
-        download_url="https://git-scm.com/download/win",
+        download_url="https://git-scm.com/download/win" if is_windows else "https://git-scm.com/downloads",
     )
     ok, stdout, _ = _run("git", "--version")
     if ok:
@@ -100,13 +102,27 @@ def _check_jenkins_service() -> EnvironmentCheckResult:
         guidance="このPCがJenkinsサーバーでない場合は未検出で問題ありません。サーバー機で確認してください。",
         download_url="https://www.jenkins.io/download/",
     )
-    _, stdout, _ = _run("sc", "query", "Jenkins")
-    if "RUNNING" in stdout.upper():
+    if sys.platform == "win32":
+        _, stdout, _ = _run("sc", "query", "Jenkins")
+        if "RUNNING" in stdout.upper():
+            result.found = True
+            result.detail = "起動中 (RUNNING)"
+        elif "STOPPED" in stdout.upper():
+            result.found = True
+            result.detail = "インストール済みだが停止中 (STOPPED) → サービスを開始してください。"
+        else:
+            result.detail = "このPCには見つかりません。"
+        return result
+
+    # Linux: systemd 管理下の jenkins サービスを確認（systemd 以外の環境では未検出扱い）。
+    ok, stdout, _ = _run("systemctl", "is-active", "jenkins")
+    state = stdout.strip().lower()
+    if ok and state == "active":
         result.found = True
-        result.detail = "起動中 (RUNNING)"
-    elif "STOPPED" in stdout.upper():
+        result.detail = "起動中 (active)"
+    elif state:
         result.found = True
-        result.detail = "インストール済みだが停止中 (STOPPED) → サービスを開始してください。"
+        result.detail = f"インストール済みだが停止中 ({state}) → サービスを開始してください。"
     else:
         result.detail = "このPCには見つかりません。"
     return result
