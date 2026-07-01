@@ -15,7 +15,7 @@ pipeline {
     }
 
     triggers {
-        cron('{{CRON_SCHEDULE}}')
+        cron(spec: '{{CRON_SCHEDULE}}', timezone: '{{TIMEZONE}}')
 {{POLL_TRIGGER}}
     }
 

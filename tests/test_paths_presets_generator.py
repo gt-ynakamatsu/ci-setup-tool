@@ -199,7 +199,7 @@ def test_build_agent_declaration_escapes():
 def test_generate_jenkinsfile(tmp_path: Path):
     template = (
         "agent {{AGENT_DECLARATION}}\n"
-        "cron('{{CRON_SCHEDULE}}')\n"
+        "cron(spec: '{{CRON_SCHEDULE}}', timezone: '{{TIMEZONE}}')\n"
         "{{POLL_TRIGGER}}\n"
         "server={{CI_FILE_SERVER}}\n"
         "cred={{TEAMS_CREDENTIAL_ID}}\n"
@@ -208,13 +208,14 @@ def test_generate_jenkinsfile(tmp_path: Path):
     cfg = CISetupConfig()
     cfg.jenkins.agent_label = "windows"
     cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
     cfg.jenkins.poll_schedule = "H/5 * * * *"
     cfg.jenkins.ci_file_server = r"\\server\ci"
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile(template, out, cfg)
     text = out.read_text(encoding="utf-8")
     assert "label 'windows'" in text
-    assert "cron('0 0 * * *')" in text
+    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in text
     assert "pollSCM('H/5 * * * *')" in text
     assert r"\\\\server\\ci" in text  # backslash escaped for groovy
     assert "timeout=30 retention=30" in text

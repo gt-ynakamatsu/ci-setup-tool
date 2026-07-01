@@ -23,7 +23,7 @@
       <extensions/>
     </scm>
     <scriptPath>cisetup/Jenkinsfile</scriptPath>
-    <lightweight>true</lightweight>
+    <lightweight>false</lightweight>
   </definition>
   <triggers/>
   <disabled>false</disabled>

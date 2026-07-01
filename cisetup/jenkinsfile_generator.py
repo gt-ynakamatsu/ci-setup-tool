@@ -25,6 +25,7 @@ def generate_jenkinsfile(template: str, output_path: Path, config) -> None:
         template.lstrip("\ufeff")
         .replace("{{AGENT_DECLARATION}}", build_agent_declaration(config.jenkins.agent_label))
         .replace("{{CRON_SCHEDULE}}", config.jenkins.cron_schedule)
+        .replace("{{TIMEZONE}}", config.jenkins.timezone.strip() or "Asia/Tokyo")
         .replace("{{POLL_TRIGGER}}", poll_trigger)
         .replace("{{CI_FILE_SERVER}}", ci_server)
         .replace("{{TEAMS_CREDENTIAL_ID}}", config.jenkins.teams_credential_id)
