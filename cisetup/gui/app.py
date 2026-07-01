@@ -928,6 +928,66 @@ class ConfigureApp(tk.Tk):
         ttk.Entry(row, textvariable=self._fields["jenkins.log_retention_count"], width=8, font=font(12)).pack(side=tk.LEFT)
         tk.Label(row, text="件保持", bg=COLOR_CARD_BG, font=font(12)).pack(side=tk.LEFT, padx=(6, 0))
 
+        retry_row = tk.Frame(frame, bg=COLOR_CARD_BG)
+        retry_row.pack(fill=tk.X, pady=4)
+        retry_label = tk.Label(
+            retry_row, text="Checkout 失敗時の自動リトライ回数", width=22, anchor="w", bg=COLOR_CARD_BG, font=font(12)
+        )
+        retry_label.pack(side=tk.LEFT)
+        self._register_field("jenkins.checkout_retry_count")
+        retry_entry = ttk.Entry(
+            retry_row, textvariable=self._fields["jenkins.checkout_retry_count"], width=8, font=font(12)
+        )
+        retry_entry.pack(side=tk.LEFT)
+        tk.Label(retry_row, text="回", bg=COLOR_CARD_BG, font=font(12)).pack(side=tk.LEFT, padx=(6, 0))
+        attach_tooltip(retry_label, help_texts.CHECKOUT_RETRY_COUNT)
+        attach_tooltip(retry_entry, help_texts.CHECKOUT_RETRY_COUNT)
+
+        self._retry_wrapper_var = tk.BooleanVar(value=False)
+        wrapper_cb = tk.Checkbutton(
+            frame,
+            text="cron 失敗時に自動リトライする（別建てジョブ + Naginator）",
+            variable=self._retry_wrapper_var,
+            command=self._on_retry_wrapper_changed,
+            font=font(12),
+            bg=COLOR_CARD_BG,
+            activebackground=COLOR_CARD_BG,
+            anchor="w",
+        )
+        wrapper_cb.pack(anchor="w", pady=(10, 0))
+        attach_tooltip(wrapper_cb, help_texts.RETRY_WRAPPER_ENABLED)
+
+        self._retry_options_row = tk.Frame(frame, bg=COLOR_CARD_BG)
+        self._retry_options_row.pack(fill=tk.X, pady=(4, 0))
+        tk.Label(
+            self._retry_options_row, text="最大リトライ回数 / 間隔",
+            width=22, anchor="w", bg=COLOR_CARD_BG, font=font(12),
+        ).pack(side=tk.LEFT)
+        self._register_field("jenkins.retry_max_count")
+        self._register_field("jenkins.retry_delay_seconds")
+        max_entry = ttk.Entry(
+            self._retry_options_row, textvariable=self._fields["jenkins.retry_max_count"], width=8, font=font(12)
+        )
+        max_entry.pack(side=tk.LEFT)
+        tk.Label(self._retry_options_row, text="回", bg=COLOR_CARD_BG, font=font(12)).pack(side=tk.LEFT, padx=(6, 16))
+        delay_entry = ttk.Entry(
+            self._retry_options_row, textvariable=self._fields["jenkins.retry_delay_seconds"], width=8, font=font(12)
+        )
+        delay_entry.pack(side=tk.LEFT)
+        tk.Label(self._retry_options_row, text="秒後に再実行", bg=COLOR_CARD_BG, font=font(12)).pack(
+            side=tk.LEFT, padx=(6, 0)
+        )
+        attach_tooltip(max_entry, help_texts.RETRY_MAX_COUNT)
+        attach_tooltip(delay_entry, help_texts.RETRY_DELAY_SECONDS)
+        self._on_retry_wrapper_changed()
+
+    def _on_retry_wrapper_changed(self) -> None:
+        if self._retry_wrapper_var.get():
+            self._retry_options_row.pack(fill=tk.X, pady=(4, 0))
+        else:
+            self._retry_options_row.pack_forget()
+        self._on_field_changed()
+
     def _build_details_server(self, parent: tk.Frame) -> None:
         frame = card(parent, bg=COLOR_SERVER_BG, border=COLOR_SERVER_BORDER)
         section_title(frame, "Jenkins サーバー初回設定（はじめてのときだけ）", COLOR_SERVER_TITLE).pack(
@@ -1230,6 +1290,9 @@ class ConfigureApp(tk.Tk):
             "jenkins.timezone": c.jenkins.timezone,
             "jenkins.build_timeout_minutes": str(c.jenkins.build_timeout_minutes),
             "jenkins.log_retention_count": str(c.jenkins.log_retention_count),
+            "jenkins.checkout_retry_count": str(c.jenkins.checkout_retry_count),
+            "jenkins.retry_max_count": str(c.jenkins.retry_max_count),
+            "jenkins.retry_delay_seconds": str(c.jenkins.retry_delay_seconds),
             "git.repository_url": c.git.repository_url,
             "git.branch": c.git.branch,
             "git.credential_id": c.git.credential_id,
@@ -1264,6 +1327,8 @@ class ConfigureApp(tk.Tk):
 
         self._use_date_var.set(c.storage.use_date_subfolder)
         self._archive_source_var.set(c.storage.archive_source)
+        self._retry_wrapper_var.set(c.jenkins.retry_wrapper_enabled)
+        self._on_retry_wrapper_changed()
         is_custom = c.build.profile.lower() == "custom"
         self._profile_var.set(
             "カスタムコマンド（FPGA・C/C++・Python など任意）"
@@ -1313,6 +1378,10 @@ class ConfigureApp(tk.Tk):
         c.jenkins.timezone = get("jenkins.timezone")
         c.jenkins.build_timeout_minutes = _safe_int(get("jenkins.build_timeout_minutes"), 30)
         c.jenkins.log_retention_count = _safe_int(get("jenkins.log_retention_count"), 30)
+        c.jenkins.checkout_retry_count = _safe_int(get("jenkins.checkout_retry_count"), 3)
+        c.jenkins.retry_wrapper_enabled = bool(self._retry_wrapper_var.get())
+        c.jenkins.retry_max_count = _safe_int(get("jenkins.retry_max_count"), 3)
+        c.jenkins.retry_delay_seconds = _safe_int(get("jenkins.retry_delay_seconds"), 300)
         c.jenkins.default_configuration = self._loaded_default_configuration
 
         c.git.repository_url = get("git.repository_url")

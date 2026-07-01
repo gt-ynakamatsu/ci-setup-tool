@@ -29,7 +29,11 @@
     "defaultConfiguration": "Release",
     "buildTimeoutMinutes": 30,
     "logRetentionCount": 30,
-    "timezone": "Asia/Tokyo"
+    "timezone": "Asia/Tokyo",
+    "checkoutRetryCount": 3,
+    "retryWrapperEnabled": false,
+    "retryMaxCount": 3,
+    "retryDelaySeconds": 300
   },
   "git": {
     "repositoryUrl": "https://git.example.com/team/YourProject.git",

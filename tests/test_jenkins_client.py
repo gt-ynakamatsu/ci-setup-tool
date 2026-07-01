@@ -115,6 +115,7 @@ class Recorder:
 
     def __init__(self):
         self.calls: list[tuple[str, str]] = []
+        self.bodies: list[bytes] = []
         self.responses: dict[str, FakeResponse] = {}
         self.errors: dict[str, urllib.error.HTTPError] = {}
 
@@ -122,6 +123,7 @@ class Recorder:
         method = req.get_method()
         url = req.full_url
         self.calls.append((method, url))
+        self.bodies.append(req.data or b"")
         for key, err in self.errors.items():
             if key in url:
                 raise err
@@ -258,6 +260,43 @@ def test_apply_settings(recorder):
     cfg.git.repository_url = "http://git/x.git"
     apply_settings(cfg, _secrets())
     assert any("createItem" in url or "job/" in url for _, url in recorder.calls)
+
+
+def test_apply_settings_skips_trigger_job_by_default(recorder):
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    apply_settings(cfg, _secrets())
+    assert not any("trigger" in url for _, url in recorder.calls)
+
+
+def test_apply_settings_creates_trigger_job_when_enabled(recorder):
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.retry_wrapper_enabled = True
+    apply_settings(cfg, _secrets())
+    assert any("CISetup-CI-trigger" in url for _, url in recorder.calls)
+
+
+def test_trigger_job_name():
+    assert jenkins_client.trigger_job_name("MyApp-CI") == "MyApp-CI-trigger"
+
+
+def test_upsert_trigger_job_xml(recorder):
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.jenkins.job_name = "MyApp-CI"
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
+    cfg.jenkins.retry_max_count = 5
+    cfg.jenkins.retry_delay_seconds = 120
+    client.upsert_trigger_job(cfg)
+    assert any("MyApp-CI-trigger" in url for _, url in recorder.calls)
+    body = recorder.bodies[-1].decode("utf-8")
+    assert "<projects>MyApp-CI</projects>" in body
+    assert "TZ=Asia/Tokyo" in body
+    assert "0 0 * * *" in body
+    assert "<maxSchedule>5</maxSchedule>" in body
+    assert "<delay>120</delay>" in body
 
 
 def test_apply_settings_requires_repo_url(recorder):

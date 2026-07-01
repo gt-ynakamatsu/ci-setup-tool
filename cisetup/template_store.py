@@ -12,6 +12,7 @@ BUNDLED_TEMPLATES = PACKAGE_ROOT / "bundled_templates"
 BUNDLED_FILES: tuple[str, ...] = (
     "Jenkinsfile.template",
     "JenkinsJob.config.template.xml",
+    "JenkinsTriggerJob.config.template.xml",
     "cisetup.config.example.json",
     "cisetup.secrets.local.example.json",
     "scripts/ci-analyze.ps1",

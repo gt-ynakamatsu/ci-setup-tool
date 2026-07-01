@@ -227,3 +227,38 @@ def test_generate_jenkinsfile_empty_poll(tmp_path: Path):
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile("{{POLL_TRIGGER}}X", out, cfg)
     assert out.read_text(encoding="utf-8") == "X"
+
+
+def test_generate_jenkinsfile_cron_trigger_line_default(tmp_path: Path):
+    cfg = CISetupConfig()
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile("{{CRON_TRIGGER_LINE}}", out, cfg)
+    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in out.read_text(encoding="utf-8")
+
+
+def test_generate_jenkinsfile_cron_trigger_line_empty_when_retry_wrapper_enabled(tmp_path: Path):
+    # cron 失敗時リトライ（トリガー用ジョブ + Naginator）を使う場合、二重起動を防ぐため
+    # Jenkinsfile 自身の cron トリガーは空にする。
+    cfg = CISetupConfig()
+    cfg.jenkins.retry_wrapper_enabled = True
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile("{{CRON_TRIGGER_LINE}}", out, cfg)
+    assert out.read_text(encoding="utf-8") == ""
+
+
+def test_generate_jenkinsfile_checkout_retry_count(tmp_path: Path):
+    cfg = CISetupConfig()
+    cfg.jenkins.checkout_retry_count = 5
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile("retry({{CHECKOUT_RETRY_COUNT}})", out, cfg)
+    assert out.read_text(encoding="utf-8") == "retry(5)"
+
+
+def test_generate_jenkinsfile_checkout_retry_count_minimum_one(tmp_path: Path):
+    cfg = CISetupConfig()
+    cfg.jenkins.checkout_retry_count = 0
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile("retry({{CHECKOUT_RETRY_COUNT}})", out, cfg)
+    assert out.read_text(encoding="utf-8") == "retry(1)"

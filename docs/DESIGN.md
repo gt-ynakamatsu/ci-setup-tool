@@ -284,6 +284,19 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | `build_timeout_minutes` | `buildTimeoutMinutes` | int | `30` | 1 ビルドのタイムアウト（分） | config（+ Jenkinsfile） |
 | `log_retention_count` | `logRetentionCount` | int | `30` | ビルド履歴保持数 | config（+ Jenkinsfile） |
 | `timezone` | `timezone` | str | `"Asia/Tokyo"` | cron の基準 TZ | config |
+| `checkout_retry_count` | `checkoutRetryCount` | int | `3` | Checkout ステージの git 取得失敗リトライ回数 | config（+ Jenkinsfile） |
+| `retry_wrapper_enabled` | `retryWrapperEnabled` | bool | `false` | true なら cron を別建てジョブ（`<job_name>-trigger`）に移し、Naginator で失敗時リトライ | config（+ Jenkinsfile / Jenkins ジョブ） |
+| `retry_max_count` | `retryMaxCount` | int | `3` | `retry_wrapper_enabled` 時の Naginator 最大リトライ回数 | config（+ Jenkins ジョブ） |
+| `retry_delay_seconds` | `retryDelaySeconds` | int | `300` | `retry_wrapper_enabled` 時の Naginator リトライ間隔（秒） | config（+ Jenkins ジョブ） |
+
+`retry_wrapper_enabled` が `true` の場合、Jenkinsfile 自身の cron トリガーは空になり
+（`jenkinsfile_generator.generate_jenkinsfile` が `{{CRON_TRIGGER_LINE}}` を空文字に置換）、
+代わりに `jenkins_client.upsert_trigger_job` が `JenkinsTriggerJob.config.template.xml` から
+Freestyle のラッパージョブ（`<job_name>-trigger`）を作成する。このジョブは cron で起動され、
+Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待機し、失敗を伝播する。
+本体が失敗すればラッパージョブも失敗となり、Naginator が `retry_max_count` / `retry_delay_seconds`
+に従ってラッパージョブごと再試行する。Pipeline ジョブは Naginator 非対応、かつ Jenkinsfile 取得
+自体の失敗は Pipeline 開始前に起きる（Jenkinsfile 内の `retry()` でも救えない）ため、この構成にしている。
 
 `ci_file_server`（単数）は後方互換アクセサで `ci_file_servers[0]` を読み書きする。
 `ci_file_servers` は機微扱いで **local** に保存される。

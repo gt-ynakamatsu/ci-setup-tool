@@ -15,7 +15,7 @@ pipeline {
     }
 
     triggers {
-        cron(spec: '{{CRON_SCHEDULE}}', timezone: '{{TIMEZONE}}')
+{{CRON_TRIGGER_LINE}}
 {{POLL_TRIGGER}}
     }
 
@@ -60,7 +60,10 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                // Git サーバーの瞬断（例: Empty reply from server）に備えて自動リトライする。
+                retry({{CHECKOUT_RETRY_COUNT}}) {
+                    checkout scm
+                }
             }
         }
 

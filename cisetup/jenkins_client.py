@@ -19,7 +19,16 @@ REQUIRED_PLUGINS = [
     "git",
     "credentials-binding",
     "plain-credentials",
+    "parameterized-trigger",
+    "naginator",
 ]
+
+TRIGGER_JOB_SUFFIX = "-trigger"
+
+
+def trigger_job_name(job_name: str) -> str:
+    """cron 失敗時リトライ用ラッパー Freestyle ジョブの名前（本体ジョブ名 + サフィックス）。"""
+    return f"{job_name}{TRIGGER_JOB_SUFFIX}"
 
 
 def _escape_xml(value: str) -> str:
@@ -266,6 +275,29 @@ class JenkinsClient:
         path = f"job/{encoded}/config.xml" if exists else f"createItem?name={encoded}"
         self._post_xml(path, job_xml)
 
+    def upsert_trigger_job(self, config: CISetupConfig) -> None:
+        """cron 失敗時に Naginator で再試行するラッパー Freestyle ジョブを作成/更新する。
+
+        Pipeline ジョブ（flow-definition）は Naginator の失敗時リトライに対応しておらず、
+        かつ Jenkinsfile 取得自体の失敗は Pipeline 開始前に起きるため Pipeline 内の retry()
+        でも救えない。そのため cron はこちらのジョブに持たせ、本体ジョブを起動・待機し、
+        失敗したら Naginator が本ジョブごと再試行する構成にする。
+        """
+        template = read_template("JenkinsTriggerJob.config.template.xml")
+        timezone = config.jenkins.timezone.strip() or "Asia/Tokyo"
+        job_xml = (
+            template.replace("{{PIPELINE_JOB_NAME}}", _escape_xml(config.jenkins.job_name))
+            .replace("{{TIMEZONE}}", _escape_xml(timezone))
+            .replace("{{CRON_SCHEDULE}}", _escape_xml(config.jenkins.cron_schedule))
+            .replace("{{RETRY_COUNT}}", str(max(1, config.jenkins.retry_max_count)))
+            .replace("{{RETRY_DELAY_SECONDS}}", str(max(1, config.jenkins.retry_delay_seconds)))
+        )
+        name = trigger_job_name(config.jenkins.job_name)
+        encoded = urllib.parse.quote(name, safe="")
+        exists = self._job_exists(name)
+        path = f"job/{encoded}/config.xml" if exists else f"createItem?name={encoded}"
+        self._post_xml(path, job_xml)
+
     def trigger_build(self, job_name: str, publish_release: bool = False) -> str:
         if not job_name.strip():
             raise ValueError("ジョブ名が空です。⑧ CI ジョブ設定でジョブ名を入力してください。")
@@ -454,3 +486,5 @@ def apply_settings(config: CISetupConfig, secrets: CISetupSecrets) -> None:
         "Git (CISetup)",
     )
     client.upsert_pipeline_job(config)
+    if config.jenkins.retry_wrapper_enabled:
+        client.upsert_trigger_job(config)

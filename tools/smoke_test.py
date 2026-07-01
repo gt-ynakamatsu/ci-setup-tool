@@ -97,6 +97,7 @@ with tempfile.TemporaryDirectory() as tmp:
     jf = (root / "cisetup" / "Jenkinsfile").read_text(encoding="utf-8")
     check("Jenkinsfile にラベル反映", "label 'windows'" in jf)
     check("Jenkinsfile に cron", "cron(spec: '0 0 * * *'" in jf and "Asia/Tokyo" in jf)
+    check("Jenkinsfile に Checkout retry", "retry(3)" in jf)
     check("Jenkinsfile に BOM なし", not jf.startswith("\ufeff"))
     logs, releases, tests = repo.build_preview_paths(cfg)
     check("preview UNC パス", logs.startswith("\\\\fileserver\\ci"))

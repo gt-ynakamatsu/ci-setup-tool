@@ -126,6 +126,40 @@ def test_archive_source_preview(app):
     assert r"\\srv\ci\Demo\source" in app._preview_source.get()
 
 
+def test_retry_wrapper_form_roundtrip(app):
+    app._retry_wrapper_var.set(True)
+    app._fields["jenkins.retry_max_count"].set("5")
+    app._fields["jenkins.retry_delay_seconds"].set("120")
+    app._fields["jenkins.checkout_retry_count"].set("4")
+    app._form_to_config()
+    assert app._config.jenkins.retry_wrapper_enabled is True
+    assert app._config.jenkins.retry_max_count == 5
+    assert app._config.jenkins.retry_delay_seconds == 120
+    assert app._config.jenkins.checkout_retry_count == 4
+
+    app._config.jenkins.retry_wrapper_enabled = False
+    app._config.jenkins.retry_max_count = 3
+    # 実際の呼び出し元（_open_project）と同様に _loading でガードする。
+    # ガードしないと StringVar の trace 経由で _form_to_config が再入し、
+    # まだ更新前の BooleanVar の値で config を上書きしてしまう。
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._retry_wrapper_var.get() is False
+    assert app._fields["jenkins.retry_max_count"].get() == "3"
+
+
+def test_retry_wrapper_toggle_shows_hides_options(app):
+    app._retry_wrapper_var.set(True)
+    app._on_retry_wrapper_changed()
+    assert app._retry_options_row.winfo_manager() != ""
+    app._retry_wrapper_var.set(False)
+    app._on_retry_wrapper_changed()
+    assert app._retry_options_row.winfo_manager() == ""
+
+
 def test_normalize_rel(app):
     assert app._normalize_rel("a\\b\\c.sln") == "a/b/c.sln"
 

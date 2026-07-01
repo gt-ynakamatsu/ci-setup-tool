@@ -186,6 +186,34 @@ TIMEZONE = (
     "【注意】Jenkins 本体の System 設定も同じ TZ に揃えてください"
 )
 
+CHECKOUT_RETRY_COUNT = (
+    "【何を】Checkout ステージで git checkout に失敗した際の自動リトライ回数\n"
+    "【想定エラー】Empty reply from server 等、Git サーバーの瞬断・過負荷\n"
+    "【注意】Jenkinsfile 自体の取得失敗（Pipeline 開始前のエラー）には効きません。"
+    "そちらは下の「cron失敗時に自動リトライ」で対応します"
+)
+
+RETRY_WRAPPER_ENABLED = (
+    "【何を】定期ビルド（cron）が失敗したら自動的に再実行する\n"
+    "【仕組み】cron を本体 Jenkinsfile ではなく別建ての軽量ジョブ（○○-trigger）に持たせ、"
+    "そこから本体ジョブを起動・待機します。失敗したら Naginator がこのジョブごと再実行するため、"
+    "Jenkinsfile 取得自体の失敗（Git サーバー瞬断など）も含めて再試行できます\n"
+    "【前提】Jenkins に Naginator プラグインと Parameterized Trigger プラグインが必要"
+    "（②Jenkins に反映 実行時に未導入なら自動インストールされます）\n"
+    "【注意】有効化すると本体 Jenkinsfile 側の cron トリガーは自動的に無効化されます"
+    "（pollSCM は従来通り有効）"
+)
+
+RETRY_MAX_COUNT = (
+    "【何を】cron 失敗時に最大何回まで自動リトライするか\n"
+    "【例】3 → 最初の失敗後、最大3回まで再実行"
+)
+
+RETRY_DELAY_SECONDS = (
+    "【何を】cron 失敗後、次のリトライまで待つ秒数\n"
+    "【例】300 → 5分後に再実行"
+)
+
 GIT_REPOSITORY_URL = (
     "【何を】社内 Git のリポジトリ URL（clone URL）\n"
     "【例】https://git.example.com/team/MyApp.git\n"

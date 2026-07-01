@@ -96,6 +96,15 @@ class JenkinsConfig:
     build_timeout_minutes: int = 30
     log_retention_count: int = 30
     timezone: str = "Asia/Tokyo"
+    # Jenkinsfile 取得前の "Checkout" ステージで一時的な Git エラー（ネットワーク/サーバー瞬断）
+    # が起きた際に何回まで自動リトライするか。
+    checkout_retry_count: int = 3
+    # true の場合、cron トリガーは Jenkinsfile 側ではなく別建てのトリガー用ジョブ
+    # （JenkinsTriggerJob）に持たせ、Naginator の失敗時リトライで再実行できるようにする。
+    # Jenkinsfile 取得自体が失敗するケース（Pipeline 開始前）はこちらでしか救えないため。
+    retry_wrapper_enabled: bool = False
+    retry_max_count: int = 3
+    retry_delay_seconds: int = 300
 
     @property
     def ci_file_server(self) -> str:
