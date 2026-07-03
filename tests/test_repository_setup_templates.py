@@ -222,7 +222,7 @@ def test_extract_to_repository(tmp_path: Path):
     assert ps1.read_bytes().startswith(b"\xef\xbb\xbf")
     # .gitignore に secrets 追記
     gi = (tmp_path / ".gitignore").read_text(encoding="utf-8")
-    assert "cisetup/cisetup.secrets.local.json" in gi
+    assert "CISetup/cisetup.secrets.local.json" in gi
     assert "cisetup.secrets.local.json" in gi
 
 
@@ -292,7 +292,7 @@ def test_gitignore_append_existing(tmp_path: Path):
 
 def test_gitignore_already_has_marker(tmp_path: Path):
     (tmp_path / ".gitignore").write_text(
-        "cisetup/cisetup.secrets.local.json\ncisetup.secrets.local.json\n",
+        "CISetup/cisetup.secrets.local.json\ncisetup.secrets.local.json\n",
         encoding="utf-8",
     )
     deploy_ci_files(tmp_path)
@@ -301,7 +301,7 @@ def test_gitignore_already_has_marker(tmp_path: Path):
         for line in (tmp_path / ".gitignore").read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    assert lines.count("cisetup/cisetup.secrets.local.json") == 1
+    assert lines.count("CISetup/cisetup.secrets.local.json") == 1
     assert lines.count("cisetup.secrets.local.json") == 1
 
 
@@ -344,6 +344,50 @@ def test_save_all_and_load(sln_repo: Path):
     jf = paths.jenkinsfile_path(sln_repo).read_text(encoding="utf-8")
     assert "pipeline" in jf
     assert not jf.startswith("\ufeff")
+    # 生成 Jenkinsfile は新フォルダ CISetup/scripts を参照する
+    assert "./CISetup/scripts/" in jf
+    assert "./cisetup/scripts/" not in jf
+
+
+def test_save_all_writes_into_cisetup_folder(sln_repo: Path):
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    repo.save_all(sln_repo, cfg, CISetupSecrets())
+    # 新規保存は CISetup/ 配下（大文字 C）
+    assert (sln_repo / "CISetup" / paths.CONFIG_FILE).is_file()
+
+
+def test_save_all_migrates_legacy_cisetup_folder(sln_repo: Path):
+    # 既存プロジェクト（旧 cisetup/ 展開済み）を用意し、保存で CISetup/ へ移行されること。
+    legacy = sln_repo / "cisetup"
+    legacy.mkdir()
+    (legacy / paths.CONFIG_FILE).write_text(
+        json.dumps({"project": {"name": "MyApp"}}), encoding="utf-8"
+    )
+    (legacy / "keepme.txt").write_text("legacy-marker", encoding="utf-8")
+
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    repo.save_all(sln_repo, cfg, CISetupSecrets())
+
+    # 実体のディレクトリ名が CISetup（正しいケース）に移行されていること。
+    ci = paths.find_ci_dir(sln_repo)
+    assert ci is not None and ci.name == "CISetup"
+    # 旧フォルダの中身（git 非追跡ファイル等）が保持されていること。
+    assert (ci / "keepme.txt").read_text(encoding="utf-8") == "legacy-marker"
+    assert (ci / paths.CONFIG_FILE).is_file()
+
+
+def test_load_config_reads_legacy_cisetup_layout(sln_repo: Path):
+    # 旧 cisetup/ レイアウトのままでも load_config で読めること（後方互換）。
+    legacy = sln_repo / "cisetup"
+    legacy.mkdir()
+    (legacy / paths.CONFIG_FILE).write_text(
+        json.dumps({"project": {"name": "LegacyProj"}}), encoding="utf-8"
+    )
+    repo = ConfigRepository()
+    loaded = repo.load_config(sln_repo)
+    assert loaded.project.name == "LegacyProj"
 
 
 def test_build_preview_paths_with_base(sln_repo: Path):
@@ -583,6 +627,89 @@ def test_load_config_overlays_local(sln_repo: Path):
     loaded = repo.load_config(sln_repo)
     assert loaded.storage.base_path == r"C:\Users\taro\OneDrive\CI"
     assert loaded.jenkins.ci_file_server == r"\\srv\ci"
+
+
+def test_save_all_persists_agent_workspace_path_local_only(sln_repo: Path, tmp_path: Path):
+    # agent_workspace_path は local に保存、committed config.json からは除去される
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
+    ws = tmp_path / "agent_ws" / "IPU_TEST_APP"
+    ws.mkdir(parents=True)
+    cfg.jenkins.agent_workspace_path = str(ws)
+    repo.save_all(sln_repo, cfg, CISetupSecrets())
+
+    local = json.loads(paths.local_path(sln_repo).read_text(encoding="utf-8"))
+    assert local["agentWorkspacePath"] == str(ws)
+
+    saved = json.loads(paths.config_path(sln_repo).read_text(encoding="utf-8"))
+    assert saved["jenkins"]["agentWorkspacePath"] == ""
+
+    # load_config が local から復元する
+    loaded = repo.load_config(sln_repo)
+    assert loaded.jenkins.agent_workspace_path == str(ws)
+
+
+def test_save_all_auto_deploys_to_agent_sibling(sln_repo: Path, tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
+    cfg.storage.base_path = r"C:\local\CI\MyApp"
+    ws = tmp_path / "agent_ws" / "IPU_TEST_APP"
+    ws.mkdir(parents=True)
+    cfg.jenkins.agent_workspace_path = str(ws)
+    repo.save_all(sln_repo, cfg, CISetupSecrets())
+
+    sibling = ws.parent / (ws.name + ".cisetup.local.json")
+    assert sibling.is_file()
+    data = json.loads(sibling.read_text(encoding="utf-8"))
+    assert data["ciFileServers"] == [r"\\fileserver\ci"]
+    assert data["basePaths"] == [r"C:\local\CI\MyApp"]
+    # 兄弟パス側には機械固有パスは含めない
+    assert "agentWorkspacePath" not in data
+
+
+def test_deploy_local_to_agent_matches_ci_config_formula(tmp_path: Path):
+    # ci-config.ps1 (225〜260 行目付近):
+    #   $externalLocalPath = Join-Path (Split-Path -Parent $root)
+    #       ("$(Split-Path -Leaf $root).cisetup.local.json")
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.storage.base_paths = [r"C:\local\CI"]
+    cfg.jenkins.ci_file_servers = [r"\\srv\ci"]
+    ws = tmp_path / "workspace" / "IPU_TEST_APP"
+    ws.mkdir(parents=True)
+    cfg.jenkins.agent_workspace_path = str(ws)
+
+    written = repo.deploy_local_to_agent(cfg)
+    expected = tmp_path / "workspace" / "IPU_TEST_APP.cisetup.local.json"
+    assert written == expected
+    assert expected.is_file()
+    data = json.loads(expected.read_text(encoding="utf-8"))
+    assert data["basePaths"] == [r"C:\local\CI"]
+    assert data["ciFileServers"] == [r"\\srv\ci"]
+
+
+def test_deploy_local_to_agent_returns_none_when_empty():
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.jenkins.agent_workspace_path = ""
+    assert repo.deploy_local_to_agent(cfg) is None
+
+
+def test_deploy_local_to_agent_also_writes_into_workspace_cisetup(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.storage.base_paths = [r"C:\local\CI"]
+    ws = tmp_path / "workspace" / "IPU_TEST_APP"
+    (ws / "cisetup").mkdir(parents=True)
+    cfg.jenkins.agent_workspace_path = str(ws)
+
+    repo.deploy_local_to_agent(cfg)
+    inside = ws / "cisetup" / "cisetup.local.json"
+    assert inside.is_file()
+    data = json.loads(inside.read_text(encoding="utf-8"))
+    assert data["basePaths"] == [r"C:\local\CI"]
 
 
 def test_validate_requires_name(sln_repo: Path):

@@ -33,7 +33,9 @@
     "checkoutRetryCount": 3,
     "retryWrapperEnabled": false,
     "retryMaxCount": 3,
-    "retryDelaySeconds": 300
+    "retryDelaySeconds": 300,
+    "agentWorkspacePath": "",
+    "pushCiFileServerEnv": false
   },
   "git": {
     "repositoryUrl": "https://git.example.com/team/YourProject.git",

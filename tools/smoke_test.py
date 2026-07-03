@@ -92,10 +92,11 @@ with tempfile.TemporaryDirectory() as tmp:
     repo = config_repository.ConfigRepository()
     cfg.git.repository_url = "https://git.example.com/x.git"
     repo.save_all(root, cfg, sec)
-    saved = json.loads((root / "cisetup" / "cisetup.config.json").read_text(encoding="utf-8"))
+    saved = json.loads((root / "CISetup" / "cisetup.config.json").read_text(encoding="utf-8"))
     check("保存 JSON が camelCase", "agentLabel" in saved["jenkins"])
-    jf = (root / "cisetup" / "Jenkinsfile").read_text(encoding="utf-8")
+    jf = (root / "CISetup" / "Jenkinsfile").read_text(encoding="utf-8")
     check("Jenkinsfile にラベル反映", "label 'windows'" in jf)
+    check("Jenkinsfile が CISetup/scripts 参照", "./CISetup/scripts/" in jf)
     check("Jenkinsfile に cron", "cron(spec: '0 0 * * *'" in jf and "Asia/Tokyo" in jf)
     check("Jenkinsfile に Checkout retry", "retry(3)" in jf)
     check("Jenkinsfile に BOM なし", not jf.startswith("\ufeff"))

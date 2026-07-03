@@ -22,7 +22,7 @@
       <submoduleCfg class="empty-list"/>
       <extensions/>
     </scm>
-    <scriptPath>cisetup/Jenkinsfile</scriptPath>
+    <scriptPath>CISetup/Jenkinsfile</scriptPath>
     <lightweight>false</lightweight>
   </definition>
   <triggers/>

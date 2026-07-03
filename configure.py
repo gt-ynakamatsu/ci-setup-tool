@@ -87,7 +87,7 @@ def _run_bootstrap(folder: Path) -> None:
             file=sys.stderr,
         )
         raise SystemExit(0)
-    print(f"CI ファイルを配置しました: {folder / 'cisetup'}")
+    print(f"CI ファイルを配置しました: {paths.ci_dir(folder)}")
 
 
 def main(argv: list[str] | None = None) -> None:

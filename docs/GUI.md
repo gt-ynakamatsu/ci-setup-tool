@@ -34,7 +34,7 @@ python configure.py --help
 | チェック | 内容 |
 |----------|------|
 | 1. 設定を保存 | `cisetup.config.json` / `Jenkinsfile` / `scripts` を再生成して保存（既定 ON） |
-| ローカルでビルド＆テスト（push せず現在のコードを検証） | 配置済み `cisetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**。push 前に手元のコードを検証する用途（既定 OFF・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
+| ローカルでビルド＆テスト（push せず現在のコードを検証） | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**。push 前に手元のコードを検証する用途（既定 OFF・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
 | 2. Jenkins に反映 | `apply_settings` でジョブ定義を Jenkins に登録（既定 ON） |
 | 3. Git push | CI 関連ファイルのみ commit / push（secrets/local は除外。既定 OFF） |
 | 4. テストビルドを実行 | Jenkins が**リモート Git のコード**をビルド（既定 OFF） |

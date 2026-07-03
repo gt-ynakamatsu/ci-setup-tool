@@ -5,10 +5,11 @@ from pathlib import Path
 import pytest
 
 import cisetup.local_ci as local_ci
+from cisetup import paths
 
 
 def _make_scripts(root: Path, *, build: bool = True, test: bool = True) -> None:
-    scripts = root / "cisetup" / "scripts"
+    scripts = root / paths.CI_FOLDER / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     if build:
         (scripts / "ci-build.ps1").write_text("# build", encoding="utf-8")

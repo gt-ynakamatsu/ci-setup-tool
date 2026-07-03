@@ -39,6 +39,20 @@ def test_form_roundtrip(app):
     assert app._config.jenkins.build_timeout_minutes == 45
 
 
+def test_agent_workspace_path_form_roundtrip(app):
+    app._fields["jenkins.agent_workspace_path"].set(r"C:\jenkins-agent\workspace\App")
+    app._form_to_config()
+    assert app._config.jenkins.agent_workspace_path == r"C:\jenkins-agent\workspace\App"
+    # config -> form の復元（_loading ガードで trace 再入を防ぐ）
+    app._config.jenkins.agent_workspace_path = r"C:\ws\Other"
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._fields["jenkins.agent_workspace_path"].get() == r"C:\ws\Other"
+
+
 def test_form_invalid_int_falls_back(app):
     app._fields["jenkins.build_timeout_minutes"].set("abc")
     app._form_to_config()
@@ -126,6 +140,20 @@ def test_archive_source_preview(app):
     assert r"\\srv\ci\Demo\source" in app._preview_source.get()
 
 
+def test_push_ci_file_server_env_form_roundtrip(app):
+    app._push_env_var.set(True)
+    app._form_to_config()
+    assert app._config.jenkins.push_ci_file_server_env is True
+    # config -> form の復元（_loading ガードで trace 再入を防ぐ）
+    app._config.jenkins.push_ci_file_server_env = False
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._push_env_var.get() is False
+
+
 def test_retry_wrapper_form_roundtrip(app):
     app._retry_wrapper_var.set(True)
     app._fields["jenkins.retry_max_count"].set("5")
@@ -186,6 +214,21 @@ def test_require_jenkins_secrets_raises(app):
     app._secrets.jenkins_url = ""
     with pytest.raises(ValueError):
         app._require_jenkins_secrets()
+
+
+def test_deploy_local_to_agent_requires_write_target(app):
+    # 書き込み先が空のまま配置すると、兄弟パスの設定を空内容で上書きしてしまう。
+    # ValueError で中断し、deploy_local_to_agent を呼ばないことを検証する。
+    app._multi_fields["jenkins.ci_file_servers"].set_values([])
+    app._multi_fields["storage.base_paths"].set_values([])
+    app._fields["jenkins.agent_workspace_path"].set(r"C:\jenkins-agent\workspace\App")
+
+    called = []
+    app._repo.deploy_local_to_agent = lambda *a, **k: called.append((a, k))
+
+    with pytest.raises(ValueError):
+        app._deploy_local_to_agent()
+    assert called == []
 
 
 def test_ensure_repo(app, sln_repo):

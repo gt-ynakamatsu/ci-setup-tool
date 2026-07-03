@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import pytest
@@ -253,6 +254,61 @@ def test_setup_server(recorder):
     result = client.setup_server(cfg, "win-agent", r"C:\agent")
     assert "sec123" in result.agent_launch_command
     assert any("バージョン" in line for line in result.log)
+
+
+def test_set_global_env_var_script_escapes():
+    # Windows パス（バックスラッシュ）と ' を Groovy 文字列へ安全にエスケープする
+    script = jenkins_client._set_global_env_var_script(
+        "CI_FILE_SERVER", r"\\srv\ipu-tes-app-ci"
+    )
+    assert "EnvironmentVariablesNodeProperty" in script
+    assert "instance.save()" in script
+    assert "CI_FILE_SERVER" in script
+    assert r"\\\\srv\\ipu-tes-app-ci" in script
+
+
+def test_set_global_env_var_calls_run_groovy(recorder):
+    recorder.responses["scriptText"] = FakeResponse("OK: CI_FILE_SERVER set")
+    client = JenkinsClient(_secrets())
+    client.set_global_env_var("CI_FILE_SERVER", r"\\srv\ci")
+    body = urllib.parse.unquote_plus(recorder.bodies[-1].decode("utf-8"))
+    assert "scriptText" in recorder.calls[-1][1]
+    assert "CI_FILE_SERVER" in body
+    # 値はエスケープ済み（バックスラッシュが二重化）で POST body に含まれる
+    assert r"\\\\srv\\ci" in body
+
+
+def test_set_global_env_var_skips_empty(recorder):
+    client = JenkinsClient(_secrets())
+    client.set_global_env_var("CI_FILE_SERVER", "   ")
+    assert recorder.calls == []
+
+
+def test_apply_settings_pushes_env_when_enabled(recorder):
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.push_ci_file_server_env = True
+    cfg.jenkins.ci_file_servers = [r"\\srv\ci"]
+    apply_settings(cfg, _secrets())
+    assert any("scriptText" in url for _, url in recorder.calls)
+    assert any(b"CI_FILE_SERVER" in body for body in recorder.bodies)
+
+
+def test_apply_settings_skips_env_by_default(recorder):
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.ci_file_servers = [r"\\srv\ci"]
+    apply_settings(cfg, _secrets())
+    assert not any(b"CI_FILE_SERVER" in body for body in recorder.bodies)
+
+
+def test_apply_settings_skips_env_when_no_target(recorder):
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.push_ci_file_server_env = True
+    cfg.jenkins.ci_file_servers = []
+    apply_settings(cfg, _secrets())
+    assert not any(b"CI_FILE_SERVER" in body for body in recorder.bodies)
 
 
 def test_apply_settings(recorder):

@@ -600,6 +600,57 @@ class ConfigureApp(tk.Tk):
             "保存先の「source」フォルダ（詳細設定で名称変更可）へ格納します。",
         ).pack(anchor="w")
 
+        tk.Label(
+            frame,
+            text="Jenkins エージェントのワークスペースパス（同一 PC のとき）",
+            font=font(12, bold=True),
+            fg=COLOR_TEXT,
+            bg=COLOR_CARD_BG,
+            anchor="w",
+        ).pack(anchor="w", pady=(12, 2))
+        self._add_field(
+            frame,
+            "jenkins.agent_workspace_path",
+            "ワークスペースパス",
+            help_texts.AGENT_WORKSPACE_PATH,
+            browse="folder",
+            label_width=16,
+        )
+        hint_label(
+            frame,
+            "例: C:\\jenkins-agent\\workspace\\IPU_TEST_APP。"
+            "この PC で Jenkins エージェントを動かしている場合に設定すると、保存時に書き込み先設定"
+            "(cisetup.local.json) をワイプで消えない兄弟パスへ自動配置します。"
+            "空なら何もしません（Git には push されません）。",
+        ).pack(anchor="w", padx=(150, 0))
+        button(
+            frame,
+            "エージェントへ書き込み先設定を配置",
+            lambda: self._run_async(self._deploy_local_to_agent),
+            padx=16,
+        ).pack(anchor="w", pady=(8, 0), padx=(150, 0))
+
+        self._push_env_var = tk.BooleanVar(value=False)
+        push_cb = tk.Checkbutton(
+            frame,
+            text="書き込み先を Jenkins のグローバル環境変数 (CI_FILE_SERVER) として登録する（別 PC/共有不可の環境向け）",
+            variable=self._push_env_var,
+            command=self._on_field_changed,
+            font=font(12),
+            bg=COLOR_CARD_BG,
+            activebackground=COLOR_CARD_BG,
+            anchor="w",
+        )
+        push_cb.pack(anchor="w", pady=(12, 0))
+        attach_tooltip(push_cb, help_texts.PUSH_CI_FILE_SERVER_ENV)
+        hint_label(
+            frame,
+            "ON にすると「Jenkinsに反映」時に、先頭の書き込み先を Jenkins 本体のグローバル環境変数"
+            " CI_FILE_SERVER として自動登録します（Jenkins 管理者権限が必要）。"
+            "別 PC・共有アクセス不可のエージェントでも書き込み先が届きます。"
+            "値は単一のため、複数先が必要な場合は上の兄弟パス配置を使ってください。",
+        ).pack(anchor="w")
+
     def _build_step_jenkins(self, parent: tk.Misc) -> None:
         frame = card(parent)
         step_title(frame, "⑤ Jenkins への接続").pack(anchor="w", pady=(0, 4))
@@ -1286,6 +1337,7 @@ class ConfigureApp(tk.Tk):
             "jenkins.agent_label": c.jenkins.agent_label,
             "jenkins.cron_schedule": c.jenkins.cron_schedule,
             "jenkins.poll_schedule": c.jenkins.poll_schedule,
+            "jenkins.agent_workspace_path": c.jenkins.agent_workspace_path,
             "jenkins.teams_credential_id": c.jenkins.teams_credential_id,
             "jenkins.timezone": c.jenkins.timezone,
             "jenkins.build_timeout_minutes": str(c.jenkins.build_timeout_minutes),
@@ -1327,6 +1379,7 @@ class ConfigureApp(tk.Tk):
 
         self._use_date_var.set(c.storage.use_date_subfolder)
         self._archive_source_var.set(c.storage.archive_source)
+        self._push_env_var.set(c.jenkins.push_ci_file_server_env)
         self._retry_wrapper_var.set(c.jenkins.retry_wrapper_enabled)
         self._on_retry_wrapper_changed()
         is_custom = c.build.profile.lower() == "custom"
@@ -1373,6 +1426,8 @@ class ConfigureApp(tk.Tk):
         c.jenkins.agent_label = get("jenkins.agent_label")
         c.jenkins.cron_schedule = get("jenkins.cron_schedule")
         c.jenkins.poll_schedule = get("jenkins.poll_schedule")
+        c.jenkins.agent_workspace_path = get("jenkins.agent_workspace_path")
+        c.jenkins.push_ci_file_server_env = bool(self._push_env_var.get())
         c.jenkins.ci_file_servers = get_multi("jenkins.ci_file_servers")
         c.jenkins.teams_credential_id = get("jenkins.teams_credential_id")
         c.jenkins.timezone = get("jenkins.timezone")
@@ -1525,7 +1580,7 @@ class ConfigureApp(tk.Tk):
                 "CISetup",
                 "選んだフォルダに保存済みの設定が見つかりません。\n\n"
                 "次のいずれかがあるフォルダを選んでください:\n"
-                "• <プロジェクト>\\cisetup\\cisetup.config.json\n"
+                "• <プロジェクト>\\CISetup\\cisetup.config.json\n"
                 "• <プロジェクト>\\cisetup.config.json",
             )
             return
@@ -1628,11 +1683,35 @@ class ConfigureApp(tk.Tk):
         self._sync_saved_fields()
         self._info(
             "保存完了",
-            f"設定を保存しました。\n{root / 'cisetup'}\n\n"
+            f"設定を保存しました。\n{paths.ci_dir(root)}\n\n"
             "※ 個人 ID を含む書き込み先（OneDrive 等）と Git ユーザー名は "
             "cisetup.local.json / secrets に保存し、Git には push されません。",
         )
         self._set_status("保存しました")
+
+    def _deploy_local_to_agent(self) -> None:
+        self._form_to_config()
+        if not self._repo.effective_write_targets(self._config):
+            raise ValueError(
+                "配置する書き込み先が未入力です。"
+                "『④ 成果物・ログの保存先（CI_FILE_SERVER）』または"
+                "詳細設定の『書き込み先ベース』を入力してください。"
+            )
+        if not self._config.jenkins.agent_workspace_path.strip():
+            raise ValueError(
+                "「Jenkins エージェントのワークスペースパス」を入力してください"
+                "（同一 PC でエージェントを動かしている場合の配置先。例: "
+                "C:\\jenkins-agent\\workspace\\IPU_TEST_APP）。"
+            )
+        sibling = self._repo.deploy_local_to_agent(self._config)
+        self._info(
+            "配置完了",
+            "書き込み先設定（cisetup.local.json）をエージェントの兄弟パスへ配置しました。\n"
+            f"{sibling}\n\n"
+            "※ ワークスペースの「ワイプ＋再クローン」でも消えない位置です。"
+            "ワークスペース内に CISetup フォルダ（旧 cisetup も可）があれば、そちらにも配置しました。",
+        )
+        self._set_status("エージェントへ書き込み先設定を配置しました")
 
     def _test_jenkins(self) -> None:
         self._form_to_config()
@@ -1651,7 +1730,16 @@ class ConfigureApp(tk.Tk):
         self._repo.save_all(root, self._config, self._secrets)
         self._sync_saved_fields()
         apply_settings(self._config, self._secrets)
-        self._info("反映完了", f"Jenkins に設定を反映しました。\nジョブ: {self._config.jenkins.job_name}")
+        message = f"Jenkins に設定を反映しました。\nジョブ: {self._config.jenkins.job_name}"
+        if (
+            self._config.jenkins.push_ci_file_server_env
+            and self._config.jenkins.ci_file_server.strip()
+        ):
+            message += (
+                "\n\nグローバル環境変数を登録しました:\n"
+                f"CI_FILE_SERVER = {self._config.jenkins.ci_file_server}"
+            )
+        self._info("反映完了", message)
         self._set_status("Jenkins への反映が完了しました")
 
     def _test_teams(self) -> None:

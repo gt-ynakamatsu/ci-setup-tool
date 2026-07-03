@@ -1,5 +1,6 @@
 ﻿# CI パイプライン共通設定ローダー
-# cisetup/cisetup.config.json を読む（旧: リポジトリ直下の cisetup.config.json も後方互換）。
+# CISetup/cisetup.config.json を読む（旧 cisetup/ フォルダ、およびリポジトリ直下の
+# cisetup.config.json も後方互換で読む）。
 # Jenkins 各ステージ（ci-build.ps1 等）から dot-source される。
 #
 # Windows PowerShell 5.1 / PowerShell 7+ (pwsh, Linux 含む) の両方で動く前提。
@@ -32,38 +33,43 @@ function Test-StorageUrl {
 
 function ConvertTo-StringArray {
     # JSON 値（単一文字列 or 配列）を空要素を除いた文字列配列へ正規化する。
+    # NOTE: PowerShell はパイプライン/return で要素数 1 の配列を自動的にスカラーへ
+    # 展開してしまう（要素数 0 や 2 以上では起きない）ため、呼び出し側で意図せず
+    # 文字列として扱われ `[0]` が「先頭文字」を指してしまう事故を防ぐため、
+    # return は必ず単項カンマ演算子（,）で配列であることを明示する。
     param($Value)
     $out = @()
-    if ($null -eq $Value) { return $out }
+    if ($null -eq $Value) { return , $out }
     if ($Value -is [string]) {
         $s = $Value.Trim()
         if ($s) { $out += $s }
-        return $out
+        return , $out
     }
     if ($Value -is [System.Collections.IEnumerable]) {
         foreach ($item in $Value) {
             $s = "$item".Trim()
             if ($s) { $out += $s }
         }
-        return $out
+        return , $out
     }
     $s = "$Value".Trim()
     if ($s) { $out += $s }
-    return $out
+    return , $out
 }
 
 function Get-ConfigList {
     # 複数形→旧単数形の順にキーを探し、最初に値がある列を配列で返す（後方互換）。
+    # NOTE: ConvertTo-StringArray と同様、return は単項カンマ演算子で配列を維持する。
     param($Container, [string[]]$Names)
-    if ($null -eq $Container) { return @() }
+    if ($null -eq $Container) { return , @() }
     $props = @($Container.PSObject.Properties.Name)
     foreach ($name in $Names) {
         if ($props -contains $name) {
             $list = ConvertTo-StringArray $Container.$name
-            if ($list.Count -gt 0) { return $list }
+            if ($list.Count -gt 0) { return , $list }
         }
     }
-    return @()
+    return , @()
 }
 
 function Join-StorageChild {
@@ -83,7 +89,8 @@ function Get-CISetupLayout {
     $scriptsDir = $PSScriptRoot
     $parent = Split-Path -Parent $scriptsDir
 
-    if ((Split-Path -Leaf $parent) -eq 'cisetup') {
+    # フォルダ名は新 CISetup / 旧 cisetup の両方を大文字小文字非区別で許容する。
+    if ((Split-Path -Leaf $parent) -ieq 'cisetup' -or (Split-Path -Leaf $parent) -ieq 'CISetup') {
         $ciDir = $parent
         $root = Split-Path -Parent $ciDir
         if ([string]::IsNullOrWhiteSpace($root)) {
@@ -168,7 +175,7 @@ function Get-CiSettings {
         $config = ConvertFrom-LegacyCiSettings -Legacy $legacy -Root $root
     }
     else {
-        throw "cisetup.config.json not found under cisetup/. Run Configure.ps1 (GUI) to create settings."
+        throw "cisetup.config.json not found under CISetup/. Run Configure.ps1 (GUI) to create settings."
     }
 
     # ---- ビルドプロファイル（dotnet / custom）----
@@ -218,18 +225,40 @@ function Get-CiSettings {
     $ciFileServers = Get-ConfigList $jenkins @('ciFileServers', 'ciFileServer')
 
     # 個人 ID を含む書き込み先は git 非追跡の cisetup.local.json に保持される（あれば優先）。
+    # NOTE: このファイルは通常ワークスペース内（チェックアウト対象ディレクトリ配下）に置く運用のため、
+    # git checkout が「フレッシュクローン」にフォールバックした場合（例: 一時的な git サーバーエラー
+    # で .git が不完全な状態になり、retry() での再チェックアウト時に git plugin がワークスペースを
+    # 丸ごと削除して再クローンするケース）に、このファイルも一緒に失われうる。
+    # そのため、ワークスペースの「外側」（ワークスペースの兄弟パス）にも同名の内容を置けるようにし、
+    # ワークスペースが再クローンされても書き込み先設定が失われないようにする（両方あれば
+    # ワークスペース内を優先。ワークスペース内が無い/空のときのみ兄弟パスを使う）。
     $localPath = if ($layout.Layout -eq 'cisetup') { Join-Path $layout.CiDir 'cisetup.local.json' } else { Join-Path $root 'cisetup.local.json' }
-    if (Test-Path $localPath) {
+    $externalLocalPath = Join-Path (Split-Path -Parent $root) ("$(Split-Path -Leaf $root).cisetup.local.json")
+
+    function Import-LocalOverrides {
+        param([string]$Path)
+        if (-not (Test-Path $Path)) { return $null }
         try {
-            $local = Get-Content $localPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            $localBasePaths = Get-ConfigList $local @('basePaths', 'basePath')
-            $localCiFileServers = Get-ConfigList $local @('ciFileServers', 'ciFileServer')
-            if ($localBasePaths.Count -gt 0) { $basePaths = $localBasePaths }
-            if ($localCiFileServers.Count -gt 0) { $ciFileServers = $localCiFileServers }
+            $data = Get-Content $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+            return [PSCustomObject]@{
+                BasePaths     = Get-ConfigList $data @('basePaths', 'basePath')
+                CiFileServers = Get-ConfigList $data @('ciFileServers', 'ciFileServer')
+            }
         }
         catch {
-            Write-Warning "Failed to read cisetup.local.json: $_"
+            Write-Warning "Failed to read $Path : $_"
+            return $null
         }
+    }
+
+    $localOverrides = Import-LocalOverrides -Path $localPath
+    if (-not $localOverrides -or ($localOverrides.BasePaths.Count -eq 0 -and $localOverrides.CiFileServers.Count -eq 0)) {
+        $externalOverrides = Import-LocalOverrides -Path $externalLocalPath
+        if ($externalOverrides) { $localOverrides = $externalOverrides }
+    }
+    if ($localOverrides) {
+        if ($localOverrides.BasePaths.Count -gt 0) { $basePaths = $localOverrides.BasePaths }
+        if ($localOverrides.CiFileServers.Count -gt 0) { $ciFileServers = $localOverrides.CiFileServers }
     }
 
     return [PSCustomObject]@{

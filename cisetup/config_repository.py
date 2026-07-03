@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import warnings
 from pathlib import Path
 
 from . import paths
@@ -28,7 +29,7 @@ class ConfigRepository:
         return paths.find_repository_root(start)
 
     def load_config(self, repository_root: Path) -> CISetupConfig:
-        config_file = paths.config_path(repository_root)
+        config_file = paths.read_config_path(repository_root)
         legacy_config = repository_root / paths.CONFIG_FILE
         legacy_flat = repository_root / "ci.settings.json"
 
@@ -47,16 +48,18 @@ class ConfigRepository:
             config.storage.base_paths = list(local.base_paths)
         if local.ci_file_servers:
             config.jenkins.ci_file_servers = list(local.ci_file_servers)
+        if local.agent_workspace_path:
+            config.jenkins.agent_workspace_path = local.agent_workspace_path
         return config
 
     def load_local(self, repository_root: Path) -> CISetupLocal:
-        local_file = paths.local_path(repository_root)
+        local_file = paths.read_local_path(repository_root)
         if local_file.is_file():
             return local_from_dict(json.loads(local_file.read_text(encoding="utf-8-sig")))
         return CISetupLocal()
 
     def load_secrets(self, repository_root: Path) -> CISetupSecrets:
-        secrets_file = paths.secrets_path(repository_root)
+        secrets_file = paths.read_secrets_path(repository_root)
         if secrets_file.is_file():
             return secrets_from_dict(json.loads(secrets_file.read_text(encoding="utf-8-sig")))
         legacy = repository_root / paths.SECRETS_FILE
@@ -78,14 +81,19 @@ class ConfigRepository:
 
         self.validate(config, repository_root)
 
+        # 旧 cisetup/ レイアウトの既存プロジェクトは新 CISetup/ へ自動移行する。
+        # 移行に失敗しても保存全体は止めない（migrate_ci_dir が警告する）。
+        paths.migrate_ci_dir(repository_root)
+
         paths.ci_dir(repository_root).mkdir(parents=True, exist_ok=True)
-        # 最新の scripts / テンプレートを cisetup/ 以下へ上書き配置
+        # 最新の scripts / テンプレートを CISetup/ 以下へ上書き配置
         extract_to_repository(repository_root, overwrite=True)
 
         # 個人 ID / マシン固有の書き込み先（複数可）は git 非追跡のローカルファイルへ。
         local = CISetupLocal(
             base_paths=list(config.storage.base_paths),
             ci_file_servers=list(config.jenkins.ci_file_servers),
+            agent_workspace_path=config.jenkins.agent_workspace_path,
         )
         paths.local_path(repository_root).write_text(
             json.dumps(local_to_dict(local), indent=2, ensure_ascii=False) + "\n",
@@ -93,10 +101,11 @@ class ConfigRepository:
             newline="\n",
         )
 
-        # コミットされる config.json / Jenkinsfile には書き込み先を残さない（空にする）。
+        # コミットされる config.json / Jenkinsfile には書き込み先・機械固有パスを残さない（空にする）。
         committed = copy.deepcopy(config)
         committed.storage.base_paths = []
         committed.jenkins.ci_file_servers = []
+        committed.jenkins.agent_workspace_path = ""
 
         paths.config_path(repository_root).write_text(
             json.dumps(config_to_dict(committed), indent=2, ensure_ascii=False) + "\n",
@@ -111,6 +120,57 @@ class ConfigRepository:
 
         template = read_template("Jenkinsfile.template")
         generate_jenkinsfile(template, paths.jenkinsfile_path(repository_root), committed)
+
+        # 同一 PC でエージェントを動かす場合、書き込み先設定をワイプで消えない兄弟パスへ配置する。
+        # 配置に失敗しても保存自体は成功させる（握りつぶさず警告する）。
+        if config.jenkins.agent_workspace_path.strip():
+            try:
+                self.deploy_local_to_agent(config, local)
+            except OSError as exc:
+                warnings.warn(
+                    f"エージェントへの書き込み先設定の自動配置に失敗しました: {exc}",
+                    stacklevel=2,
+                )
+
+    def deploy_local_to_agent(
+        self, config: CISetupConfig, local: CISetupLocal | None = None
+    ) -> Path | None:
+        """書き込み先設定(cisetup.local.json 相当)をエージェントの兄弟パスへ配置する。
+
+        同一 PC で Jenkins エージェントを動かす前提で、ワークスペースの「ワイプ＋再クローン」でも
+        消えない兄弟パス（ci-config.ps1 の externalLocalPath と同一式）へ書き込む。
+        ワークスペースパス未設定なら何もせず None を返す。書き出した兄弟パスを返す。
+        """
+        ws = config.jenkins.agent_workspace_path.strip()
+        if not ws:
+            return None
+        if local is None:
+            local = CISetupLocal(
+                base_paths=list(config.storage.base_paths),
+                ci_file_servers=list(config.jenkins.ci_file_servers),
+            )
+        # 兄弟パス側は basePaths / ciFileServers のみ（エージェントが読むのはこの 2 つ）。
+        data = local_to_dict(local)
+        data.pop("agentWorkspacePath", None)
+        payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+        workspace = Path(ws)
+        sibling = workspace.parent / (workspace.name + "." + paths.LOCAL_FILE)
+        sibling.write_text(payload, encoding="utf-8", newline="\n")
+
+        # ベストエフォート: ワークスペース内 CISetup/（旧 cisetup/）があればそこにも置く。
+        ci_dir = paths.find_ci_dir(workspace)
+        if ci_dir is not None:
+            try:
+                (ci_dir / paths.LOCAL_FILE).write_text(
+                    payload, encoding="utf-8", newline="\n"
+                )
+            except OSError as exc:
+                warnings.warn(
+                    f"ワークスペース内への書き込み先設定の配置に失敗しました: {exc}",
+                    stacklevel=2,
+                )
+        return sibling
 
     def effective_write_targets(self, config: CISetupConfig) -> list[str]:
         """実際にコピーされる全書き込み先（重複除去）。

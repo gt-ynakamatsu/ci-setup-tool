@@ -174,6 +174,30 @@ POLL_SCHEDULE = (
     "【保存先】cisetup.config.json + Jenkinsfile 自動生成"
 )
 
+AGENT_WORKSPACE_PATH = (
+    "【何を】同一 PC で Jenkins エージェントを動かしている場合の、エージェントのワークスペースパス\n"
+    "【例】C:\\jenkins-agent\\workspace\\IPU_TEST_APP\n"
+    "【用途】保存時（または「エージェントへ書き込み先設定を配置」ボタン）で、書き込み先設定"
+    "(cisetup.local.json) を『ワイプで消えない兄弟パス』"
+    "（<親>\\<ワークスペース名>.cisetup.local.json）へ自動配置します\n"
+    "【なぜ】Git のフレッシュクローンでワークスペースが丸ごと再作成されても書き込み先設定が失われないようにするため\n"
+    "【空欄】何もしません\n"
+    "【push されません】機械固有のため cisetup.local.json（git 非追跡）に保存。config/Jenkinsfile には残しません\n"
+    "【保存先】cisetup.local.json → agentWorkspacePath"
+)
+
+PUSH_CI_FILE_SERVER_ENV = (
+    "【何を】ON にすると「Jenkinsに反映」時に、先頭の書き込み先を Jenkins 本体のグローバル環境変数"
+    " CI_FILE_SERVER として自動登録します（Manage Jenkins → System → Global properties）\n"
+    "【なぜ】git 非経由・ワークスペースのワイプに影響されず、別 PC のエージェントにも有効。"
+    "共有アクセスできない環境で書き込み先をエージェントへ届ける手段です\n"
+    "【使い分け】同一 PC でエージェントを動かす場合は「エージェントへ書き込み先設定を配置（兄弟パス）」でも可。"
+    "別 PC・共有不可の場合はこちらを使います\n"
+    "【注意】値は単一（先頭の書き込み先のみ）。複数先が必要な場合は兄弟パス配置を使ってください\n"
+    "【権限】Jenkins 管理者権限（Groovy スクリプト実行）が必要です\n"
+    "【保存先】cisetup.config.json → jenkins.pushCiFileServerEnv"
+)
+
 TEAMS_CREDENTIAL_ID = (
     "【何を】Jenkins Credentials に登録する Teams Webhook の ID\n"
     "【例】teams-webhook-url（変更不要なことが多い）\n"

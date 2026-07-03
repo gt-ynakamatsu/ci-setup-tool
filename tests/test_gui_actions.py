@@ -71,7 +71,7 @@ def fake_jenkins(monkeypatch):
 
 def test_save_only_writes_config(app, sln_repo):
     app._save_only()
-    assert (sln_repo / "cisetup" / "cisetup.config.json").is_file()
+    assert (sln_repo / "CISetup" / "cisetup.config.json").is_file()
 
 
 def test_confirm_test_project_ok_when_set(app):
@@ -100,7 +100,7 @@ def test_save_only_aborts_when_test_warning_declined(app, monkeypatch, sln_repo)
     monkeypatch.setattr(app, "_ask", lambda *a, **k: False)
     app._save_only()
     # 中断したので config.json は書き出されない
-    assert not (sln_repo / "cisetup" / "cisetup.config.json").is_file()
+    assert not (sln_repo / "CISetup" / "cisetup.config.json").is_file()
 
 
 def test_test_jenkins_calls_connection(app, fake_jenkins):

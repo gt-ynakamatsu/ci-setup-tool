@@ -1,6 +1,6 @@
 """ローカル（Jenkins / git を介さない）での CI ビルド & テスト実行。
 
-配置済みの `cisetup/scripts/ci-build.ps1` → `ci-test.ps1` を、リポジトリの
+配置済みの `CISetup/scripts/ci-build.ps1` → `ci-test.ps1` を、リポジトリの
 作業コピーに対してそのまま PowerShell で実行する。fetch / pull / push といった
 git 操作は一切行わないため、push 前に手元のコードを検証する用途に使う。
 各スクリプトは自前で `ci-config.ps1` を読み込み `Set-Location $ci.Root` するため、
@@ -100,10 +100,10 @@ def run_local_ci(
 ) -> None:
     """ローカルでビルド→テストを順に実行する（git 操作なし）。
 
-    `cisetup/scripts/ci-build.ps1` を実行し、成功した場合のみ `ci-test.ps1` を実行する。
+    `CISetup/scripts/ci-build.ps1` を実行し、成功した場合のみ `ci-test.ps1` を実行する。
     いずれかが見つからない / 失敗した場合は :class:`LocalCIError` を送出する。
 
-    :param root: リポジトリルート（`cisetup/` がある階層）。
+    :param root: リポジトリルート（`CISetup/` がある階層）。
     :param configuration: ビルド構成（既定 ``Release``）。各スクリプトの ``-Configuration``。
     :param on_output: 標準出力/標準エラーを 1 行ずつ受け取るコールバック（任意）。
     """

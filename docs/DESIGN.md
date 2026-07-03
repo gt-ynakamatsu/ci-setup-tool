@@ -44,7 +44,7 @@ Python（標準ライブラリの tkinter）製で、配布形態は **単一 ex
 
 CISetup が行うことは大きく次の 3 つに分けられる。
 
-1. **CI 定義ファイルの生成・配置** — 対象アプリのリポジトリへ `cisetup\` フォルダを作り、
+1. **CI 定義ファイルの生成・配置** — 対象アプリのリポジトリへ `CISetup\` フォルダ（旧 `cisetup\` も後方互換で読込）を作り、
    `Jenkinsfile`・各ステージの PowerShell スクリプト（`ci-*.ps1`）・設定 JSON を配置する。
 2. **Jenkins への反映** — Jenkins API を叩いて、資格情報（Git / Teams Webhook）の登録、
    Pipeline ジョブの作成/更新、（任意で）ビルド起動、サーバー初回設定（プラグイン/エージェント登録）を行う。
@@ -126,7 +126,7 @@ flowchart TB
     end
 
     subgraph Repo["対象アプリ リポジトリ"]
-        CIDIR["cisetup/<br/>Jenkinsfile + scripts + JSON"]
+        CIDIR["CISetup/<br/>Jenkinsfile + scripts + JSON"]
     end
 
     subgraph External["外部システム"]
@@ -156,7 +156,7 @@ flowchart TB
 - **GUI（`gui/app.py`）** が唯一のオーケストレータ。フォーム値 ↔ データモデルの変換を行い、
   保存・反映・push・ビルド・環境スキャン等の各アクションを呼び出す。
 - **`ConfigRepository`** が「ディスクへの読み書き」と「整形・検証・機微情報の分離」を担う。
-- **`TemplateStore`** が同梱テンプレート（`bundled_templates/`）をリポジトリの `cisetup\` 配下へ展開する。
+- **`TemplateStore`** が同梱テンプレート（`bundled_templates/`）をリポジトリの `CISetup\` 配下へ展開する。
   ソース実行時はパッケージ同梱フォルダ、exe 実行時は `_MEIPASS` から読む。
 - **`JenkinsClient` / `GitService` / `TeamsService`** が外部システムとの通信を担う。
 - 配置後の**ランタイム挙動は Jenkins 上の `ci-*.ps1`** が担い、CISetup アプリは関与しない。
@@ -221,7 +221,7 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `paths.py` | ファイル名定数、リポジトリルート探索/正規化、レイアウト判定、URL 判定、パス連結 | `CI_FOLDER` / `CONFIG_FILE` / `SECRETS_FILE` / `LOCAL_FILE` / `JENKINSFILE`、`is_url` / `join_location` / `config_path` / `secrets_path` / `local_path` / `jenkinsfile_path` / `normalize_project_root` / `resolve_repository_root` / `find_repository_root` / `has_saved_config` |
 | `app_paths.py` | パッケージルートの解決（ソース実行と `_MEIPASS` の差を吸収） | `get_package_root` |
 | `recent_project.py` | 直近に開いたプロジェクトを `%AppData%\CISetup\recent-project.txt` に記憶 | `RecentProjectStore.get_last_project_root` / `save` |
-| `template_store.py` | 同梱テンプレート一覧の正本、`cisetup\` への展開（`.ps1` は BOM 付与）、`.gitignore` への secrets 追記 | `BUNDLED_FILES`、`read_template`、`extract_to_repository`、`bundled_template_dir` |
+| `template_store.py` | 同梱テンプレート一覧の正本、`CISetup\` への展開（`.ps1` は BOM 付与）、`.gitignore` への secrets 追記 | `BUNDLED_FILES`、`read_template`、`extract_to_repository`、`bundled_template_dir` |
 | `project_setup.py` | `.sln` 解析・プロジェクト自動検出・CI ファイル配置 | `deploy_ci_files`、`has_solution_file`、`parse_solution_projects`、`apply_auto_detection`、`find_test_project`、`count_projects` |
 | `ci_preset_catalog.py` | ビルドプリセット定義と検索 | `CiPreset`、`PRESETS`、`find_preset` |
 | `jenkinsfile_generator.py` | テンプレートのプレースホルダ置換で `Jenkinsfile` を生成 | `generate_jenkinsfile`、`build_agent_declaration` |
@@ -261,8 +261,8 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 `models.py` の dataclass 群が設定の正本。JSON へは **camelCase**（`_snake_to_camel`）で直列化し、
 読み込み時に `_camel_to_snake` で復元する（C# 版 JSON との相互運用のため）。
 
-保存先の凡例: **config** = `cisetup\cisetup.config.json`（コミット対象） /
-**local** = `cisetup\cisetup.local.json`（git 非追跡） / **secrets** = `cisetup\cisetup.secrets.local.json`（git 非追跡）。
+保存先の凡例: **config** = `CISetup\cisetup.config.json`（コミット対象） /
+**local** = `CISetup\cisetup.local.json`（git 非追跡） / **secrets** = `CISetup\cisetup.secrets.local.json`（git 非追跡）。
 
 ### 6.1 `ProjectConfig`（JSON: `project`）
 
@@ -312,6 +312,8 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | `retry_wrapper_enabled` | `retryWrapperEnabled` | bool | `false` | true なら cron を別建てジョブ（`<job_name>-trigger`）に移し、Naginator で失敗時リトライ | config（+ Jenkinsfile / Jenkins ジョブ） |
 | `retry_max_count` | `retryMaxCount` | int | `3` | `retry_wrapper_enabled` 時の Naginator 最大リトライ回数 | config（+ Jenkins ジョブ） |
 | `retry_delay_seconds` | `retryDelaySeconds` | int | `300` | `retry_wrapper_enabled` 時の Naginator リトライ間隔（秒） | config（+ Jenkins ジョブ） |
+| `agent_workspace_path` | `agentWorkspacePath` | str | `""` | 同一 PC のエージェントのワークスペースパス。書き込み先設定を兄弟パスへ自動配置する用途にのみ使用。機械固有 | **local**（config/Jenkinsfile には残さない） |
+| `push_ci_file_server_env` | `pushCiFileServerEnv` | bool | `false` | true なら「Jenkinsに反映」時に先頭の書き込み先を Jenkins グローバル環境変数 `CI_FILE_SERVER` として自動登録（別 PC/共有不可向け・単一値・管理者権限要） | config（個人 ID ではないため committed に残す） |
 
 `retry_wrapper_enabled` が `true` の場合、Jenkinsfile 自身の cron トリガーは空になり
 （`jenkinsfile_generator.generate_jenkinsfile` が `{{CRON_TRIGGER_LINE}}` を空文字に置換）、
@@ -324,6 +326,34 @@ Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待
 
 `ci_file_server`（単数）は後方互換アクセサで `ci_file_servers[0]` を読み書きする。
 `ci_file_servers` は機微扱いで **local** に保存される。
+
+**既知のトレードオフ:** `checkout_retry_count`（Checkout ステージの `retry()`）は
+一時的な git サーバーエラー（例: "Empty reply from server"）を自動で吸収して
+ビルドを `SUCCESS` にするが、その裏で git plugin が「フレッシュクローン」に
+フォールバックし、ワークスペースの内容を丸ごと削除して再クローンすることがある。
+これはエージェント上のワークスペース内に手動配置している `cisetup.local.json`
+（git 非追跡、§7.x 参照）も一緒に削除してしまうため、次回以降のビルドで
+`storage.basePaths` / `jenkins.ciFileServers` が「未設定」に戻り、ビルドは
+成功するがファイルサーバーへの配置だけが静かにスキップされる、という気づきにくい
+副作用を生む。対策として `ci-config.ps1` の `Get-CiSettings` はワークスペースの
+兄弟パス（`<workspace>\..\<workspace 名>.cisetup.local.json`）も
+フォールバックとして読み込む（ワークスペース内が優先、無い/空のときのみ使用）。
+書き込み側は、CISetup の GUI で `agent_workspace_path`（同一 PC のエージェントのワークスペースパス）
+を設定しておけば、保存時にこの兄弟パスへ書き込み先設定を自動配置する（`deploy_local_to_agent`）。
+運用上は、書き込み先が単一なら **エージェント/グローバル環境変数 `CI_FILE_SERVER`**
+（ワークスペースに依存せず最も確実）を使うことを推奨する。
+
+**別 PC/共有不可の環境向け（`push_ci_file_server_env`）:** 兄弟パス自動配置は同一 PC 前提
+（CISetup を実行する PC のパスへ直接書き込む）だが、エージェントが別 PC で共有アクセスもできない
+場合はこの手段が使えない。そのため `jenkins.pushCiFileServerEnv` を `true` にすると、
+「Jenkinsに反映」時に `apply_settings` が `JenkinsClient.set_global_env_var("CI_FILE_SERVER", …)`
+を呼び、Jenkins 本体のグローバル環境変数（`Global properties` の
+`hudson.slaves.EnvironmentVariablesNodeProperty`）へ先頭の書き込み先を API（`run_groovy` / `scriptText`）
+経由で upsert する。git 非経由・ワークスペースのワイプに影響されず、別 PC のエージェントにも届く。
+環境変数は**単一値**のため先頭の書き込み先のみ push する（複数先が必要な場合は兄弟パス配置を使う）。
+Jenkins 管理者権限（Groovy 実行）が必要。Groovy へ埋め込む値は `_escape_groovy`（`\`→`\\`、`'`→`\'`）で
+エスケープする（Windows パスのバックスラッシュ対策）。push する値は base（例 `…\ipu-tes-app-ci`）
+そのままで、プロジェクト名はデプロイスクリプト（`ci-deploy-fileserver.ps1`）側で付与される。
 
 ### 6.4 `GitConfig`（JSON: `git`）
 
@@ -370,8 +400,15 @@ Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待
 |-------------|-----------|----|--------|------|
 | `base_paths` | `basePaths` | list[str] | `[]` | 書き込み先ベース（個人 ID を含みうる） |
 | `ci_file_servers` | `ciFileServers` | list[str] | `[]` | CI_FILE_SERVER 群（個人 ID を含みうる） |
+| `agent_workspace_path` | `agentWorkspacePath` | str | `""` | 同一 PC のエージェントのワークスペースパス（機械固有）。兄弟パスへの自動配置に使用 |
 
 `base_path` / `ci_file_server`（単数）は後方互換アクセサ。**local** に保存（git 非追跡）。
+`agent_workspace_path` が設定されていると、`save_all` は書き込み先設定（`basePaths` / `ciFileServers`）を
+エージェントの**兄弟パス**（`ci-config.ps1` の `externalLocalPath` と同一式:
+`<ワークスペースの親>\<ワークスペース名>.cisetup.local.json`）へ自動配置する
+（`ConfigRepository.deploy_local_to_agent`）。兄弟パス側の JSON には `agentWorkspacePath` は含めない
+（エージェントが読むのは `basePaths` / `ciFileServers` のみ）。ワークスペース内に `CISetup\`（旧 `cisetup\`）があれば
+ベストエフォートで `<ワークスペース>\CISetup\cisetup.local.json` にも配置する。
 
 ### 6.9 機微情報・個人 ID の分離方針
 
@@ -381,11 +418,12 @@ Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待
 2. **local**（`cisetup.local.json`）: 個人 ID を含みうる書き込み先（`base_paths` / `ci_file_servers`）。
 3. **config**（`cisetup.config.json`、コミット対象）: 上記以外。コミット時は `base_paths` と
    `ci_file_servers` を**空にして**書き出す（`save_all` 内で `committed` のクローンを作り、両者を `[]` にする）。
+   機械固有の `agent_workspace_path` も同様に `""` へ退避する。
 
 加えて Git URL に `user@` が埋め込まれていれば `split_repository_url` で除去し、ユーザー名は
 secrets（`git_username`、未設定時のみ）へ退避する。
 
-> 補足: `.gitignore` には `cisetup/cisetup.secrets.local.json`（と旧名）が自動追記される
+> 補足: `.gitignore` には `CISetup/cisetup.secrets.local.json`（と旧名）が自動追記される
 > （`template_store._ensure_secrets_gitignore`）。`cisetup.local.json` は `.gitignore` には
 > 追記されないが、`git_service.push_ci_files` がステージから自動的に外すため push されない（[9.5](#95-git-push)）。
 
@@ -395,25 +433,30 @@ secrets（`git_username`、未設定時のみ）へ退避する。
 
 ### 7.1 保存先パスとレイアウト
 
-`paths.py` の定数: `CI_FOLDER="cisetup"` / `CONFIG_FILE="cisetup.config.json"` /
-`SECRETS_FILE="cisetup.secrets.local.json"` / `LOCAL_FILE="cisetup.local.json"` / `JENKINSFILE="Jenkinsfile"`。
+`paths.py` の定数: `CI_FOLDER="CISetup"`（新規生成フォルダ名）/ `LEGACY_CI_FOLDER="cisetup"`（旧フォルダ名・後方互換）/
+`CONFIG_FILE="cisetup.config.json"` / `SECRETS_FILE="cisetup.secrets.local.json"` / `LOCAL_FILE="cisetup.local.json"` /
+`JENKINSFILE="Jenkinsfile"`。**フォルダ名だけが `cisetup`→`CISetup` に変わり、設定ファイル名は従来どおり**。
 
-- **標準レイアウト**: `<repo>\cisetup\cisetup.config.json` ほか（`config_path` / `secrets_path` /
-  `local_path` / `jenkinsfile_path` / `scripts_dir` がいずれも `<repo>\cisetup\` 配下を返す）。
+- **標準レイアウト**: `<repo>\CISetup\cisetup.config.json` ほか（`config_path` / `secrets_path` /
+  `local_path` / `jenkinsfile_path` / `scripts_dir` がいずれも新規書き込み用に `<repo>\CISetup\` 配下を返す）。
+- **旧 CI フォルダ（後方互換・読込）**: `<repo>\cisetup\...`。読み込み時は `find_ci_dir()` が
+  `CISetup\`（優先）→ `cisetup\` の順にフォールバック探索する（Linux/git のケース感度に対応し両名を明示探索）。
+  保存時は `migrate_ci_dir()` が旧 `cisetup\` を `CISetup\` へ自動リネーム移行してから書き込む。
 - **旧レイアウト（後方互換・読込のみ）**: `<repo>\cisetup.config.json`（ルート直下）、
-  さらに古いフラット形式 `<repo>\ci.settings.json`。保存は常に標準レイアウトで行う。
+  さらに古いフラット形式 `<repo>\ci.settings.json`。保存は常に標準レイアウト（`CISetup\`）で行う。
 
-`load_config` の探索順は「標準 config → 旧 config（ルート直下）→ 旧フラット（`migrate_from_legacy`）→
-無ければ `default_config()`」。読み込みは BOM 許容（`utf-8-sig`）。読込後、`load_local` の値があれば
-`base_paths` / `ci_file_servers` をローカル値で上書きする。
+`load_config` の探索順は「標準 config（`CISetup\` または旧 `cisetup\` を `find_ci_dir` で解決）→ 旧 config（ルート直下）→
+旧フラット（`migrate_from_legacy`）→ 無ければ `default_config()`」。読み込みは BOM 許容（`utf-8-sig`）。読込後、
+`load_local` の値があれば `base_paths` / `ci_file_servers` をローカル値で上書きする。
 
 ### 7.2 リポジトリルートの決定
 
 | 関数 | 役割 |
 |------|------|
-| `normalize_project_root` | 選択パスが `cisetup\`（設定入り）なら親へ繰り上げ。それ以外はそのまま（入れ子 `cisetup\cisetup\` の生成防止） |
-| `resolve_repository_root` | 「保存した設定を開く」用。`cisetup\` を選んだら親、設定があるフォルダならそれ、無ければ親方向へ探索 |
-| `find_repository_root` | 起動時の自動探索。`cisetup` レイアウト / 旧レイアウト / `ci.settings.json` / `*.sln` のいずれかを持つ祖先を返す |
+| `normalize_project_root` | 選択パスが `CISetup\`（旧 `cisetup\`・設定入り）なら親へ繰り上げ。それ以外はそのまま（入れ子 `CISetup\CISetup\` の生成防止）。フォルダ名判定は大文字小文字非区別 |
+| `resolve_repository_root` | 「保存した設定を開く」用。`CISetup\`（旧 `cisetup\`）を選んだら親、設定があるフォルダならそれ、無ければ親方向へ探索 |
+| `find_ci_dir` | 既存 CI フォルダを返す（`CISetup\` 優先→旧 `cisetup\`）。無ければ `None`。読み込み・存在判定の両対応の要 |
+| `find_repository_root` | 起動時の自動探索。CI レイアウト / 旧レイアウト / `ci.settings.json` / `*.sln` のいずれかを持つ祖先を返す |
 | `has_saved_config` | 標準 + 旧レイアウトの設定ファイル有無 |
 
 ### 7.3 URL サニタイズと検証（`validate`）
@@ -436,14 +479,18 @@ secrets（`git_username`、未設定時のみ）へ退避する。
 ```mermaid
 flowchart TB
     A["Git URL から userinfo 除去<br/>(split_repository_url)<br/>未設定なら username を secrets へ"] --> B["validate(config, root)"]
-    B --> C["cisetup/ ディレクトリ作成"]
+    B --> C["CISetup/ ディレクトリ作成（旧 cisetup/ は自動移行）"]
     C --> D["extract_to_repository(overwrite=True)<br/>最新の scripts/テンプレートを上書き配置"]
-    D --> E["cisetup.local.json 書き出し<br/>(base_paths / ci_file_servers)"]
-    E --> F["committed = deepcopy(config)<br/>base_paths=[] / ci_file_servers=[]"]
+    D -->     E["cisetup.local.json 書き出し<br/>(base_paths / ci_file_servers / agent_workspace_path)"]
+    E --> F["committed = deepcopy(config)<br/>base_paths=[] / ci_file_servers=[] / agent_workspace_path=''"]
     F --> G["cisetup.config.json 書き出し (committed)"]
     G --> H["cisetup.secrets.local.json 書き出し"]
     H --> I["Jenkinsfile 生成 (committed)"]
+    I --> J["agent_workspace_path が設定済みなら<br/>deploy_local_to_agent（兄弟パスへ自動配置）"]
 ```
+
+`agent_workspace_path` が設定されている場合、最後に `deploy_local_to_agent` が書き込み先設定を
+エージェントの兄弟パスへ配置する（失敗しても保存自体は成功させ、`warnings.warn` で警告する）。
 
 config / local / secrets の JSON 書き出しはいずれも `indent=2, ensure_ascii=False`、末尾に改行、
 `encoding="utf-8"`（BOM なし）、`newline="\n"`。
@@ -597,7 +644,7 @@ sequenceDiagram
 重要: **Jenkins 反映または Git push が選ばれている場合、保存を強制的に ON にする**
 （古い定義のまま push/反映するのを防ぐため）。
 
-**ローカルでビルド＆テスト**（`local` ステップ）は、配置済みの `cisetup\scripts\ci-build.ps1` →
+**ローカルでビルド＆テスト**（`local` ステップ）は、配置済みの `CISetup\scripts\ci-build.ps1` →
 `ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する**純粋なローカル処理**。
 **git 操作（fetch / pull / push）は一切なく、Jenkins も使わない**ため、保存の強制も
 `_require_jenkins_secrets()` も発生しない。ビルドが失敗したらテストは実行しない（最初の失敗で停止）。
@@ -703,6 +750,12 @@ sequenceDiagram
         JC->>J: POST job/<name>/config.xml
     else 新規
         JC->>J: POST createItem?name=<name>
+    end
+    opt retryWrapperEnabled
+        JC->>J: POST <job>-trigger の config.xml / createItem
+    end
+    opt pushCiFileServerEnv かつ ciFileServer あり
+        JC->>J: POST scriptText (Global env CI_FILE_SERVER を upsert)
     end
 
     Note over App,J: 任意でビルド起動 (trigger_build)
@@ -832,7 +885,7 @@ sequenceDiagram
 ### 10.1 共通ローダー `ci-config.ps1`
 
 各ステージ（`ci-build.ps1` 等）から dot-source される。`Get-CiSettings` が
-`cisetup\cisetup.config.json`（旧: ルート直下 / `ci.settings.json`）を読み、`cisetup.local.json` が
+`CISetup\cisetup.config.json`（旧: ルート直下 / `ci.settings.json`）を読み、`cisetup.local.json` が
 あれば `basePaths` / `ciFileServers` を上書きして、`PSCustomObject` で設定を返す。レイアウト
 （`cisetup` / `legacy`）判定、URL 判定（`Test-StorageUrl`）、配列正規化（`ConvertTo-StringArray` /
 `Get-ConfigList`）、パス連結（`Join-StorageChild`）のユーティリティも提供する。
@@ -980,7 +1033,7 @@ CISetup-<Version>/
 | カバレッジ | `.coveragerc`（`source=cisetup`、`branch=True`、`show_missing`） |
 | GUI テスト | `tkinter` を `importorskip`、ディスプレイ不可なら skip。`ConfigureApp` を生成し `withdraw()`、ダイアログ/通知をモンキーパッチで無効化 |
 | 外部依存のモック | `JenkinsClient` を `FakeClient` に差し替え、`git_service.push_ci_files` / `teams_service.send_test` / `apply_settings` をモンキーパッチ |
-| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序と強制保存（`test_run_setup_push_forces_save`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
+| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序と強制保存（`test_run_setup_push_forces_save`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
 | 代表的なテストファイル | `test_gui_actions.py` / `test_repository_setup_templates.py` / `test_models.py` / `test_paths_presets_generator.py` / `test_jenkins_client.py` / `test_teams_service.py` / `test_git_env_recent.py` / `test_configure_cli.py` / `test_app_paths.py` / `test_exe_freshness.py` |
 | 補助 | `tools\smoke_test.py`（C# 版との JSON 互換などの素早い確認） |
 
@@ -1034,7 +1087,7 @@ CISetup-<Version>/
 | Git ユーザー名 / パスワード | `gitUsername` / `gitPassword` | **secrets** |
 | Teams Webhook URL | `teamsWebhookUrl` | **secrets** |
 
-### 15.2 生成されるファイル一覧（`cisetup\` 配下）
+### 15.2 生成されるファイル一覧（`CISetup\` 配下）
 
 `Jenkinsfile`、`cisetup.config.json`、`cisetup.secrets.local.json`、`cisetup.local.json`、
 `cisetup.config.example.json`、`cisetup.secrets.local.example.json`、

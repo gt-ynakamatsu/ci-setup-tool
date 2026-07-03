@@ -36,6 +36,14 @@ def _escape_xml(value: str) -> str:
     return _sax_escape(value, {'"': "&quot;", "'": "&apos;"})
 
 
+def _escape_groovy(value: str) -> str:
+    """Groovy シングルクォート文字列へ安全に埋め込むためのエスケープ。
+
+    Windows パスはバックスラッシュを多く含むため \\ と ' のエスケープは必須。
+    """
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
 class JenkinsError(RuntimeError):
     pass
 
@@ -202,6 +210,16 @@ class JenkinsClient:
         self._ensure_crumb()
         result = self._request("POST", "scriptText", form={"script": script})
         return (result if isinstance(result, str) else json.dumps(result)).strip()
+
+    def set_global_env_var(self, name: str, value: str) -> None:
+        """Jenkins 本体のグローバル環境変数（Global properties）を upsert する。
+
+        別 PC・共有アクセス不可のエージェントへ CI_FILE_SERVER を届ける手段。
+        値が空なら何もしない。失敗時は run_groovy 経由で既存のエラー型が伝播する。
+        """
+        if not value.strip():
+            return
+        self.run_groovy(_set_global_env_var_script(name, value))
 
     # --- connection ---
 
@@ -447,6 +465,28 @@ loc.save()
 return 'OK: Jenkins URL set to {escaped}'"""
 
 
+def _set_global_env_var_script(name: str, value: str) -> str:
+    """グローバルノードプロパティに環境変数を upsert する Groovy を生成する。"""
+    name_g = _escape_groovy(name)
+    value_g = _escape_groovy(value)
+    return f"""import jenkins.model.*
+import hudson.slaves.EnvironmentVariablesNodeProperty
+def instance = Jenkins.get()
+def gp = instance.getGlobalNodeProperties()
+def list = gp.getAll(EnvironmentVariablesNodeProperty.class)
+def envVars
+if (list == null || list.isEmpty()) {{
+    def prop = new EnvironmentVariablesNodeProperty()
+    gp.add(prop)
+    envVars = prop.getEnvVars()
+}} else {{
+    envVars = list.get(0).getEnvVars()
+}}
+envVars.put('{name_g}', '{value_g}')
+instance.save()
+return 'OK: {name_g} set'"""
+
+
 def test_file_server_write(unc_path: str) -> str:
     import uuid
     from pathlib import Path
@@ -488,3 +528,7 @@ def apply_settings(config: CISetupConfig, secrets: CISetupSecrets) -> None:
     client.upsert_pipeline_job(config)
     if config.jenkins.retry_wrapper_enabled:
         client.upsert_trigger_job(config)
+    # 別 PC/共有不可のエージェント向け: 先頭の書き込み先を Jenkins グローバル環境変数へ登録する。
+    # 環境変数は単一値のため先頭のみ push する（複数先が必要な場合は兄弟パス配置を使う）。
+    if config.jenkins.push_ci_file_server_env and config.jenkins.ci_file_server.strip():
+        client.set_global_env_var("CI_FILE_SERVER", config.jenkins.ci_file_server)

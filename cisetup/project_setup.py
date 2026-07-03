@@ -85,7 +85,7 @@ def _is_executable_project(csproj: Path) -> bool:
 
 
 def deploy_ci_files(repository_root: Path, overwrite: bool = True) -> list[str]:
-    """埋め込み CI テンプレートを cisetup/ へ展開する。"""
+    """埋め込み CI テンプレートを CISetup/ へ展開する。"""
     return extract_to_repository(repository_root, overwrite=overwrite)
 
 

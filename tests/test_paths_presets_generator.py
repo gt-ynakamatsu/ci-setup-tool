@@ -70,6 +70,73 @@ def test_has_ci_layout(tmp_path: Path):
     assert paths.has_ci_layout(tmp_path)
 
 
+def test_ci_folder_is_capitalized():
+    assert paths.CI_FOLDER == "CISetup"
+    assert paths.LEGACY_CI_FOLDER == "cisetup"
+
+
+def test_find_ci_dir_none(tmp_path: Path):
+    assert paths.find_ci_dir(tmp_path) is None
+
+
+def test_find_ci_dir_new_layout(tmp_path: Path):
+    (tmp_path / "CISetup").mkdir()
+    found = paths.find_ci_dir(tmp_path)
+    assert found is not None
+    assert found.name == "CISetup"
+
+
+def test_find_ci_dir_legacy_layout(tmp_path: Path):
+    (tmp_path / "cisetup").mkdir()
+    found = paths.find_ci_dir(tmp_path)
+    assert found is not None
+    # 旧レイアウトも検出できる（Windows はケース非区別）
+    assert paths.is_ci_folder_name(found.name)
+
+
+def test_find_ci_dir_prefers_new_over_legacy(tmp_path: Path):
+    # ケースを区別する OS（Linux/git）では両方存在しうる。CISetup を優先する。
+    (tmp_path / "CISetup").mkdir()
+    try:
+        (tmp_path / "cisetup").mkdir()
+    except (FileExistsError, OSError):
+        # 大文字小文字非区別 FS（Windows）では同一とみなされ作成できないことがある。
+        pass
+    found = paths.find_ci_dir(tmp_path)
+    assert found is not None and found.name == "CISetup"
+
+
+def test_has_ci_layout_reads_legacy(tmp_path: Path):
+    legacy = tmp_path / "cisetup"
+    legacy.mkdir()
+    (legacy / paths.CONFIG_FILE).write_text("{}", encoding="utf-8")
+    assert paths.has_ci_layout(tmp_path)
+
+
+def test_migrate_ci_dir_renames_legacy(tmp_path: Path):
+    legacy = tmp_path / "cisetup"
+    legacy.mkdir()
+    (legacy / paths.CONFIG_FILE).write_text("{}", encoding="utf-8")
+    (legacy / "marker.txt").write_text("keep", encoding="utf-8")
+
+    assert paths.migrate_ci_dir(tmp_path) is True
+
+    ci = paths.find_ci_dir(tmp_path)
+    assert ci is not None and ci.name == "CISetup"
+    assert (ci / "marker.txt").read_text(encoding="utf-8") == "keep"
+    assert (ci / paths.CONFIG_FILE).is_file()
+
+
+def test_migrate_ci_dir_noop_when_already_new(tmp_path: Path):
+    (tmp_path / "CISetup").mkdir()
+    # 既に正しいケースなら移行不要（False）。
+    assert paths.migrate_ci_dir(tmp_path) is False
+
+
+def test_migrate_ci_dir_noop_when_absent(tmp_path: Path):
+    assert paths.migrate_ci_dir(tmp_path) is False
+
+
 def test_has_saved_config(tmp_path: Path):
     assert not paths.has_saved_config(tmp_path)
     paths.config_path(tmp_path).parent.mkdir(parents=True)

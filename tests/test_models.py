@@ -41,6 +41,38 @@ def test_local_roundtrip():
     assert legacy.ci_file_servers == [r"\\s\c"]
 
 
+def test_local_agent_workspace_path_roundtrip():
+    local = CISetupLocal(
+        base_paths=[r"C:\OneDrive\CI"],
+        ci_file_servers=[r"\\srv\ci"],
+        agent_workspace_path=r"C:\jenkins-agent\workspace\IPU_TEST_APP",
+    )
+    data = local_to_dict(local)
+    assert data["agentWorkspacePath"] == r"C:\jenkins-agent\workspace\IPU_TEST_APP"
+    assert local_from_dict(data) == local
+    # 後方互換: キーが無ければ空文字
+    assert local_from_dict({"basePath": r"C:\X"}).agent_workspace_path == ""
+    assert local_from_dict({}).agent_workspace_path == ""
+
+
+def test_jenkins_agent_workspace_path_roundtrip():
+    cfg = config_from_dict({"jenkins": {"agentWorkspacePath": r"C:\ws\App"}})
+    assert cfg.jenkins.agent_workspace_path == r"C:\ws\App"
+    assert config_to_dict(cfg)["jenkins"]["agentWorkspacePath"] == r"C:\ws\App"
+    # 既定値（キー欠落時）は空文字
+    assert config_from_dict({}).jenkins.agent_workspace_path == ""
+
+
+def test_push_ci_file_server_env_roundtrip_and_default():
+    # 既定値（キー欠落時）は False（後方互換）
+    assert config_from_dict({}).jenkins.push_ci_file_server_env is False
+    assert config_from_dict({"jenkins": {}}).jenkins.push_ci_file_server_env is False
+    # camelCase で round-trip
+    cfg = config_from_dict({"jenkins": {"pushCiFileServerEnv": True}})
+    assert cfg.jenkins.push_ci_file_server_env is True
+    assert config_to_dict(cfg)["jenkins"]["pushCiFileServerEnv"] is True
+
+
 def test_storage_multi_value_roundtrip_and_legacy():
     # 配列キーは配列のまま、旧単一キーは 1 要素リストへ正規化される
     cfg = config_from_dict(

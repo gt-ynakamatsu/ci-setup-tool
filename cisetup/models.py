@@ -105,6 +105,14 @@ class JenkinsConfig:
     retry_wrapper_enabled: bool = False
     retry_max_count: int = 3
     retry_delay_seconds: int = 300
+    # 同一 PC で Jenkins エージェントを動かす場合の、エージェントのワークスペースパス。
+    # 機械固有・git 非追跡。書き込み先設定(cisetup.local.json)をワイプで消えない兄弟パスへ
+    # 自動配置する用途にのみ使い、Jenkinsfile/config には残さない（save_all で committed を空にする）。
+    agent_workspace_path: str = ""
+    # true の場合、「Jenkinsに反映」時に先頭の書き込み先を Jenkins 本体のグローバル環境変数
+    # CI_FILE_SERVER として登録する（別 PC/共有不可のエージェント向け）。個人 ID ではないため
+    # committed config.json に保存する（save_all で strip しない）。
+    push_ci_file_server_env: bool = False
 
     @property
     def ci_file_server(self) -> str:
@@ -152,6 +160,8 @@ class CISetupLocal:
 
     base_paths: list[str] = field(default_factory=list)
     ci_file_servers: list[str] = field(default_factory=list)
+    # 同一 PC の Jenkins エージェントのワークスペースパス（機械固有・git 非追跡）。
+    agent_workspace_path: str = ""
 
     @property
     def base_path(self) -> str:
@@ -284,6 +294,7 @@ def local_from_dict(data: dict[str, Any]) -> CISetupLocal:
     local = CISetupLocal()
     local.base_paths = _coalesce_list(data, "basePaths", "basePath")
     local.ci_file_servers = _coalesce_list(data, "ciFileServers", "ciFileServer")
+    local.agent_workspace_path = str(data.get("agentWorkspacePath", "") or "").strip()
     return local
 
 

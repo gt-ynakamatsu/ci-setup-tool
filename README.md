@@ -227,6 +227,8 @@ configure.py --help
 | 設定 GUI の各項目の意味・保存先 | GUI 内ヘルプ / CI-GUIDE.md「9. 設定値↔JSON 対応」 |
 | 保存先・閲覧 URL を「複数」設定する（＋/− 行追加） | CI-GUIDE.md「④ 保存先」の注記 / GUI の ④・③ の各「＋」ボタン |
 | 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（書き込み先は `cisetup.local.json`、CI 側は `CI_FILE_SERVER`） |
+| 書き込み先設定がワークスペースのワイプで消える対策（同一 PC でエージェント運用時） | GUI ④「Jenkins エージェントのワークスペースパス」を設定 → 保存時に兄弟パスへ自動配置（CI-GUIDE.md「④ 保存先」の注記） |
+| 別 PC・共有アクセス不可のエージェントへ書き込み先を届ける | GUI ④「書き込み先を Jenkins のグローバル環境変数 (CI_FILE_SERVER) として登録する」を ON →「Jenkinsに反映」で Jenkins 本体に自動登録（単一値・管理者権限要） |
 | エラー・トラブルの対処 | CI-GUIDE.md「15. トラブルシューティング」 |
 | 配布された exe の使い方（利用者向け） | docs/README-dist.md |
 | コードを直してから exe を再ビルド | README.md「3. 開発フロー」 |
