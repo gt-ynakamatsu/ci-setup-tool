@@ -8,7 +8,7 @@ tk = pytest.importorskip("tkinter")
 from tkinter import TclError  # noqa: E402
 
 from cisetup.gui.commit_dialog import CommitMessageDialog  # noqa: E402
-from cisetup.gui.tooltip import ToolTip, attach_tooltip  # noqa: E402
+from cisetup.gui.tooltip import ToolTip, attach_tooltip, help_icon  # noqa: E402
 
 
 @pytest.fixture
@@ -130,6 +130,80 @@ def test_archive_source_form_roundtrip(app):
     assert app._fields["storage.source_dir"].get() == "mysrc"
 
 
+def test_enable_category_form_roundtrip(app):
+    # カテゴリ有効チェックがフォーム往復で保存・復元される
+    app._enable_logs_var.set(False)
+    app._enable_analysis_var.set(False)
+    app._enable_releases_var.set(True)
+    app._enable_tests_var.set(True)
+    app._form_to_config()
+    assert app._config.storage.enable_logs is False
+    assert app._config.storage.enable_analysis is False
+    assert app._config.storage.enable_releases is True
+    assert app._config.storage.enable_tests is True
+    # config -> form の復元（_loading ガードで trace 再入を防ぐ）
+    app._config.storage.enable_logs = True
+    app._config.storage.enable_tests = False
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._enable_logs_var.get() is True
+    assert app._enable_tests_var.get() is False
+
+
+def test_teams_url_grayed_when_category_disabled_or_folder_missing(app, tmp_path):
+    app._multi_fields["jenkins.ci_file_servers"].set_values([])
+    app._multi_fields["storage.base_paths"].set_values([str(tmp_path)])
+    app._enable_analysis_var.set(True)
+    app._update_preview()
+    analysis_field = app._multi_fields["storage.analysis_urls"]
+
+    def entry_state():
+        return str(analysis_field._rows[0]["entry"].cget("state"))
+
+    assert entry_state() == "disabled"
+    (tmp_path / "analysis").mkdir()
+    app._update_preview()
+    assert entry_state() == "normal"
+    app._enable_analysis_var.set(False)
+    app._update_preview()
+    assert entry_state() == "disabled"
+
+
+def test_source_teams_url_grayed_when_archive_disabled_or_folder_missing(app, tmp_path):
+    app._multi_fields["jenkins.ci_file_servers"].set_values([])
+    app._multi_fields["storage.base_paths"].set_values([str(tmp_path)])
+    app._archive_source_var.set(True)
+    app._update_preview()
+    source_field = app._multi_fields["storage.source_urls"]
+
+    def entry_state():
+        return str(source_field._rows[0]["entry"].cget("state"))
+
+    assert entry_state() == "disabled"
+    (tmp_path / "source").mkdir()
+    app._update_preview()
+    assert entry_state() == "normal"
+    app._archive_source_var.set(False)
+    app._update_preview()
+    assert entry_state() == "disabled"
+
+
+def test_source_urls_form_roundtrip(app):
+    app._multi_fields["storage.source_urls"].set_values(["https://src"])
+    app._form_to_config()
+    assert app._config.storage.source_urls == ["https://src"]
+    app._config.storage.source_urls = ["https://a", "https://b"]
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._multi_fields["storage.source_urls"].get_values() == ["https://a", "https://b"]
+
+
 def test_archive_source_preview(app):
     app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\srv\ci"])
     app._multi_fields["storage.base_paths"].set_values([])
@@ -138,6 +212,25 @@ def test_archive_source_preview(app):
     app._fields["storage.source_dir"].set("source")
     app._update_preview()
     assert r"\\srv\ci\Demo\source" in app._preview_source.get()
+
+
+def test_analysis_dir_form_roundtrip(app):
+    # 解析成果物フォルダ名がフォーム往復で保存・復元される
+    app._fields["storage.analysis_dir"].set("reports")
+    app._form_to_config()
+    assert app._config.storage.analysis_dir == "reports"
+    # 空欄なら "analysis" にフォールバック
+    app._fields["storage.analysis_dir"].set("")
+    app._form_to_config()
+    assert app._config.storage.analysis_dir == "analysis"
+    # config -> form の復元（_loading ガードで trace 再入を防ぐ）
+    app._config.storage.analysis_dir = "myanalysis"
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._fields["storage.analysis_dir"].get() == "myanalysis"
 
 
 def test_push_ci_file_server_env_form_roundtrip(app):
@@ -269,3 +362,11 @@ def test_tooltip_show_hide(app):
 def test_attach_tooltip_empty_text(app):
     label = tk.Label(app, text="x")
     attach_tooltip(label, "")  # 空文字なら ToolTip を生成しない（例外が出ないこと）
+
+
+def test_help_icon_creates_question_mark(app):
+    row = tk.Frame(app)
+    row.pack()
+    icon = help_icon(row, "【なぜ】テスト用の説明")
+    assert icon.cget("text") == "?"
+    assert icon.cget("cursor") == "question_arrow"

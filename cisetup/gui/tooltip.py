@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from .layout import font
+from .layout import COLOR_CARD_BG, COLOR_STEP, _bg_of, font
 
 
 class ToolTip:
     """ウィジェットにホバー時のツールチップを付与する。"""
 
-    def __init__(self, widget: tk.Widget, text: str, delay_ms: int = 400) -> None:
+    def __init__(
+        self,
+        widget: tk.Widget,
+        text: str,
+        delay_ms: int = 400,
+        wraplength: int = 420,
+    ) -> None:
         self._widget = widget
         self._text = text
         self._delay = delay_ms
+        self._wraplength = wraplength
         self._tip: tk.Toplevel | None = None
         self._after_id: str | None = None
         widget.bind("<Enter>", self._schedule, add="+")
@@ -38,8 +45,9 @@ class ToolTip:
             relief=tk.SOLID,
             borderwidth=1,
             font=font(12),
-            padx=6,
-            pady=4,
+            padx=8,
+            pady=6,
+            wraplength=self._wraplength,
         )
         label.pack()
 
@@ -58,3 +66,19 @@ class ToolTip:
 def attach_tooltip(widget: tk.Widget, text: str) -> None:
     if text:
         ToolTip(widget, text)
+
+
+def help_icon(parent: tk.Misc, text: str, *, bg: str | None = None) -> tk.Label:
+    """設定項目の横に表示する「?」ヘルプアイコン（ホバーで説明を表示）。"""
+    bg = bg if bg is not None else _bg_of(parent, COLOR_CARD_BG)
+    icon = tk.Label(
+        parent,
+        text="?",
+        font=font(11, bold=True),
+        fg=COLOR_STEP,
+        bg=bg,
+        cursor="question_arrow",
+        padx=2,
+    )
+    attach_tooltip(icon, text)
+    return icon

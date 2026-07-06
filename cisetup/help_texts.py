@@ -1,7 +1,16 @@
 """各設定項目のヘルプ文（GUI のツールチップ用）。C# SettingHelpTexts 相当。"""
 
+PROJECT_FOLDER = (
+    "【何を】CI を設定する対象アプリのフォルダ（.sln や CI 用ファイルがある場所）\n"
+    "【なぜ】ここを選ぶとプロジェクト名・ビルド対象・CI テンプレートが自動配置され、"
+    "手入力の手間と設定ミスを減らせます\n"
+    "【操作】フォルダを選ぶ → 読み込み で反映"
+)
+
 PROJECT_NAME = (
     "【何を】CI で識別するプロジェクト名\n"
+    "【なぜ】Teams 通知の表示名やファイルサーバーのサブフォルダ名に使われ、"
+    "複数プロジェクトを同じ保存先に分けて整理するために必要です\n"
     "【どこで使う】Teams 通知の表示名、ファイルサーバーのサブフォルダ名\n"
     "【例】MyApp\n"
     "【保存先】cisetup.config.json → project.name"
@@ -9,6 +18,7 @@ PROJECT_NAME = (
 
 SOLUTION_FILE = (
     "【何を】ビルド対象のソリューションファイル (.sln)\n"
+    "【なぜ】CI のビルド・テスト・解析ステージがどのソリューションを対象にするか決めるため\n"
     "【どこで】リポジトリルートからの相対パス\n"
     "【例】MyApp.sln または src/MyApp.sln\n"
     "【保存先】cisetup.config.json → project.solutionFile"
@@ -16,12 +26,14 @@ SOLUTION_FILE = (
 
 PUBLISH_PROJECT = (
     "【何を】成果物 zip を作る csproj（dotnet publish 対象）\n"
+    "【なぜ】ビルド成功時に配布する実行ファイル一式をどのプロジェクトから作るか指定するため\n"
     "【例】src/MyApp/MyApp.csproj\n"
     "【保存先】cisetup.config.json → project.publishProject"
 )
 
 TEST_PROJECT = (
     "【何を】ユニットテスト用 csproj（dotnet test / xUnit 等）\n"
+    "【なぜ】自動テストを CI に含めるかどうかを決めるため。空欄ならテストはスキップ\n"
     "【空欄】CI の Test ステージはスキップします\n"
     "【例】tests/MyApp.Tests/MyApp.Tests.csproj\n"
     "【保存先】cisetup.config.json → project.testProject"
@@ -29,43 +41,72 @@ TEST_PROJECT = (
 
 ARTIFACT_PREFIX = (
     "【何を】成果物 zip のファイル名の先頭部分\n"
+    "【なぜ】保存先に複数ビルドの zip が並ぶとき、どのプロジェクトの成果物か判別するため\n"
     "【例】MyApp → MyApp-42-win-x64.zip\n"
     "【保存先】cisetup.config.json → project.artifactPrefix"
 )
 
 STORAGE_BASE_PATH = (
-    "【何を】書き込み先を『プロジェクト名を付けずにそのまま』指定したいときのパス（UNC/ローカル）\n"
-    "【複数可】右端の「＋」で複数指定でき、④ CI_FILE_SERVER と併用した全先へコピーします"
+    "【何を】書き込み先のベースディレクトリ（UNC/ローカル）。プロジェクト名を付けずそのまま使います\n"
+    "【なぜ】ビルド成果物・ログ・テスト結果をチームで共有する保存場所を決めるため。"
+    "ここが無いと CI は成果物を置けません\n"
+    "【複数可】右端の「＋」で複数指定でき、共有フォルダルート（CI_FILE_SERVER）と併用した全先へコピーします"
     "（相互排他ではありません）\n"
     "【OneDrive/SharePoint】同期済みのローカルフォルダのパスを指定します"
     "（例: C:\\Users\\you\\OneDrive - 会社\\CI\\MyApp）。共有 URL ではありません\n"
-    "【共有リンク】Teams から開く URL は下の『成果物／ログ／ユニットテスト／解析 URL』欄へ\n"
+    "【共有リンク】Teams から開く URL は ④ の各カテゴリ（logs / releases / …）欄へ\n"
     "【例】\\\\fileserver\\share\\builds\\MyApp\n"
     "【push されません】個人 ID を含むため cisetup.local.json（git 非追跡）に保存。"
     "CI 側は Jenkins の CI_FILE_SERVER（パラメータ/環境変数）から取得します\n"
     "【保存先】cisetup.local.json → basePath"
 )
 
+CI_FILE_SERVERS = (
+    "【何を】共有フォルダのルート（CI_FILE_SERVER）。この下にプロジェクト名フォルダを自動作成します\n"
+    "【なぜ】社内ファイルサーバーへ成果物を集約し、エージェントから書き込める UNC パスを"
+    " Jenkins に渡すため（書き込み先ベースと併用可）\n"
+    "【例】\\\\fileserver\\ci → \\\\fileserver\\ci\\MyApp\\releases\\...\n"
+    "【push されません】cisetup.local.json（git 非追跡）に保存"
+)
+
 LOGS_DIR = (
+    "【③ 保存フォルダ】失敗時ログ（logs）\n"
     "【何を】ビルド失敗時のログを置くフォルダ名\n"
+    "【なぜ】失敗時にどこを見ればよいか Teams 通知と保存先を一致させるため\n"
+    "【④ 対応】同じカテゴリの Teams ボタン URL 欄（logs）\n"
     "【デフォルト】logs\n"
     "【保存先】cisetup.config.json → storage.logsDir"
 )
 
 RELEASES_DIR = (
+    "【③ 保存フォルダ】成果物 zip（releases）\n"
     "【何を】ビルド成功時の zip を置くフォルダ名\n"
+    "【④ 対応】同じカテゴリの Teams ボタン URL 欄（releases）\n"
     "【デフォルト】releases\n"
     "【保存先】cisetup.config.json → storage.releasesDir"
 )
 
+ANALYSIS_DIR = (
+    "【③ 保存フォルダ】解析レポート（analysis）\n"
+    "【何を】解析レポート（HTML / タイミング・使用率など）を置くフォルダ名\n"
+    "【④ 対応】同じカテゴリの Teams ボタン URL 欄（analysis）\n"
+    "【ポイント】releases / logs / tests と同じくプロジェクト配下に入れ子で保存\n"
+    "【保存先パス】CI_FILE_SERVER 指定時: <保存先>/<プロジェクト>/<このフォルダ名>/[日付]\n"
+    "【デフォルト】analysis\n"
+    "【保存先】cisetup.config.json → storage.analysisDir"
+)
+
 USE_DATE_SUBFOLDER = (
     "【何を】保存先の下に日付フォルダ (YYYYMMDD) を作るか\n"
+    "【なぜ】毎日のビルド成果物を上書きせず、日付ごとに履歴を残すため\n"
     "【ON の例】...\\releases\\20260615\\MyApp-42-win-x64.zip\n"
     "【保存先】cisetup.config.json → storage.useDateSubfolder"
 )
 
 RELEASE_URL = (
+    "【④ Teams ボタン】成果物 zip（releases）\n"
     "【何を】成果物フォルダを開くための共有 URL（SharePoint / Web 等）\n"
+    "【③ 対応】同じカテゴリの保存フォルダ名（releases）\n"
     "【どこで使う】Teams 通知の「成果物フォルダを開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
@@ -74,7 +115,9 @@ RELEASE_URL = (
 )
 
 ANALYSIS_URL = (
+    "【④ Teams ボタン】解析レポート（analysis）\n"
     "【何を】解析レポートフォルダを開くための共有 URL（SharePoint / Web 等）\n"
+    "【③ 対応】同じカテゴリの保存フォルダ名（analysis）\n"
     "【どこで使う】Teams 通知の「解析レポート (HTML)」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
@@ -82,7 +125,9 @@ ANALYSIS_URL = (
 )
 
 LOGS_URL = (
+    "【④ Teams ボタン】失敗時ログ（logs）\n"
     "【何を】ログフォルダを開くための共有 URL（SharePoint / Web 等）\n"
+    "【③ 対応】同じカテゴリの保存フォルダ名（logs）\n"
     "【どこで使う】Teams 通知（失敗時）の「ログフォルダを開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ボタンは表示されません\n"
@@ -90,17 +135,31 @@ LOGS_URL = (
 )
 
 TESTS_URL = (
+    "【④ Teams ボタン】テスト成果物（tests）\n"
     "【何を】ユニットテストログを開くための共有 URL（SharePoint / Web 等）\n"
+    "【③ 対応】同じカテゴリの保存フォルダ名（tests）\n"
     "【どこで使う】Teams 通知でユニットテスト失敗時の「ユニットテストログを開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ファイルサーバーへ配置したログへのリンク（同一 PC のみ有効）にフォールバック\n"
     "【保存先】cisetup.config.json → storage.testsUrls"
 )
 
+SOURCE_URL = (
+    "【④ Teams ボタン】開発環境 zip（source）\n"
+    "【何を】開発環境一式 zip を開くための共有 URL（SharePoint / Web 等）\n"
+    "【③ 対応】同じカテゴリの保存フォルダ名（source）— archiveSource が ON のときのみ有効\n"
+    "【どこで使う】Teams 通知の「開発環境 zip を開く」ボタン\n"
+    "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
+    "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
+    "【保存先】cisetup.config.json → storage.sourceUrls"
+)
+
 TESTS_DIR = (
-    "【何を】ユニットテスト結果（TRX / サマリ / 失敗ログ）を毎回置く専用トップレベルフォルダ名\n"
-    "【ポイント】releases / logs / analysis とは混ざらない独立フォルダに分離して保存\n"
-    "【保存先パス】CI_FILE_SERVER 指定時: <保存先>/<このフォルダ名>/<プロジェクト>/[日付]\n"
+    "【③ 保存フォルダ】テスト成果物（tests）\n"
+    "【何を】ユニットテスト結果（TRX / サマリ / 失敗ログ）を毎回置くフォルダ名\n"
+    "【④ 対応】同じカテゴリの Teams ボタン URL 欄（tests）\n"
+    "【ポイント】releases / logs / analysis と同じくプロジェクト配下に入れ子で保存\n"
+    "【保存先パス】CI_FILE_SERVER 指定時: <保存先>/<プロジェクト>/<このフォルダ名>/[日付]\n"
     "【デフォルト】tests\n"
     "【保存先】cisetup.config.json → storage.testsDir"
 )
@@ -112,15 +171,44 @@ ARCHIVE_SOURCE = (
     "【保存先】cisetup.config.json → storage.archiveSource"
 )
 
+ENABLE_CATEGORY = (
+    "【何を】このカテゴリを使うか（作成/配置の対象にするか）\n"
+    "【OFF のとき】「格納先フォルダを作成」ボタンで作らず、CI の配置(deploy)でもスキップします\n"
+    "【なぜ】プロジェクトによって不要なカテゴリ（テスト無し・解析無し等）を無効化するため\n"
+    "【ソース行】「開発環境一式を zip 化して保存する」(archiveSource) と同じ設定です\n"
+    "【保存先】cisetup.config.json → storage.enableLogs / enableReleases / enableAnalysis / enableTests"
+)
+
+CREATE_STORAGE_FOLDERS = (
+    "【何を】書き込み先の実効ルート配下に、有効化したカテゴリフォルダを今すぐ作成します\n"
+    "【作成】チェックが ON の releases / logs / analysis / tests（archive_source が ON なら source も）。"
+    "日付フォルダは作りません\n"
+    "【なぜ】OneDrive 同期フォルダなら同期後に SharePoint 側で各フォルダの共有 URL を取得し、"
+    "上の各 URL 欄に貼り付けられます（ビルド前に URL を用意できます）\n"
+    "【スキップ】URL の書き込み先には作成できないためスキップします\n"
+    "【対象ルート】共有フォルダルートは <base>/<プロジェクト名>、書き込み先ベースは <base>"
+)
+
 SOURCE_DIR = (
+    "【③ 保存フォルダ】開発環境 zip（source）\n"
     "【何を】開発環境一式 zip を毎回置くフォルダ名（releases / logs / tests と同列）\n"
+    "【なぜ】ビルド時点のソース一式を後から参照・再現できるようにするため（任意）\n"
+    "【④ 対応】同じカテゴリの URL 欄（source）— archiveSource が ON のときのみ\n"
     "【保存先パス】<保存先>/<このフォルダ名>/[日付]/<プレフィックス>-<ビルド番号>-src.zip\n"
     "【デフォルト】source\n"
     "【保存先】cisetup.config.json → storage.sourceDir"
 )
 
+TEAMS_WEBHOOK_URL = (
+    "【何を】Teams チャンネルへ通知を送る Webhook URL\n"
+    "【なぜ】ビルド成功・失敗をチームに即座に知らせ、対応を早めるため\n"
+    "【取得】Teams チャンネル → ワークフロー →「Webhook アラートをチャネルに送信する」\n"
+    "【保存先】cisetup.secrets.local.json → teamsWebhookUrl（Git には push されません）"
+)
+
 JENKINS_URL = (
     "【何を】設定を反映する Jenkins サーバーの URL（http://ホスト:ポート/）\n"
+    "【なぜ】ジョブ作成・Credentials 登録・ビルド起動はすべてこの Jenkins に対して行うため\n"
     "【どの画面の URL?】Jenkins にログインした直後の "
     "ホーム画面（ダッシュボード＝ジョブ一覧や『新規ジョブ作成』『Jenkins の管理』が並ぶトップ）を開いた状態で、"
     "ブラウザのアドレスバーに出ている URL です。\n"
@@ -162,8 +250,9 @@ AGENT_LABEL = (
 
 CRON_SCHEDULE = (
     "【何を】定期ビルドのスケジュール（cron 形式）\n"
-    "【例】0 0 * * * → 毎日 0:00（Jenkins のタイムゾーンに従う）\n"
-    "【保存先】cisetup.config.json + Jenkinsfile 自動生成"
+    "【例】0 0 * * * → 毎日 0:00（タイムゾーン欄の設定に従う）\n"
+    "【保存先】cisetup.config.json。「Jenkins に反映」時にジョブ XML の TimerTrigger として登録"
+    "（retry ラッパー ON 時はラッパージョブ側のみ）"
 )
 
 POLL_SCHEDULE = (
@@ -171,7 +260,8 @@ POLL_SCHEDULE = (
     "【動き】対象ブランチに新しいコミットがあるとビルドを自動実行\n"
     "【例】H/5 * * * * → 約5分ごとに変更を確認\n"
     "【空欄】ポーリングを無効化（定期ビルドのみ）\n"
-    "【保存先】cisetup.config.json + Jenkinsfile 自動生成"
+    "【保存先】cisetup.config.json。「Jenkins に反映」時にジョブ XML の SCMTrigger として登録"
+    "（Jenkinsfile 上書きでトリガーが消える問題を避けるため）"
 )
 
 AGENT_WORKSPACE_PATH = (
@@ -240,6 +330,7 @@ RETRY_DELAY_SECONDS = (
 
 GIT_REPOSITORY_URL = (
     "【何を】社内 Git のリポジトリ URL（clone URL）\n"
+    "【なぜ】Jenkins がビルドするソースコードをここから取得するため\n"
     "【例】https://git.example.com/team/MyApp.git\n"
     "【ユーザー名】URL に user@ が含まれる場合は保存時に自動除去し、ユーザー名は secrets へ移動します"
     "（認証は Jenkins 資格情報で実施）\n"
@@ -248,8 +339,22 @@ GIT_REPOSITORY_URL = (
 
 GIT_BRANCH = (
     "【何を】CI 対象のブランチ\n"
+    "【なぜ】どのブランチへのマージで自動ビルドするかを Jenkins に伝えるため\n"
     "【例】main / master\n"
     "【保存先】cisetup.config.json → git.branch"
+)
+
+GIT_USERNAME = (
+    "【何を】社内 Git にログインするユーザー名\n"
+    "【なぜ】Jenkins がリポジトリを clone する際の認証に使います（Git には保存されません）\n"
+    "【保存先】cisetup.secrets.local.json → gitUsername"
+)
+
+GIT_PASSWORD = (
+    "【何を】社内 Git のパスワード、または個人アクセストークン (PAT)\n"
+    "【なぜ】パスワード認証や PAT で Jenkins が安全に Git にアクセスするため\n"
+    "【注意】Git リポジトリには push されません。Jenkins Credentials に登録されます\n"
+    "【保存先】cisetup.secrets.local.json → gitPassword"
 )
 
 GIT_CREDENTIAL_ID = (
@@ -272,10 +377,95 @@ JENKINS_AGENT_ROOT = (
 LOCAL_BUILD_TEST = (
     "【何を】配置済みの ci-build.ps1 / ci-test.ps1 をこの PC でそのまま実行し、"
     "現在のローカルコード（作業コピー）をビルド＆テストします\n"
+    "【なぜ】push 前に手元の変更が通るか確認し、壊れたコードをリモートに送らないため\n"
     "【git 操作なし】fetch / pull / push を一切行いません。push 前に手元の変更を確認する用途です\n"
     "【テストビルドとの違い】「テストビルド」は Jenkins がリモート Git のコードをビルド。"
     "こちらは push せずにローカルのコードを検証します\n"
     "【おすすめ】先に「設定を保存」を実行すると最新のスクリプトで検証できます\n"
     "【実行内容】cisetup\\scripts\\ci-build.ps1 → ci-test.ps1"
     "（ビルドが失敗したらテストは実行しません）"
+)
+
+PUBLISH_RELEASE = (
+    "【何を】テストビルド時に成果物 zip（dotnet publish 等）も作成して releases に保存するか\n"
+    "【なぜ】本番と同じ成果物がファイルサーバーに届くか、CI 全体を通しで確認するため\n"
+    "【OFF】ビルド・テストのみ実行し、zip 作成と releases への配置はスキップします"
+)
+
+STEP_SAVE = (
+    "【何を】入力内容を cisetup.config.json / cisetup.local.json / secrets に保存し、"
+    "CI スクリプトをリポジトリへ配置します\n"
+    "【なぜ】Jenkins 反映や push の前に、設定ファイルとスクリプトを最新状態にするため"
+)
+
+STEP_JENKINS = (
+    "【何を】Jenkins ジョブ・Credentials・トリガー設定をサーバーへ反映します\n"
+    "【なぜ】GUI で編集した設定を実際の CI パイプラインとして動かすため"
+)
+
+STEP_PUSH = (
+    "【何を】ローカルの変更を社内 Git へ push します\n"
+    "【なぜ】Jenkins が取得するコードを最新にし、チームと設定・ソースを共有するため"
+)
+
+STEP_BUILD = (
+    "【何を】Jenkins でテストビルドを起動します\n"
+    "【なぜ】本番と同じ経路でビルド・テスト・通知・成果物配置が動くか最終確認するため"
+)
+
+BUILD_PROFILE = (
+    "【何を】CI のビルド方式（.NET 自動 / カスタムコマンド）\n"
+    "【なぜ】.NET 以外（FPGA・C/C++・Python 等）でも同じ CI 基盤を使えるようにするため\n"
+    "【.NET】dotnet build / test / publish を自動実行\n"
+    "【カスタム】各ステージのコマンドを自分で指定"
+)
+
+BUILD_COMMAND = (
+    "【何を】CI のビルドステージで実行するコマンド（カスタム時・必須）\n"
+    "【なぜ】プロジェクト固有のビルド手順（vivado、make 等）を CI に組み込むため\n"
+    "【例】vivado -mode batch -source build.tcl"
+)
+
+LINT_COMMAND = (
+    "【何を】Lint / 静的チェック用コマンド（任意）\n"
+    "【なぜ】ビルド前にコーディング規約違反や明らかな問題を検出するため"
+)
+
+TEST_COMMAND = (
+    "【何を】テストステージで実行するコマンド（任意）\n"
+    "【なぜ】自動テストで回帰を検出し、壊れたビルドを早く気づくため\n"
+    "【例】pytest -q / dotnet test"
+)
+
+ANALYZE_COMMAND = (
+    "【何を】解析・レポート生成コマンド（任意）\n"
+    "【なぜ】タイミング・使用率レポート等を CI で毎回残すため"
+)
+
+PUBLISH_COMMAND = (
+    "【何を】成果物を生成するコマンド（任意・カスタム時）\n"
+    "【なぜ】ビットストリーム生成など、ビルド後の成果物作成手順を CI に含めるため\n"
+    "【注意】zip に含めるファイルは下の glob で指定します"
+)
+
+ARTIFACT_GLOB = (
+    "【何を】成果物 zip に含めるファイルの glob パターン（; 区切り）\n"
+    "【なぜ】カスタムビルドでできたファイルのうち、配布・保存したいものだけを選ぶため\n"
+    "【例】**/*.bit;**/*.bin;reports/*.rpt"
+)
+
+BUILD_TIMEOUT = (
+    "【何を】1 回の Jenkins ビルドがタイムアウトするまでの時間（分）\n"
+    "【なぜ】ハングしたビルドがエージェントを占有し続けるのを防ぐため"
+)
+
+LOG_RETENTION = (
+    "【何を】Jenkins が保持するビルドログの件数\n"
+    "【なぜ】ディスクを圧迫しないよう、古いビルド履歴を自動削除するため"
+)
+
+DEPLOY_LOCAL_TO_AGENT = (
+    "【何を】書き込み先設定 (cisetup.local.json) をエージェントの兄弟パスへ今すぐコピーします\n"
+    "【なぜ】ワークスペースのワイプで設定が消えても、次のビルドで書き込み先を復元するため\n"
+    "【前提】上のワークスペースパスが正しく、同一 PC でエージェントを動かしていること"
 )

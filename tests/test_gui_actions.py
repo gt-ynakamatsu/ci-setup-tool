@@ -8,6 +8,7 @@ tk = pytest.importorskip("tkinter")
 from tkinter import TclError  # noqa: E402
 
 import cisetup.gui.app as appmod  # noqa: E402
+import cisetup.gui.deps as deps_mod  # noqa: E402
 import cisetup.jenkins_client as jc  # noqa: E402
 
 
@@ -62,8 +63,7 @@ class FakeClient:
 @pytest.fixture
 def fake_jenkins(monkeypatch):
     FakeClient.last = None
-    monkeypatch.setattr(appmod, "JenkinsClient", FakeClient)
-    monkeypatch.setattr(jc, "JenkinsClient", FakeClient)
+    monkeypatch.setattr(deps_mod, "JenkinsClient", FakeClient)
     return FakeClient
 
 
@@ -118,7 +118,7 @@ def test_test_jenkins_requires_secrets(app):
 
 def test_apply_jenkins_calls_apply_settings(app, monkeypatch):
     calls = {}
-    monkeypatch.setattr(appmod, "apply_settings", lambda cfg, sec: calls.setdefault("c", (cfg, sec)))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda cfg, sec: calls.setdefault("c", (cfg, sec)))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._apply_jenkins()
@@ -132,7 +132,7 @@ def test_test_teams_calls_send(app, monkeypatch):
         captured["url"] = url
         return "送信しました"
 
-    monkeypatch.setattr(appmod.teams_service, "send_test", fake_send)
+    monkeypatch.setattr(deps_mod.teams_service, "send_test", fake_send)
     app._fields["secrets.teams_webhook_url"].set("https://hook")
     app._test_teams()
     assert captured["url"] == "https://hook"
@@ -140,9 +140,8 @@ def test_test_teams_calls_send(app, monkeypatch):
 
 def test_test_file_server_calls_helper(app, monkeypatch):
     seen = []
-    monkeypatch.setattr(
-        appmod, "test_file_server_write", lambda unc: seen.append(unc) or "OK"
-    )
+    writer = lambda unc: seen.append(unc) or "OK"
+    monkeypatch.setattr(deps_mod, "test_file_server_write", writer)
     app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\srv\ci", r"\\srv2\ci"])
     app._multi_fields["storage.base_paths"].set_values([])
     app._test_file_server()
@@ -150,15 +149,29 @@ def test_test_file_server_calls_helper(app, monkeypatch):
     assert seen == [r"\\srv\ci", r"\\srv2\ci"]
 
 
+def test_create_storage_folders_requires_write_target(app):
+    # 書き込み先未入力ならエラー（フォルダは作成されない）
+    app._multi_fields["jenkins.ci_file_servers"].set_values([])
+    app._multi_fields["storage.base_paths"].set_values([])
+    with pytest.raises(ValueError, match="格納先フォルダ"):
+        app._create_storage_folders()
+
+
+def test_create_storage_folders_invokes_repo(app, tmp_path):
+    app._multi_fields["jenkins.ci_file_servers"].set_values([])
+    app._multi_fields["storage.base_paths"].set_values([str(tmp_path)])
+    app._create_storage_folders()
+    # 実効ルート直下にカテゴリフォルダが作られる
+    assert (tmp_path / "releases").is_dir()
+    assert (tmp_path / "logs").is_dir()
+
+
 # --------------------------------------------------------------- git / setup
 
 def test_git_push_invokes_service(app, monkeypatch, sln_repo):
     captured = {}
-    monkeypatch.setattr(
-        appmod.git_service,
-        "push_ci_files",
-        lambda root, msg: captured.setdefault("args", (root, msg)) or "staged",
-    )
+    pusher = lambda root, msg: captured.setdefault("args", (root, msg)) or "staged"
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", pusher)
     app._git_push()
     assert captured["args"][0] == sln_repo
     assert captured["args"][1] == "commit msg"
@@ -167,39 +180,33 @@ def test_git_push_invokes_service(app, monkeypatch, sln_repo):
 def test_git_push_cancelled(app, monkeypatch):
     monkeypatch.setattr(app, "_ask", lambda *a, **k: False)
     called = {}
-    monkeypatch.setattr(
-        appmod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("x", True)
-    )
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("x", True))
     app._git_push()
     assert "x" not in called
 
 
 def test_run_setup_runs_all_steps(app, fake_jenkins, monkeypatch):
     seq = []
-    monkeypatch.setattr(appmod, "apply_settings", lambda *a, **k: seq.append("apply"))
-    monkeypatch.setattr(appmod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("apply"))
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._fields["jenkins.job_name"].set("MyApp-CI")
-    # 全ステップを有効化（build はビルド実行後に push される順）
-    app._step_save_var.set(True)
-    app._step_jenkins_var.set(True)
-    app._step_build_var.set(True)
-    app._step_push_var.set(True)
+    # 全ステップは既定で有効（build はビルド実行後に push される順）
     app._run_setup()
-    assert seq == ["apply", "push"]
-    assert fake_jenkins.last.triggered == ("MyApp-CI", False)
+    assert seq == ["local", "apply", "push"]
+    assert fake_jenkins.last.triggered == ("MyApp-CI", True)
 
 
 def test_run_setup_skips_unchecked_steps(app, fake_jenkins, monkeypatch):
-    # 既定（push=OFF）でローカル確認のみ。Git push は実行されない。
+    # push / build / local をオフにすると Git push とビルドは実行されない。
     pushed = {}
-    monkeypatch.setattr(appmod, "apply_settings", lambda *a, **k: None)
-    monkeypatch.setattr(
-        appmod.git_service, "push_ci_files", lambda *a, **k: pushed.setdefault("x", True)
-    )
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: None)
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: pushed.setdefault("x", True))
     _set_jenkins_secrets(app)
     app._fields["jenkins.job_name"].set("MyApp-CI")
+    app._step_local_var.set(False)
     app._step_build_var.set(False)
     app._step_push_var.set(False)
     app._run_setup()
@@ -211,9 +218,10 @@ def test_run_setup_push_forces_save(app, monkeypatch, sln_repo):
     # 「設定を保存」をオフにして「Git push」だけ選んでも、push 前に必ず save_all される
     seq = []
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
-    monkeypatch.setattr(appmod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
     app._fields["git.repository_url"].set("http://git/x.git")
     app._step_save_var.set(False)
+    app._step_local_var.set(False)
     app._step_jenkins_var.set(False)
     app._step_build_var.set(False)
     app._step_push_var.set(True)
@@ -226,11 +234,9 @@ def test_run_setup_local_only_no_git_no_jenkins(app, fake_jenkins, monkeypatch):
     # 「ローカルでビルド＆テスト」だけ選択 → git push / pull も apply_settings /
     # trigger_build も呼ばれず、ローカルランナーだけが実行される。
     called = {}
-    monkeypatch.setattr(appmod, "run_local_ci", lambda *a, **k: called.setdefault("local", (a, k)))
-    monkeypatch.setattr(appmod, "apply_settings", lambda *a, **k: called.setdefault("apply", True))
-    monkeypatch.setattr(
-        appmod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("push", True)
-    )
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: called.setdefault("local", (a, k)))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: called.setdefault("apply", True))
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("push", True))
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: called.setdefault("save", True))
     app._step_save_var.set(False)
     app._step_local_var.set(True)
@@ -247,7 +253,7 @@ def test_run_setup_local_only_no_git_no_jenkins(app, fake_jenkins, monkeypatch):
 
 def test_run_setup_local_does_not_require_jenkins_secrets(app, monkeypatch):
     # ローカル単独なら Jenkins URL 等が未入力でも例外にならない。
-    monkeypatch.setattr(appmod, "run_local_ci", lambda *a, **k: None)
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: None)
     app._fields["secrets.jenkins_url"].set("")
     app._fields["secrets.jenkins_user"].set("")
     app._fields["secrets.jenkins_api_token"].set("")
@@ -263,9 +269,9 @@ def test_run_setup_local_ordering(app, fake_jenkins, monkeypatch):
     # save → local → jenkins → push → build の順で実行される。
     seq = []
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
-    monkeypatch.setattr(appmod, "run_local_ci", lambda *a, **k: seq.append("local"))
-    monkeypatch.setattr(appmod, "apply_settings", lambda *a, **k: seq.append("jenkins"))
-    monkeypatch.setattr(appmod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("jenkins"))
+    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
     monkeypatch.setattr(app, "_build_now", lambda: seq.append("build"))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
@@ -281,6 +287,7 @@ def test_run_setup_local_ordering(app, fake_jenkins, monkeypatch):
 
 def test_run_setup_requires_at_least_one_step(app):
     app._step_save_var.set(False)
+    app._step_local_var.set(False)
     app._step_jenkins_var.set(False)
     app._step_build_var.set(False)
     app._step_push_var.set(False)
@@ -293,7 +300,7 @@ def test_build_now_triggers(app, fake_jenkins, monkeypatch):
     _set_jenkins_secrets(app)
     app._fields["jenkins.job_name"].set("MyApp-CI")
     app._build_now()
-    assert fake_jenkins.last.triggered == ("MyApp-CI", False)
+    assert fake_jenkins.last.triggered == ("MyApp-CI", True)
 
 
 def test_setup_server_runs(app, fake_jenkins):
@@ -315,7 +322,7 @@ def test_setup_server_requires_agent_fields(app, fake_jenkins):
 
 def test_copy_agent_command_empty_warns(app, monkeypatch):
     seen = {}
-    monkeypatch.setattr(appmod.messagebox, "showinfo", lambda *a, **k: seen.setdefault("info", True))
+    monkeypatch.setattr(deps_mod.messagebox, "showinfo", lambda *a, **k: seen.setdefault("info", True))
     app._set_text(app._agent_command_text, "")
     app._copy_agent_command()
     assert seen.get("info")
@@ -365,16 +372,13 @@ def test_open_legacy_layout_keeps_saved_values(app, tmp_path_factory):
 def test_scan_env_populates_text(app, monkeypatch):
     from cisetup.environment_scan import EnvironmentCheckResult
 
-    monkeypatch.setattr(
-        appmod.env_scan,
-        "scan",
-        lambda: [
-            EnvironmentCheckResult(name="Git", guidance="", found=True, detail="git 2.4"),
-            EnvironmentCheckResult(
-                name="Java", found=False, detail="未検出", guidance="入れてね", download_url="http://j"
-            ),
-        ],
-    )
+    fake_scan = lambda: [
+        EnvironmentCheckResult(name="Git", guidance="", found=True, detail="git 2.4"),
+        EnvironmentCheckResult(
+            name="Java", found=False, detail="未検出", guidance="入れてね", download_url="http://j"
+        ),
+    ]
+    monkeypatch.setattr(deps_mod.env_scan, "scan", fake_scan)
     app._scan_env()
     app.update()
     text = app._env_text.get("1.0", "end")
