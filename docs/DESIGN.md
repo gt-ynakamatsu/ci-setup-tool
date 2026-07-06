@@ -471,6 +471,15 @@ Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待
 に従ってラッパージョブごと再試行する。Pipeline ジョブは Naginator 非対応、かつ Jenkinsfile 取得
 自体の失敗は Pipeline 開始前に起きる（Jenkinsfile 内の `retry()` でも救えない）ため、この構成にしている。
 
+poll / cron はいずれも Jenkins ジョブ XML 側（`SCMTrigger` / `TimerTrigger`）に持たせるため、
+生成される `Jenkinsfile` の `triggers` ブロックは通常「空」になる。ここで注意すべきは、
+Declarative Pipeline は空の `triggers {}` を許さず `WorkflowScript: triggers can not be empty`
+というコンパイルエラーになり、どのステージにも入らないままビルドが即失敗する点である
+（失敗するとラッパー/トリガージョブが再起動を繰り返し、"No Changes" ビルドが短間隔で連投される）。
+このため `jenkinsfile_generator.build_triggers_block` はトリガー行が 1 つも無いときは
+`triggers` ブロックごと出力しない（`{{TRIGGERS_BLOCK}}` を空文字へ置換）。トリガー行がある
+ときのみ `triggers { ... }` 全体を生成する。
+
 `ci_file_server`（単数）は後方互換アクセサで `ci_file_servers[0]` を読み書きする。
 `ci_file_servers` は機微扱いで **local** に保存される。
 

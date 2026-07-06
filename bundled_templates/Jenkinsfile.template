@@ -27,12 +27,7 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '{{LOG_RETENTION}}'))
         timeout(time: {{BUILD_TIMEOUT}}, unit: 'MINUTES')
     }
-
-    triggers {
-{{CRON_TRIGGER_LINE}}
-{{POLL_TRIGGER}}
-    }
-
+{{TRIGGERS_BLOCK}}
     parameters {
         string(
             name: 'CI_FILE_SERVER',

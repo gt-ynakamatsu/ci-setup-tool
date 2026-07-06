@@ -10,6 +10,21 @@ def build_agent_declaration(agent_label: str | None) -> str:
     return f"{{\n        label '{escaped}'\n    }}"
 
 
+def build_triggers_block(cron_trigger_line: str, poll_trigger: str) -> str:
+    """Declarative Pipeline の triggers ブロック全体を生成する。
+
+    poll(SCMTrigger) / cron(TimerTrigger) は Jenkins ジョブ XML 側へ移設済みのため、
+    通常このブロックは空になる。Declarative Pipeline は空の `triggers {}` を許さず、
+    "triggers can not be empty" というコンパイルエラーで（どのステージにも入らないまま）
+    ビルドが即失敗する。そのためトリガー行が 1 つも無いときはブロックごと出力しない。
+    """
+    lines = [line for line in (cron_trigger_line, poll_trigger) if line.strip()]
+    if not lines:
+        return ""
+    body = "\n".join(lines)
+    return f"\n    triggers {{\n{body}\n    }}\n"
+
+
 def generate_jenkinsfile(template: str, output_path: Path, config) -> None:
     # CI_FILE_SERVER パラメータは単一文字列。複数書き込み先のうち先頭を既定値に使う
     # （個人 ID 入りの値はコミット前に空へ退避されるため通常は空になる）。
@@ -21,12 +36,14 @@ def generate_jenkinsfile(template: str, output_path: Path, config) -> None:
     timezone = config.jenkins.timezone.strip() or "Asia/Tokyo"
     cron_trigger_line = ""
     checkout_retry_count = max(1, config.jenkins.checkout_retry_count)
+    triggers_block = build_triggers_block(cron_trigger_line, poll_trigger)
 
     content = (
         template.lstrip("\ufeff")
         .replace("{{AGENT_DECLARATION}}", build_agent_declaration(config.jenkins.agent_label))
         .replace("{{CRON_SCHEDULE}}", config.jenkins.cron_schedule)
         .replace("{{TIMEZONE}}", timezone)
+        .replace("{{TRIGGERS_BLOCK}}", triggers_block)
         .replace("{{CRON_TRIGGER_LINE}}", cron_trigger_line)
         .replace("{{POLL_TRIGGER}}", poll_trigger)
         .replace("{{CI_FILE_SERVER}}", ci_server)

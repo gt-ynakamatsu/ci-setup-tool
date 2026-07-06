@@ -4,8 +4,13 @@ from pathlib import Path
 
 from cisetup import paths
 from cisetup.ci_preset_catalog import PRESETS, CiPreset, find_preset
-from cisetup.jenkinsfile_generator import build_agent_declaration, generate_jenkinsfile
+from cisetup.jenkinsfile_generator import (
+    build_agent_declaration,
+    build_triggers_block,
+    generate_jenkinsfile,
+)
 from cisetup.models import CISetupConfig, BuildConfig
+from cisetup.template_store import read_template
 
 
 def test_paths_helpers(tmp_path: Path):
@@ -338,3 +343,39 @@ def test_generate_jenkinsfile_checkout_retry_count_minimum_one(tmp_path: Path):
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile("retry({{CHECKOUT_RETRY_COUNT}})", out, cfg)
     assert out.read_text(encoding="utf-8") == "retry(1)"
+
+
+def test_build_triggers_block_empty_when_no_lines():
+    # poll / cron はジョブ XML 側に移設済みのため通常は空。
+    # 空の `triggers {}` は Declarative Pipeline でコンパイルエラーになるため、
+    # トリガー行が無いときはブロックごと出力しない。
+    assert build_triggers_block("", "") == ""
+    assert build_triggers_block("   ", "\n") == ""
+
+
+def test_build_triggers_block_wraps_lines():
+    block = build_triggers_block("        cron('0 0 * * *')", "        pollSCM('H/5 * * * *')")
+    assert block.startswith("\n    triggers {\n")
+    assert block.endswith("\n    }\n")
+    assert "cron('0 0 * * *')" in block
+    assert "pollSCM('H/5 * * * *')" in block
+
+
+def test_generated_jenkinsfile_has_no_empty_triggers_block(tmp_path: Path):
+    # 実際の同梱テンプレートから生成した Jenkinsfile に、空の triggers ブロックが
+    # 出力されないこと（"triggers can not be empty" コンパイル失敗の回帰防止）。
+    template = read_template("Jenkinsfile.template")
+    cfg = CISetupConfig()
+    cfg.jenkins.poll_schedule = "H/5 * * * *"
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile(template, out, cfg)
+    text = out.read_text(encoding="utf-8")
+    # triggers ブロック自体が出力されない（poll/cron はジョブ XML 側）
+    assert "triggers {" not in text
+    # 未置換プレースホルダが残っていない
+    assert "{{TRIGGERS_BLOCK}}" not in text
+    assert "{{POLL_TRIGGER}}" not in text
+    assert "{{CRON_TRIGGER_LINE}}" not in text
+    # options ブロックの直後に parameters ブロックが続く（空行のみ）
+    assert "    }\n\n    parameters {" in text
