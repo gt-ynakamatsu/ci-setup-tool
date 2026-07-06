@@ -28,10 +28,14 @@ def _normalize_staged_path(line: str) -> str:
 def _matches_ci_file(normalized: str, filename: str) -> bool:
     if not normalized:
         return False
-    if normalized.lower() == filename.lower():
+    low = normalized.lower()
+    if low == filename.lower():
         return True
-    expected = f"{paths.CI_FOLDER}/{filename}"
-    return normalized.lower() == expected.lower()
+    # 新 CISetup/ と旧 cisetup/ の両プレフィックスを許容（ケース区別 git 対策）。
+    for folder in (paths.CI_FOLDER, paths.LEGACY_CI_FOLDER):
+        if low == f"{folder}/{filename}".lower():
+            return True
+    return False
 
 
 def _is_secrets_path(normalized: str) -> bool:
@@ -169,7 +173,11 @@ def push_ci_files(repository_root: Path, commit_message: str | None = None) -> s
 
     # 個人 ID を含むローカル設定（cisetup.local.json）は push しない。静かに除外する。
     if contains_staged_local(staged):
-        for path in (paths.LOCAL_FILE, f"{paths.CI_FOLDER}/{paths.LOCAL_FILE}"):
+        for path in (
+            paths.LOCAL_FILE,
+            f"{paths.CI_FOLDER}/{paths.LOCAL_FILE}",
+            f"{paths.LEGACY_CI_FOLDER}/{paths.LOCAL_FILE}",
+        ):
             try:
                 _run_git(repository_root, LOCAL_GIT_TIMEOUT, "reset", "HEAD", "--", path)
             except GitError:
@@ -180,6 +188,7 @@ def push_ci_files(repository_root: Path, commit_message: str | None = None) -> s
         for path in (
             paths.SECRETS_FILE,
             f"{paths.CI_FOLDER}/{paths.SECRETS_FILE}",
+            f"{paths.LEGACY_CI_FOLDER}/{paths.SECRETS_FILE}",
         ):
             try:
                 _run_git(repository_root, LOCAL_GIT_TIMEOUT, "reset", "HEAD", "--", path)

@@ -209,10 +209,16 @@ function Get-CiSettings {
     $storage = $config.storage
     $logsDir = if ($storage -and $storage.logsDir) { $storage.logsDir.Trim() } else { 'logs' }
     $releasesDir = if ($storage -and $storage.releasesDir) { $storage.releasesDir.Trim() } else { 'releases' }
+    $analysisDirName = if ($storage -and $storage.analysisDir) { $storage.analysisDir.Trim() } else { 'analysis' }
     $useDateSubfolder = if ($storage -and $null -ne $storage.useDateSubfolder) { [bool]$storage.useDateSubfolder } else { $true }
     $testsDir = if ($storage -and $storage.testsDir) { $storage.testsDir.Trim() } else { 'tests' }
     $sourceDir = if ($storage -and $storage.sourceDir) { $storage.sourceDir.Trim() } else { 'source' }
     $archiveSource = if ($storage -and $null -ne $storage.archiveSource) { [bool]$storage.archiveSource } else { $false }
+    # カテゴリ有効フラグ（未設定＝後方互換で有効）。false のカテゴリは配置(deploy)をスキップする。
+    $enableLogs = if ($storage -and $null -ne $storage.enableLogs) { [bool]$storage.enableLogs } else { $true }
+    $enableReleases = if ($storage -and $null -ne $storage.enableReleases) { [bool]$storage.enableReleases } else { $true }
+    $enableAnalysis = if ($storage -and $null -ne $storage.enableAnalysis) { [bool]$storage.enableAnalysis } else { $true }
+    $enableTests = if ($storage -and $null -ne $storage.enableTests) { [bool]$storage.enableTests } else { $true }
 
     # 書き込み先・閲覧 URL は複数対応（配列。旧単一キーも読む）。
     $basePaths = Get-ConfigList $storage @('basePaths', 'basePath')
@@ -220,6 +226,7 @@ function Get-CiSettings {
     $analysisUrls = Get-ConfigList $storage @('analysisUrls', 'analysisUrl')
     $logsUrls = Get-ConfigList $storage @('logsUrls', 'logsUrl')
     $testsUrls = Get-ConfigList $storage @('testsUrls', 'testsUrl')
+    $sourceUrls = Get-ConfigList $storage @('sourceUrls', 'sourceUrl')
 
     $jenkins = $config.jenkins
     $ciFileServers = Get-ConfigList $jenkins @('ciFileServers', 'ciFileServer')
@@ -278,18 +285,25 @@ function Get-CiSettings {
         StorageBasePath = if ($basePaths.Count -gt 0) { $basePaths[0] } else { '' }
         LogsDir = (ConvertTo-PlatformPath $logsDir)
         ReleasesDir = (ConvertTo-PlatformPath $releasesDir)
+        AnalysisDir = (ConvertTo-PlatformPath $analysisDirName)
         TestsDir = (ConvertTo-PlatformPath $testsDir)
         SourceDir = (ConvertTo-PlatformPath $sourceDir)
         ArchiveSource = $archiveSource
+        EnableLogs = $enableLogs
+        EnableReleases = $enableReleases
+        EnableAnalysis = $enableAnalysis
+        EnableTests = $enableTests
         UseDateSubfolder = $useDateSubfolder
         ReleaseUrls = $releaseUrls
         AnalysisUrls = $analysisUrls
         LogsUrls = $logsUrls
         TestsUrls = $testsUrls
+        SourceUrls = $sourceUrls
         ReleaseUrl = if ($releaseUrls.Count -gt 0) { $releaseUrls[0] } else { '' }
         AnalysisUrl = if ($analysisUrls.Count -gt 0) { $analysisUrls[0] } else { '' }
         LogsUrl = if ($logsUrls.Count -gt 0) { $logsUrls[0] } else { '' }
         TestsUrl = if ($testsUrls.Count -gt 0) { $testsUrls[0] } else { '' }
+        SourceUrl = if ($sourceUrls.Count -gt 0) { $sourceUrls[0] } else { '' }
         CiFileServers = $ciFileServers
         CiFileServer = if ($ciFileServers.Count -gt 0) { $ciFileServers[0] } else { '' }
         Root = $root

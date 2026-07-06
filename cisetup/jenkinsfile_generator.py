@@ -14,20 +14,12 @@ def generate_jenkinsfile(template: str, output_path: Path, config) -> None:
     # CI_FILE_SERVER パラメータは単一文字列。複数書き込み先のうち先頭を既定値に使う
     # （個人 ID 入りの値はコミット前に空へ退避されるため通常は空になる）。
     ci_server = config.jenkins.ci_file_server.replace("\\", "\\\\")
-    poll = config.jenkins.poll_schedule.strip()
-    poll_trigger = (
-        ""
-        if not poll
-        else f"        pollSCM('{poll}')"
-    )
+    # poll / cron は Jenkins ジョブ XML 側で設定する（upsert_pipeline_job / upsert_trigger_job）。
+    # Jenkinsfile に書くと「Jenkins に反映」後にジョブ XML 上書きでトリガー登録が消えうるため、
+    # Jenkinsfile の triggers ブロックは空にする（二重起動も防ぐ）。
+    poll_trigger = ""
     timezone = config.jenkins.timezone.strip() or "Asia/Tokyo"
-    # retry_wrapper_enabled が true の場合、cron は別建てのトリガー用ジョブ側に持たせるため、
-    # Jenkinsfile 自身の cron トリガーは空にして二重起動を防ぐ。
-    cron_trigger_line = (
-        ""
-        if config.jenkins.retry_wrapper_enabled
-        else f"        cron(spec: '{config.jenkins.cron_schedule}', timezone: '{timezone}')"
-    )
+    cron_trigger_line = ""
     checkout_retry_count = max(1, config.jenkins.checkout_retry_count)
 
     content = (

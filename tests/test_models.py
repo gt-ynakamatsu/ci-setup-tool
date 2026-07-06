@@ -102,6 +102,13 @@ def test_storage_multi_value_roundtrip_and_legacy():
     assert legacy.storage.base_paths == [r"C:\Only"]
     assert legacy.storage.analysis_urls == ["https://a"]
     assert legacy.jenkins.ci_file_servers == [r"\\srv\only"]
+
+    source_cfg = config_from_dict(
+        {"storage": {"sourceUrls": ["https://s1"], "sourceUrl": "https://legacy"}}
+    )
+    assert source_cfg.storage.source_urls == ["https://s1"]
+    legacy_source = config_from_dict({"storage": {"sourceUrl": "https://only"}})
+    assert legacy_source.storage.source_urls == ["https://only"]
     # 後方互換プロパティ（先頭要素）
     assert legacy.storage.base_path == r"C:\Only"
     assert legacy.jenkins.ci_file_server == r"\\srv\only"
@@ -129,6 +136,53 @@ def test_archive_source_roundtrip_and_default():
     restored = config_from_dict(out)
     assert restored.storage.archive_source is True
     assert restored.storage.source_dir == "src-snapshot"
+
+def test_enable_category_flags_roundtrip_and_default():
+    # 既定値（キー欠落時）はすべて有効（後方互換）
+    s = config_from_dict({}).storage
+    assert (s.enable_logs, s.enable_releases, s.enable_analysis, s.enable_tests) == (
+        True,
+        True,
+        True,
+        True,
+    )
+    assert config_from_dict({"storage": {}}).storage.enable_tests is True
+    # camelCase で round-trip
+    cfg = config_from_dict(
+        {
+            "storage": {
+                "enableLogs": False,
+                "enableReleases": True,
+                "enableAnalysis": False,
+                "enableTests": False,
+            }
+        }
+    )
+    assert cfg.storage.enable_logs is False
+    assert cfg.storage.enable_analysis is False
+    assert cfg.storage.enable_tests is False
+    out = config_to_dict(cfg)
+    assert out["storage"]["enableLogs"] is False
+    assert out["storage"]["enableReleases"] is True
+    assert out["storage"]["enableAnalysis"] is False
+    assert out["storage"]["enableTests"] is False
+    restored = config_from_dict(out)
+    assert restored.storage.enable_logs is False
+    assert restored.storage.enable_tests is False
+
+
+def test_analysis_dir_roundtrip_and_default():
+    # 既定値（キー欠落時）は "analysis"（後方互換）
+    assert config_from_dict({}).storage.analysis_dir == "analysis"
+    assert config_from_dict({"storage": {}}).storage.analysis_dir == "analysis"
+    # camelCase (analysisDir) で round-trip
+    cfg = config_from_dict({"storage": {"analysisDir": "reports"}})
+    assert cfg.storage.analysis_dir == "reports"
+    out = config_to_dict(cfg)
+    assert out["storage"]["analysisDir"] == "reports"
+    restored = config_from_dict(out)
+    assert restored.storage.analysis_dir == "reports"
+
 
 EXAMPLE = (
     Path(__file__).resolve().parent.parent

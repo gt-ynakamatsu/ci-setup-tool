@@ -107,7 +107,7 @@ def run_local_ci(
     :param configuration: ビルド構成（既定 ``Release``）。各スクリプトの ``-Configuration``。
     :param on_output: 標準出力/標準エラーを 1 行ずつ受け取るコールバック（任意）。
     """
-    scripts = paths.scripts_dir(root)
+    scripts = paths.read_scripts_dir(root)
     configuration = (configuration or "Release").strip() or "Release"
 
     if on_output is not None:

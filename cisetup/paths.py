@@ -130,6 +130,11 @@ def read_local_path(repository_root: Path) -> Path:
     return _read_ci_dir(repository_root) / LOCAL_FILE
 
 
+def read_scripts_dir(repository_root: Path) -> Path:
+    """既存スクリプトの読み込み用ディレクトリ（CISetup 優先、無ければ旧 cisetup）。"""
+    return _read_ci_dir(repository_root) / "scripts"
+
+
 def has_ci_layout(repository_root: Path) -> bool:
     return read_config_path(repository_root).is_file()
 

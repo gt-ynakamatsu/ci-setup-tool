@@ -120,6 +120,7 @@ def build_test_card_payload(config: CISetupConfig) -> str:
         ("成果物フォルダを開く", config.storage.release_urls),
         ("ユニットテストログを開く", config.storage.tests_urls),
         ("ログフォルダを開く", config.storage.logs_urls),
+        ("開発環境 zip を開く", config.storage.source_urls),
     ):
         actions.extend(_open_url_actions(title, urls))
 

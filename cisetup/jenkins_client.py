@@ -31,6 +31,34 @@ def trigger_job_name(job_name: str) -> str:
     return f"{job_name}{TRIGGER_JOB_SUFFIX}"
 
 
+def build_job_triggers_xml(config: CISetupConfig) -> str:
+    """Pipeline ジョブ XML 用のトリガー断片（pollSCM / cron）。
+
+    Jenkinsfile の triggers は「Jenkins に反映」でジョブ XML を上書きすると登録が消えうるため、
+    poll（SCMTrigger）と cron（TimerTrigger）をジョブ XML 側に持たせる。
+    retry_wrapper_enabled 時の cron はラッパー Freestyle ジョブ側のみ（二重起動防止）。
+    """
+    parts: list[str] = []
+    poll = config.jenkins.poll_schedule.strip()
+    if poll:
+        parts.append(
+            "    <hudson.triggers.SCMTrigger>\n"
+            f"      <spec>{_escape_xml(poll)}</spec>\n"
+            "      <ignorePostCommitHooks>false</ignorePostCommitHooks>\n"
+            "    </hudson.triggers.SCMTrigger>"
+        )
+    if not config.jenkins.retry_wrapper_enabled:
+        cron = config.jenkins.cron_schedule.strip()
+        if cron:
+            tz = config.jenkins.timezone.strip() or "Asia/Tokyo"
+            parts.append(
+                "    <hudson.triggers.TimerTrigger>\n"
+                f"      <spec>TZ={_escape_xml(tz)}\n{_escape_xml(cron)}</spec>\n"
+                "    </hudson.triggers.TimerTrigger>"
+            )
+    return "\n".join(parts)
+
+
 def _escape_xml(value: str) -> str:
     """C# の SecurityElement.Escape 相当（< > & " ' をすべてエスケープ）。"""
     return _sax_escape(value, {'"': "&quot;", "'": "&apos;"})
@@ -281,12 +309,21 @@ class JenkinsClient:
         except JenkinsHTTPError:
             return False
 
+    def disable_job_if_exists(self, job_name: str) -> None:
+        """ジョブが存在すれば無効化する（retry ラッパー OFF 時の残骸対策）。"""
+        if not job_name.strip() or not self._job_exists(job_name):
+            return
+        encoded = urllib.parse.quote(job_name, safe="")
+        self._ensure_crumb()
+        self._request("POST", f"job/{encoded}/disable")
+
     def upsert_pipeline_job(self, config: CISetupConfig) -> None:
         template = read_template("JenkinsJob.config.template.xml")
         job_xml = (
             template.replace("{{GIT_URL}}", _escape_xml(config.git.repository_url))
             .replace("{{GIT_CREDENTIAL_ID}}", _escape_xml(config.git.credential_id))
             .replace("{{GIT_BRANCH}}", _escape_xml(config.git.branch))
+            .replace("{{JOB_TRIGGERS}}", build_job_triggers_xml(config))
         )
         encoded = urllib.parse.quote(config.jenkins.job_name, safe="")
         exists = self._job_exists(config.jenkins.job_name)
@@ -528,6 +565,8 @@ def apply_settings(config: CISetupConfig, secrets: CISetupSecrets) -> None:
     client.upsert_pipeline_job(config)
     if config.jenkins.retry_wrapper_enabled:
         client.upsert_trigger_job(config)
+    else:
+        client.disable_job_if_exists(trigger_job_name(config.jenkins.job_name))
     # 別 PC/共有不可のエージェント向け: 先頭の書き込み先を Jenkins グローバル環境変数へ登録する。
     # 環境変数は単一値のため先頭のみ push する（複数先が必要な場合は兄弟パス配置を使う）。
     if config.jenkins.push_ci_file_server_env and config.jenkins.ci_file_server.strip():

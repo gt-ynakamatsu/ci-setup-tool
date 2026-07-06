@@ -227,6 +227,94 @@ def test_trigger_build_empty_name(recorder):
         client.trigger_build("")
 
 
+def test_build_job_triggers_xml_poll_schedule():
+    cfg = CISetupConfig()
+    cfg.jenkins.poll_schedule = "H/5 * * * *"
+    cfg.jenkins.cron_schedule = ""
+    xml = jenkins_client.build_job_triggers_xml(cfg)
+    assert "SCMTrigger" in xml
+    assert "H/5 * * * *" in xml
+    assert "TimerTrigger" not in xml
+
+
+def test_build_job_triggers_xml_cron_schedule():
+    cfg = CISetupConfig()
+    cfg.jenkins.poll_schedule = ""
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
+    xml = jenkins_client.build_job_triggers_xml(cfg)
+    assert "TimerTrigger" in xml
+    assert "TZ=Asia/Tokyo" in xml
+    assert "0 0 * * *" in xml
+    assert "SCMTrigger" not in xml
+
+
+def test_build_job_triggers_xml_no_cron_when_retry_wrapper_enabled():
+    cfg = CISetupConfig()
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.retry_wrapper_enabled = True
+    xml = jenkins_client.build_job_triggers_xml(cfg)
+    assert "TimerTrigger" not in xml
+    assert "SCMTrigger" in xml  # poll はデフォルト有効
+
+
+def test_build_job_triggers_xml_empty_when_both_disabled():
+    cfg = CISetupConfig()
+    cfg.jenkins.poll_schedule = ""
+    cfg.jenkins.cron_schedule = ""
+    assert jenkins_client.build_job_triggers_xml(cfg) == ""
+
+
+def test_upsert_pipeline_job_includes_scm_trigger(recorder):
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.poll_schedule = "H/10 * * * *"
+    cfg.jenkins.cron_schedule = ""
+    client.upsert_pipeline_job(cfg)
+    body = recorder.bodies[-1].decode("utf-8")
+    assert "hudson.triggers.SCMTrigger" in body
+    assert "H/10 * * * *" in body
+    assert "TimerTrigger" not in body
+
+
+def test_upsert_pipeline_job_includes_timer_trigger(recorder):
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.poll_schedule = ""
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
+    client.upsert_pipeline_job(cfg)
+    body = recorder.bodies[-1].decode("utf-8")
+    assert "hudson.triggers.TimerTrigger" in body
+    assert "TZ=Asia/Tokyo" in body
+    assert "0 0 * * *" in body
+
+
+def test_disable_job_if_exists(recorder):
+    recorder.responses["job/MyApp-CI-trigger/api/json"] = FakeResponse("{}")
+    client = JenkinsClient(_secrets())
+    client.disable_job_if_exists("MyApp-CI-trigger")
+    assert any("job/MyApp-CI-trigger/disable" in url for _, url in recorder.calls)
+
+
+def test_disable_job_if_exists_skips_missing(recorder):
+    recorder.errors["job/Ghost/api/json"] = _http_error("http://x/job/Ghost/api/json", 404)
+    client = JenkinsClient(_secrets())
+    client.disable_job_if_exists("Ghost")
+    assert not any("/disable" in url for _, url in recorder.calls)
+
+
+def test_apply_settings_disables_trigger_job_when_wrapper_off(recorder):
+    recorder.responses["job/CISetup-CI-trigger/api/json"] = FakeResponse("{}")
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.retry_wrapper_enabled = False
+    apply_settings(cfg, _secrets())
+    assert any("CISetup-CI-trigger/disable" in url for _, url in recorder.calls)
+
+
 def test_upsert_credentials_and_job(recorder):
     client = JenkinsClient(_secrets())
     client.upsert_string_credential("teams-webhook-url", "http://hook", "Teams")
@@ -322,7 +410,10 @@ def test_apply_settings_skips_trigger_job_by_default(recorder):
     cfg = CISetupConfig()
     cfg.git.repository_url = "http://git/x.git"
     apply_settings(cfg, _secrets())
-    assert not any("trigger" in url for _, url in recorder.calls)
+    assert not any(
+        "CISetup-CI-trigger" in url and ("createItem" in url or "config.xml" in url)
+        for _, url in recorder.calls
+    )
 
 
 def test_apply_settings_creates_trigger_job_when_enabled(recorder):

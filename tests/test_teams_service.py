@@ -47,6 +47,16 @@ def _cfg():
     return cfg
 
 
+def test_build_test_card_payload_includes_source_url():
+    cfg = _cfg()
+    cfg.storage.source_urls = ["https://src"]
+    data = json.loads(teams_service.build_test_card_payload(cfg))
+    card = data["attachments"][0]["content"]
+    titles = [a["title"] for a in card["actions"]]
+    assert "開発環境 zip を開く" in titles
+    assert len(card["actions"]) == 5
+
+
 def test_build_test_card_payload():
     data = json.loads(teams_service.build_test_card_payload(_cfg()))
     assert data["type"] == "message"

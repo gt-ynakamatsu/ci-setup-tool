@@ -17,6 +17,13 @@ def _make_scripts(root: Path, *, build: bool = True, test: bool = True) -> None:
         (scripts / "ci-test.ps1").write_text("# test", encoding="utf-8")
 
 
+def _make_legacy_scripts(root: Path) -> None:
+    scripts = root / paths.LEGACY_CI_FOLDER / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    (scripts / "ci-build.ps1").write_text("# build", encoding="utf-8")
+    (scripts / "ci-test.ps1").write_text("# test", encoding="utf-8")
+
+
 def _fake_popen(returncodes: dict[str, int], calls: list[list[str]]):
     class FakePopen:
         def __init__(self, cmd, **kwargs):
@@ -93,6 +100,21 @@ def test_run_local_ci_missing_build_script_raises(tmp_path, monkeypatch):
     assert "設定を保存" in str(exc.value)
     # スクリプトが無いので subprocess は起動されない
     assert calls == []
+
+
+def test_run_local_ci_uses_legacy_scripts_when_not_migrated(tmp_path, monkeypatch):
+    # 未移行の旧 cisetup/scripts レイアウトでもスクリプトを解決して実行できること。
+    _make_legacy_scripts(tmp_path)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(local_ci.subprocess, "Popen", _fake_popen({}, calls))
+
+    local_ci.run_local_ci(tmp_path)
+
+    assert len(calls) == 2
+    for cmd in calls:
+        joined = " ".join(cmd)
+        assert paths.LEGACY_CI_FOLDER in joined
+        assert "scripts" in joined
 
 
 def test_run_local_ci_default_configuration(tmp_path, monkeypatch):

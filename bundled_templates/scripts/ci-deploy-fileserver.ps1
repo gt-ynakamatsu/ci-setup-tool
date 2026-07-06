@@ -58,8 +58,8 @@ function Update-DeployManifest {
 # 上書き採用する（従来互換）。無ければ config / cisetup.local.json の全先を使う。
 #   CI_FILE_SERVER 系 : <base>/<project>（プロジェクト名を付与）
 #   basePath 系       : <base>（そのまま）
-# ユニットテスト結果は releases / logs / analysis と混ざらない専用トップレベルに分離する:
-#   CI_FILE_SERVER 系 : <base>/<testsDir>/<project>
+# ユニットテスト結果は releases / logs / analysis と同じく <Root>/<testsDir>/[date] に入れ子配置する:
+#   CI_FILE_SERVER 系 : <base>/<project>/<testsDir>
 #   basePath 系       : <base>/<testsDir>
 # ※ プロジェクト名はフォルダ整理のための区切りで、検出/判定ロジックには依存しない。
 $targets = New-Object System.Collections.Generic.List[object]
@@ -71,16 +71,14 @@ function Add-WriteTarget {
     $b = $Base.Trim()
     if ($AppendProject) {
         $root = Join-StorageChild $b $ci.ProjectName
-        $testsRoot = Join-StorageChild (Join-StorageChild $b $testsDir) $ci.ProjectName
     }
     else {
         $root = $b
-        $testsRoot = Join-StorageChild $b $testsDir
     }
     # 重複排除は「入力ベース文字列」ではなく「実効ルート」で行う（GUI の build_target_roots と一致させ、
     # ④=<base>/<project> と書き込み先ベース=<base> が同一ルートに解決される場合の二重コピーを防ぐ）。
     if (-not $seen.Add($root.ToLowerInvariant())) { return }
-    $targets.Add([PSCustomObject]@{ Base = $b; Root = $root; TestsRoot = $testsRoot }) | Out-Null
+    $targets.Add([PSCustomObject]@{ Base = $b; Root = $root }) | Out-Null
 }
 
 if (-not [string]::IsNullOrWhiteSpace($FileServerRoot)) {
@@ -118,9 +116,20 @@ function Get-CategoryDest {
 
 function Get-TestsDest {
     param([object]$Target)
-    $dest = $Target.TestsRoot
-    if ($ci.UseDateSubfolder) { $dest = Join-StorageChild $dest $dateFolder }
-    return $dest
+    return Get-CategoryDest -Target $Target -CategoryDir $testsDir
+}
+
+# カテゴリ有効フラグ（GUI のチェック）で無効化されたカテゴリは配置をスキップする。
+$categoryEnabled = @{
+    'Logs'     = $ci.EnableLogs
+    'Artifact' = $ci.EnableReleases
+    'Analysis' = $ci.EnableAnalysis
+    'Test'     = $ci.EnableTests
+    'Source'   = $ci.ArchiveSource
+}
+if ($categoryEnabled.ContainsKey($Type) -and (-not $categoryEnabled[$Type])) {
+    Write-Host "Category '$Type' is disabled (storage.enable* = false). Skipping deploy."
+    exit 0
 }
 
 if ($Type -eq 'Logs') {
@@ -157,7 +166,7 @@ if ($Type -eq 'Analysis') {
     $firstDest = $null
     foreach ($t in $targets) {
         if (Test-TargetUrl $t) { continue }
-        $destDir = Join-Path (Get-CategoryDest -Target $t -CategoryDir 'analysis') "$displayName-$BuildNumber-$timeStamp"
+        $destDir = Join-Path (Get-CategoryDest -Target $t -CategoryDir $ci.AnalysisDir) "$displayName-$BuildNumber-$timeStamp"
         New-Item -ItemType Directory -Force -Path $destDir | Out-Null
         foreach ($file in $files) {
             Copy-Item -Path $file.FullName -Destination (Join-Path $destDir $file.Name) -Force
@@ -193,7 +202,7 @@ if ($Type -eq 'Test') {
     $firstDest = $null
     foreach ($t in $targets) {
         if (Test-TargetUrl $t) { continue }
-        # ユニットテスト結果は専用トップレベル（Get-TestsDest）へ配置する。
+        # ユニットテスト結果は他カテゴリと同じく <Root>/<testsDir>/[date] へ入れ子配置する。
         $destDir = Join-Path (Get-TestsDest -Target $t) "$displayName-$BuildNumber-$timeStamp"
         New-Item -ItemType Directory -Force -Path $destDir | Out-Null
         foreach ($file in $files) {

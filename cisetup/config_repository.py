@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import paths
@@ -22,6 +23,20 @@ from .models import (
     split_repository_url,
 )
 from .template_store import extract_to_repository, read_template
+
+
+@dataclass
+class StorageFolderResult:
+    """create_storage_folders の結果。
+
+    created: 作成/確保できたフォルダパス（重複なし・順序安定）。
+    failed: 作成に失敗した (パス, エラー内容) の一覧。
+    skipped_urls: URL のためスキップした書き込み先。
+    """
+
+    created: list[str] = field(default_factory=list)
+    failed: list[tuple[str, str]] = field(default_factory=list)
+    skipped_urls: list[str] = field(default_factory=list)
 
 
 class ConfigRepository:
@@ -196,9 +211,9 @@ class ConfigRepository:
         build_target_roots() を参照（CI_FILE_SERVER 系はプロジェクト名を付与、base_path 系は
         そのまま）。
 
-        ユニットテスト成果物は releases / logs / analysis と混ざらない「専用トップレベル」
-        に分離する（ci-deploy-fileserver.ps1 の Get-TestsDest と一致）。
-          - CI_FILE_SERVER 指定時 : <fileServer>/<testsDir>/<project>/[date]
+        ユニットテスト成果物は releases / logs / analysis と同じく <root>/<testsDir>/[date]
+        に入れ子配置する（ci-deploy-fileserver.ps1 の Get-TestsDest と一致）。
+          - CI_FILE_SERVER 指定時 : <fileServer>/<project>/<testsDir>/[date]
           - base_path のみ指定時   : <base>/<testsDir>/[date]
 
         戻り値は (logs, releases, tests) の順。
@@ -207,27 +222,18 @@ class ConfigRepository:
         base = config.storage.base_path.strip()
         if file_server:
             root = paths.join_location(file_server, config.project.name)
-            tests_root = paths.join_location(
-                file_server, config.storage.tests_dir, config.project.name
-            )
         else:
             root = base
-            tests_root = paths.join_location(base, config.storage.tests_dir)
 
         def build(category_dir: str) -> str:
             if config.storage.use_date_subfolder:
                 return paths.join_location(root, category_dir, date_folder)
             return paths.join_location(root, category_dir)
 
-        def build_tests() -> str:
-            if config.storage.use_date_subfolder:
-                return paths.join_location(tests_root, date_folder)
-            return tests_root
-
         return (
             build(config.storage.logs_dir),
             build(config.storage.releases_dir),
-            build_tests(),
+            build(config.storage.tests_dir),
         )
 
     def build_source_preview(
@@ -274,6 +280,87 @@ class ConfigRepository:
                 out.append((base, base))
         return out
 
+    _STORAGE_CATEGORY_DIRS = {
+        "logs": lambda s: s.logs_dir,
+        "releases": lambda s: s.releases_dir,
+        "analysis": lambda s: s.analysis_dir,
+        "tests": lambda s: s.tests_dir,
+        "source": lambda s: s.source_dir,
+    }
+
+    _STORAGE_CATEGORY_ENABLED = {
+        "logs": lambda s: s.enable_logs,
+        "releases": lambda s: s.enable_releases,
+        "analysis": lambda s: s.enable_analysis,
+        "tests": lambda s: s.enable_tests,
+        "source": lambda s: s.archive_source,
+    }
+
+    def storage_folder_exists(self, config: CISetupConfig, category: str) -> bool:
+        """書き込み先のいずれかに、指定カテゴリの格納フォルダが存在するか。
+
+        category は logs / releases / analysis / tests / source のいずれか。
+        カテゴリが無効、または書き込み先が URL のみの場合は False。
+        """
+        dir_fn = self._STORAGE_CATEGORY_DIRS.get(category)
+        enabled_fn = self._STORAGE_CATEGORY_ENABLED.get(category)
+        if dir_fn is None or enabled_fn is None:
+            return False
+        if not enabled_fn(config.storage):
+            return False
+        dir_name = dir_fn(config.storage).strip()
+        if not dir_name:
+            return False
+        for base, root in self.build_target_roots(config):
+            if paths.is_url(base) or paths.is_url(root):
+                continue
+            if Path(paths.join_location(root, dir_name)).is_dir():
+                return True
+        return False
+
+    def create_storage_folders(self, config: CISetupConfig) -> StorageFolderResult:
+        """各書き込み先の実効ルート配下にカテゴリフォルダ（日付フォルダは作らない）を作成する。
+
+        deploy/preview と同じ規則で build_target_roots() の各実効ルート配下に
+        有効化されたカテゴリのみを mkdir する。各カテゴリの有効/無効は enable_* フラグ
+        （source は archive_source）で制御し、無効カテゴリはフォルダを作らない。
+        URL の書き込み先には作成できないためスキップする。
+        個々の失敗で全体を止めず、結果（作成・失敗・スキップ）をまとめて返す。
+        """
+        categories: list[str] = []
+        if config.storage.enable_releases:
+            categories.append(config.storage.releases_dir)
+        if config.storage.enable_logs:
+            categories.append(config.storage.logs_dir)
+        if config.storage.enable_analysis:
+            categories.append(config.storage.analysis_dir)
+        if config.storage.enable_tests:
+            categories.append(config.storage.tests_dir)
+        if config.storage.archive_source:
+            categories.append(config.storage.source_dir)
+        categories = [c.strip() for c in categories if c and c.strip()]
+
+        result = StorageFolderResult()
+        seen: set[str] = set()
+        for base, root in self.build_target_roots(config):
+            if paths.is_url(base) or paths.is_url(root):
+                if base not in result.skipped_urls:
+                    result.skipped_urls.append(base)
+                continue
+            for category in categories:
+                target = paths.join_location(root, category)
+                key = target.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    Path(target).mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                    result.failed.append((target, str(exc)))
+                else:
+                    result.created.append(target)
+        return result
+
     def validate(self, config: CISetupConfig, repository_root: Path) -> None:
         if not config.project.name.strip():
             raise ValueError("プロジェクト名を入力してください。")
@@ -299,7 +386,7 @@ class ConfigRepository:
         base_paths = [v.strip() for v in config.storage.base_paths if v.strip()]
         if not file_servers and not base_paths:
             raise ValueError(
-                "成果物の書き込み先を入力してください（④ CI_FILE_SERVER、または詳細設定の格納ベース）。"
+                "成果物の書き込み先を入力してください（③ 保存先の書き込み先ベースまたは共有フォルダルート）。"
             )
         # 無人 CI から OneDrive/SharePoint の共有 URL へ直接書き込むには Graph 連携が必要なため、
         # 書き込み先には UNC・ローカルパス（OneDrive 同期フォルダ等）を指定する。
@@ -311,13 +398,13 @@ class ConfigRepository:
         for value in file_servers:
             if paths.is_url(value):
                 raise ValueError(
-                    "『④ 成果物・ログの保存先（CI_FILE_SERVER）』に URL が入っています。"
+                    "『③ 保存先 → 共有フォルダルート（CI_FILE_SERVER）』に URL が入っています。"
                     "ここには UNC またはローカルパスを指定してください。" + url_guide
                 )
         for value in base_paths:
             if paths.is_url(value):
                 raise ValueError(
-                    "『詳細設定 → 保存先の詳細 → 書き込み先ベース』に URL が入っています。"
+                    "『③ 保存先 → 書き込み先ベース』に URL が入っています。"
                     "ここには UNC またはローカルパスを指定してください。" + url_guide
                 )
 

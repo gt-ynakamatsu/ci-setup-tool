@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cisetup import environment_scan, git_service
+from cisetup import environment_scan, git_service, paths
 from cisetup.recent_project import RecentProjectStore
 
 
@@ -94,6 +94,92 @@ def test_push_ci_files_excludes_local(tmp_path: Path, monkeypatch):
     reset_cmds = [c for c in fake.commands if c[0] == "reset"]
     assert reset_cmds, "ローカルファイルの reset が実行されていない"
     assert any("cisetup.local.json" in " ".join(c) for c in reset_cmds)
+
+
+def _reset_targets(commands):
+    """reset コマンドの対象パス（`--` の直後）を集める。"""
+    targets = []
+    for c in commands:
+        if c and c[0] == "reset" and "--" in c:
+            targets.append(c[c.index("--") + 1])
+    return targets
+
+
+def test_push_ci_files_local_reset_covers_legacy_folder(tmp_path: Path, monkeypatch):
+    # 旧レイアウト cisetup/cisetup.local.json がステージされたケースで、
+    # 新 CISetup/ だけでなく旧 cisetup/ のパスも unstage 対象に含めること。
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit(staged="cisetup/cisetup.local.json")
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    git_service.push_ci_files(tmp_path, "msg")
+    targets = _reset_targets(fake.commands)
+    assert f"{paths.LEGACY_CI_FOLDER}/{paths.LOCAL_FILE}" in targets
+    assert f"{paths.CI_FOLDER}/{paths.LOCAL_FILE}" in targets
+
+
+def test_push_ci_files_secrets_reset_covers_legacy_folder(tmp_path: Path, monkeypatch):
+    # 旧 cisetup/cisetup.secrets.local.json も検出・除外対象になること。
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit(staged="cisetup/cisetup.secrets.local.json")
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    with pytest.raises(git_service.GitError, match="secrets"):
+        git_service.push_ci_files(tmp_path)
+    targets = _reset_targets(fake.commands)
+    assert f"{paths.LEGACY_CI_FOLDER}/{paths.SECRETS_FILE}" in targets
+    assert f"{paths.CI_FOLDER}/{paths.SECRETS_FILE}" in targets
+
+
+def _git_available() -> bool:
+    try:
+        subprocess.run(
+            ["git", "--version"],
+            capture_output=True,
+            check=True,
+        )
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=str(repo), capture_output=True, check=True)
+
+
+@pytest.mark.skipif(not _git_available(), reason="git コマンドが必要")
+def test_push_ci_files_unstages_legacy_local_real_repo(tmp_path: Path):
+    # 実際の一時 git repo で、旧レイアウト cisetup/ の local/secrets を add した後
+    # push_ci_files を実行し、reset 後の staged に個人用パスが残らないことを確認する。
+    repo = tmp_path
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "Test")
+
+    # reset HEAD が解決できるよう初期コミットを用意する。
+    (repo / "README.md").write_text("x", encoding="utf-8")
+    _git(repo, "add", "README.md")
+    _git(repo, "commit", "-m", "init")
+
+    legacy = repo / paths.LEGACY_CI_FOLDER
+    legacy.mkdir()
+    (legacy / paths.CONFIG_FILE).write_text("{}", encoding="utf-8")
+    (legacy / paths.LOCAL_FILE).write_text("{}", encoding="utf-8")
+    (legacy / paths.SECRETS_FILE).write_text("{}", encoding="utf-8")
+
+    _git(repo, "add", "-A")
+
+    # push は失敗する（remote 未設定）ので例外は許容する。
+    with pytest.raises(git_service.GitError):
+        git_service.push_ci_files(repo, "msg")
+
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+    ).stdout
+    normalized = staged.replace("\\", "/")
+    assert f"{paths.LEGACY_CI_FOLDER}/{paths.LOCAL_FILE}" not in normalized
+    assert f"{paths.LEGACY_CI_FOLDER}/{paths.SECRETS_FILE}" not in normalized
 
 
 def test_push_ci_files_nothing_staged(tmp_path: Path, monkeypatch):

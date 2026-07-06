@@ -16,31 +16,38 @@ def test_paths_helpers(tmp_path: Path):
     assert paths.ci_dir(tmp_path).name == paths.CI_FOLDER
 
 
+def test_read_scripts_dir_prefers_new(tmp_path: Path):
+    (tmp_path / paths.CI_FOLDER / "scripts").mkdir(parents=True)
+    assert paths.read_scripts_dir(tmp_path) == tmp_path / paths.CI_FOLDER / "scripts"
+
+
+def test_read_scripts_dir_falls_back_to_legacy(tmp_path: Path):
+    (tmp_path / paths.LEGACY_CI_FOLDER / "scripts").mkdir(parents=True)
+    resolved = paths.read_scripts_dir(tmp_path)
+    assert paths.is_ci_folder_name(resolved.parent.name)
+    assert resolved.name == "scripts"
+
+
+def test_read_scripts_dir_defaults_to_new_when_absent(tmp_path: Path):
+    assert paths.read_scripts_dir(tmp_path) == tmp_path / paths.CI_FOLDER / "scripts"
+
+
 def test_is_url():
+    # http(s) のみ True。ローカル/UNC/その他スキームは False
     assert paths.is_url("https://contoso.sharepoint.com/x")
     assert paths.is_url("HTTP://example.com")
-    assert not paths.is_url(r"\\fileserver\ci")
-    assert not paths.is_url(r"C:\Users\me\OneDrive\CI")
-    assert not paths.is_url("")
-
-
-def test_is_url_true_only_for_http_scheme():
-    # http(s) で始まる場合のみ True（前後空白・大文字小文字は無視）
-    assert paths.is_url("https://contoso.sharepoint.com/sites/team/MyApp")
     assert paths.is_url("HTTPS://contoso.sharepoint.com/x")
     assert paths.is_url("  http://example.com/path  ")
-
-
-def test_is_url_false_for_local_and_unc_paths():
-    # 正当なローカル/UNC パス（スペース・ハイフン・日本語を含んでも）は URL ではない
+    assert not paths.is_url(r"\\fileserver\ci")
+    assert not paths.is_url(r"C:\Users\me\OneDrive\CI")
     assert not paths.is_url(r"C:\Users\taro\OneDrive - 会社名\CI\MyApp")
     assert not paths.is_url(r"C:\Users\taro\OneDrive\個人用\CI\アプリ")
     assert not paths.is_url(r"D:\日本語 パス-test\CI")
     assert not paths.is_url(r"\\fileserver\ci\MyApp")
     assert not paths.is_url("  C:\\Users\\me\\OneDrive\\CI  ")
-    # file:// / onedrive: などのスキームも http(s) ではないので URL 扱いしない
     assert not paths.is_url("file:///C:/Users/me/OneDrive/CI")
     assert not paths.is_url("onedrive:C:/Users/me/CI")
+    assert not paths.is_url("")
     assert not paths.is_url(None)  # type: ignore[arg-type]
 
 
@@ -266,8 +273,7 @@ def test_build_agent_declaration_escapes():
 def test_generate_jenkinsfile(tmp_path: Path):
     template = (
         "agent {{AGENT_DECLARATION}}\n"
-        "cron(spec: '{{CRON_SCHEDULE}}', timezone: '{{TIMEZONE}}')\n"
-        "{{POLL_TRIGGER}}\n"
+        "triggers {\n{{CRON_TRIGGER_LINE}}\n{{POLL_TRIGGER}}\n}\n"
         "server={{CI_FILE_SERVER}}\n"
         "cred={{TEAMS_CREDENTIAL_ID}}\n"
         "timeout={{BUILD_TIMEOUT}} retention={{LOG_RETENTION}}\n"
@@ -282,8 +288,10 @@ def test_generate_jenkinsfile(tmp_path: Path):
     generate_jenkinsfile(template, out, cfg)
     text = out.read_text(encoding="utf-8")
     assert "label 'windows'" in text
-    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in text
-    assert "pollSCM('H/5 * * * *')" in text
+    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" not in text
+    # poll / cron は Jenkins ジョブ XML 側に移したため Jenkinsfile には含めない
+    assert "pollSCM" not in text
+    assert "cron(spec:" not in text
     assert r"\\\\server\\ci" in text  # backslash escaped for groovy
     assert "timeout=30 retention=30" in text
 
@@ -296,13 +304,14 @@ def test_generate_jenkinsfile_empty_poll(tmp_path: Path):
     assert out.read_text(encoding="utf-8") == "X"
 
 
-def test_generate_jenkinsfile_cron_trigger_line_default(tmp_path: Path):
+def test_generate_jenkinsfile_cron_trigger_line_always_empty(tmp_path: Path):
+    # cron は Jenkins ジョブ XML（TimerTrigger）またはラッパージョブ側で設定する。
     cfg = CISetupConfig()
     cfg.jenkins.cron_schedule = "0 0 * * *"
     cfg.jenkins.timezone = "Asia/Tokyo"
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile("{{CRON_TRIGGER_LINE}}", out, cfg)
-    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in out.read_text(encoding="utf-8")
+    assert out.read_text(encoding="utf-8") == ""
 
 
 def test_generate_jenkinsfile_cron_trigger_line_empty_when_retry_wrapper_enabled(tmp_path: Path):

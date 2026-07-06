@@ -87,8 +87,7 @@ $facts = @(
 )
 if ($Branch) { $facts += @{ title = 'ブランチ'; value = $Branch } }
 if ($Commit) {
-    $shortCommit = if ($Commit.Length -gt 8) { $Commit.Substring(0, 8) } else { $Commit }
-    $facts += @{ title = 'コミット'; value = $shortCommit }
+    $facts += @{ title = 'コミット'; value = $Commit }
 }
 if ($BuildUrl) { $facts += @{ title = 'Jenkins'; value = $BuildUrl } }
 
@@ -112,7 +111,7 @@ $testFallback = ''
 
 # ---- 静的解析サマリー ----
 $summaryPath = Join-PathMulti $ci.Root @('artifacts', 'analysis', 'analysis-summary.json')
-if (Test-Path $summaryPath) {
+if ($ci.EnableAnalysis -and (Test-Path $summaryPath)) {
     try {
         $summary = Get-Content $summaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $analysisColor = if ($summary.high -gt 0) { 'Attention' } elseif ($summary.medium -gt 0) { 'Warning' } else { 'Good' }
@@ -133,7 +132,7 @@ if (Test-Path $summaryPath) {
 
 # ---- ユニットテスト（失敗時のみテスト名とログリンク） ----
 $testSummaryPath = Join-PathMulti $ci.Root @('artifacts', 'test', 'test-summary.json')
-if (Test-Path $testSummaryPath) {
+if ($ci.EnableTests -and (Test-Path $testSummaryPath)) {
     try {
         $ts = Get-Content $testSummaryPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $testColor = if ($ts.failed -gt 0) { 'Attention' } elseif ($ts.total -eq 0) { 'Default' } else { 'Good' }
@@ -194,7 +193,7 @@ if (Test-Path $testSummaryPath) {
     }
 }
 
-if (-not $isSuccess) {
+if (-not $isSuccess -and $ci.EnableLogs) {
     $body += @{
         type  = 'TextBlock'
         color = 'Attention'
@@ -204,16 +203,19 @@ if (-not $isSuccess) {
 }
 
 $actions = New-Object System.Collections.Generic.List[object]
-if ($hasAnalysis) {
+if ($hasAnalysis -and $ci.EnableAnalysis) {
     Add-LinkActions -Actions $actions -Title '解析レポート (HTML)' -Urls $ci.AnalysisUrls -Fallback $analysisFallback
 }
-if ($hasTestFailure) {
+if ($hasTestFailure -and $ci.EnableTests) {
     Add-LinkActions -Actions $actions -Title 'ユニットテストログを開く' -Urls $ci.TestsUrls -Fallback $testFallback
 }
-if ($deploy -and $deploy.artifactDir) {
+if ($deploy -and $deploy.artifactDir -and $ci.EnableReleases) {
     Add-LinkActions -Actions $actions -Title '成果物フォルダを開く' -Urls $ci.ReleaseUrls -Fallback (ConvertTo-FileUri $deploy.artifactDir)
 }
-if (-not $isSuccess -and $ci.LogsUrls.Count -gt 0) {
+if ($deploy -and $deploy.sourceDir -and $ci.ArchiveSource) {
+    Add-LinkActions -Actions $actions -Title '開発環境 zip を開く' -Urls $ci.SourceUrls -Fallback (ConvertTo-FileUri $deploy.sourceDir)
+}
+if (-not $isSuccess -and $ci.EnableLogs -and $ci.LogsUrls.Count -gt 0) {
     Add-LinkActions -Actions $actions -Title 'ログフォルダを開く' -Urls $ci.LogsUrls -Fallback ''
 }
 

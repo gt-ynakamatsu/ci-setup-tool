@@ -275,6 +275,25 @@ def test_bundled_ps1_no_array_op_on_generic_lists():
     assert not offenders, f"Generic.List を @(...) で配列化しています: {offenders}"
 
 
+def test_ci_config_exposes_analysis_dir():
+    # ci-config.ps1 は storage.analysisDir を読み、既定 'analysis' で AnalysisDir を公開する。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-config.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "$storage.analysisDir" in text
+    assert "AnalysisDir = (ConvertTo-PlatformPath" in text
+
+
+def test_deploy_analysis_dest_uses_configured_folder():
+    # 解析の配置先フォルダ名は設定値 $ci.AnalysisDir を使う（ハードコード 'analysis' 廃止）。
+    # 入力元のローカル変数 artifacts/analysis はハードコードのまま（別物）。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-deploy-fileserver.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "Get-CategoryDest -Target $t -CategoryDir $ci.AnalysisDir" in text
+    assert "-CategoryDir 'analysis'" not in text
+    # 入力元（ビルドが解析レポートを出力する artifacts/analysis）は従来どおり。
+    assert "Join-PathMulti $ci.Root @('artifacts', 'analysis')" in text
+
+
 def test_extract_no_overwrite(tmp_path: Path):
     deploy_ci_files(tmp_path)
     target = tmp_path / paths.CI_FOLDER / "scripts" / "ci-build.ps1"
@@ -414,8 +433,8 @@ def test_build_preview_paths_ci_file_server_wins_over_base(sln_repo: Path):
     logs, releases, tests = repo.build_preview_paths(cfg)
     assert logs == r"\\fileserver\ci\MyApp\logs"
     assert releases == r"\\fileserver\ci\MyApp\releases"
-    # ユニットテストは専用トップレベル <fileServer>/<testsDir>/<project>
-    assert tests == r"\\fileserver\ci\tests\MyApp"
+    # ユニットテストも他カテゴリと同じ入れ子 <fileServer>/<project>/<testsDir>
+    assert tests == r"\\fileserver\ci\MyApp\tests"
 
 
 def test_build_preview_paths_without_base(sln_repo: Path):
@@ -427,22 +446,21 @@ def test_build_preview_paths_without_base(sln_repo: Path):
     logs, releases, tests = repo.build_preview_paths(cfg)
     assert logs == r"\\fileserver\ci\MyApp\logs"
     assert releases == r"\\fileserver\ci\MyApp\releases"
-    # ユニットテストは releases/logs と分離した専用トップレベル
-    assert tests == r"\\fileserver\ci\tests\MyApp"
+    # ユニットテストも releases/logs と同じプロジェクト配下の入れ子
+    assert tests == r"\\fileserver\ci\MyApp\tests"
 
 
 def test_build_preview_tests_separated_with_date(sln_repo: Path):
-    # 専用トップレベル＋日付サブフォルダ: <fileServer>/<testsDir>/<project>/<date>
+    # 他カテゴリと同じ入れ子＋日付サブフォルダ: <fileServer>/<project>/<testsDir>/<date>
     repo = ConfigRepository()
     cfg = default_config()
     cfg.project.name = "MyApp"
     cfg.jenkins.ci_file_server = r"\\fileserver\ci"
     cfg.storage.use_date_subfolder = True
     _, releases, tests = repo.build_preview_paths(cfg, date_folder="20260101")
-    # releases は従来どおりプロジェクト配下、tests は専用トップレベルで混在しない
+    # releases も tests も同じくプロジェクト配下（カテゴリのみ異なる）
     assert releases == r"\\fileserver\ci\MyApp\releases\20260101"
-    assert tests == r"\\fileserver\ci\tests\MyApp\20260101"
-    assert r"\MyApp\releases" not in tests  # releases と同じ階層に混ざらない
+    assert tests == r"\\fileserver\ci\MyApp\tests\20260101"
 
 
 def test_build_source_preview(sln_repo: Path):
@@ -478,6 +496,138 @@ def test_build_target_roots_multiple_mixed(sln_repo: Path):
     # base_path が ④ の実効ルートと重複する場合は除外される
     resolved = [root for _, root in roots]
     assert resolved.count(r"\\fileserver\ci\MyApp") == 1
+
+
+def test_create_storage_folders_default_categories(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    cfg.storage.archive_source = False
+    result = repo.create_storage_folders(cfg)
+    for cat in ("releases", "logs", "analysis", "tests"):
+        assert (tmp_path / cat).is_dir()
+        assert str(tmp_path / cat) in result.created
+    # archive_source が False なら source は作られない
+    assert not (tmp_path / "source").exists()
+    assert result.failed == []
+    assert result.skipped_urls == []
+    # 日付サブフォルダは作られない
+    assert not (tmp_path / "releases" / "YYYYMMDD").exists()
+
+
+def test_create_storage_folders_archive_source(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    cfg.storage.archive_source = True
+    result = repo.create_storage_folders(cfg)
+    assert (tmp_path / "source").is_dir()
+    assert str(tmp_path / "source") in result.created
+
+
+def test_storage_folder_exists_respects_enable_and_path(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    cfg.storage.enable_analysis = False
+    assert repo.storage_folder_exists(cfg, "analysis") is False
+    cfg.storage.enable_analysis = True
+    assert repo.storage_folder_exists(cfg, "analysis") is False
+    (tmp_path / "analysis").mkdir()
+    assert repo.storage_folder_exists(cfg, "analysis") is True
+
+
+def test_create_storage_folders_respects_disabled_categories(tmp_path: Path):
+    # 無効化したカテゴリはフォルダを作らない
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    cfg.storage.enable_logs = False
+    cfg.storage.enable_analysis = False
+    cfg.storage.enable_releases = True
+    cfg.storage.enable_tests = True
+    result = repo.create_storage_folders(cfg)
+    assert (tmp_path / "releases").is_dir()
+    assert (tmp_path / "tests").is_dir()
+    assert not (tmp_path / "logs").exists()
+    assert not (tmp_path / "analysis").exists()
+    assert str(tmp_path / "logs") not in result.created
+    assert str(tmp_path / "analysis") not in result.created
+
+
+def test_create_storage_folders_custom_category_name(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    cfg.storage.analysis_dir = "解析"
+    result = repo.create_storage_folders(cfg)
+    assert (tmp_path / "解析").is_dir()
+    assert not (tmp_path / "analysis").exists()
+    assert str(tmp_path / "解析") in result.created
+
+
+def test_create_storage_folders_ci_file_server_adds_project(tmp_path: Path):
+    # ④ CI_FILE_SERVER 系はルートに project 名が付く（<base>/<project>/releases）
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = [str(tmp_path)]
+    cfg.storage.base_paths = []
+    repo.create_storage_folders(cfg)
+    assert (tmp_path / "MyApp" / "releases").is_dir()
+    assert (tmp_path / "MyApp" / "logs").is_dir()
+    # base 直下（project 名なし）には作られない
+    assert not (tmp_path / "releases").exists()
+
+
+def test_create_storage_folders_base_path_no_project(tmp_path: Path):
+    # 書き込み先ベース系は project 名を付けずそのまま <base>/releases
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [str(tmp_path)]
+    repo.create_storage_folders(cfg)
+    assert (tmp_path / "releases").is_dir()
+    assert not (tmp_path / "MyApp").exists()
+
+
+def test_create_storage_folders_skips_url_target(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = [
+        str(tmp_path),
+        "https://contoso.sharepoint.com/sites/team/MyApp",
+    ]
+    result = repo.create_storage_folders(cfg)
+    # ローカルパス側は作られる
+    assert (tmp_path / "releases").is_dir()
+    # URL 側はスキップされ、作成結果に出ない
+    assert "https://contoso.sharepoint.com/sites/team/MyApp" in result.skipped_urls
+    assert all(not p.startswith("http") for p in result.created)
+
+
+def test_create_storage_folders_empty_when_all_urls(tmp_path: Path):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = []
+    cfg.storage.base_paths = ["https://contoso.sharepoint.com/sites/team/MyApp"]
+    result = repo.create_storage_folders(cfg)
+    assert result.created == []
+    assert result.skipped_urls == ["https://contoso.sharepoint.com/sites/team/MyApp"]
 
 
 def test_build_preview_paths_url_base(sln_repo: Path):

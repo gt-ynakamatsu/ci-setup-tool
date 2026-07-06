@@ -31,8 +31,16 @@ class StorageConfig:
     base_paths: list[str] = field(default_factory=list)
     logs_dir: str = "logs"
     releases_dir: str = "releases"
+    analysis_dir: str = "analysis"
     tests_dir: str = "tests"
     source_dir: str = "source"
+    # 各カテゴリを「格納先フォルダを作成」ボタンおよび CI の配置(deploy)で使うか。
+    # false のカテゴリはフォルダを作らず、CI でも配置をスキップする（プロジェクトによって
+    # 不要なカテゴリを無効化するため）。source は archive_source を有効/無効の判定に用いる。
+    enable_logs: bool = True
+    enable_releases: bool = True
+    enable_analysis: bool = True
+    enable_tests: bool = True
     use_date_subfolder: bool = True
     # pull した最新ソースツリーを zip 化して保存するか（個人 ID を含まない通常設定）。
     archive_source: bool = False
@@ -40,6 +48,7 @@ class StorageConfig:
     analysis_urls: list[str] = field(default_factory=list)
     logs_urls: list[str] = field(default_factory=list)
     tests_urls: list[str] = field(default_factory=list)
+    source_urls: list[str] = field(default_factory=list)
 
     # --- 後方互換アクセサ（旧コード/設定の単一文字列向け。先頭要素を見る/設定する）---
     @property
@@ -81,6 +90,14 @@ class StorageConfig:
     @tests_url.setter
     def tests_url(self, value: str) -> None:
         self.tests_urls = _single_to_list(value)
+
+    @property
+    def source_url(self) -> str:
+        return self.source_urls[0] if self.source_urls else ""
+
+    @source_url.setter
+    def source_url(self, value: str) -> None:
+        self.source_urls = _single_to_list(value)
 
 
 @dataclass
@@ -257,6 +274,7 @@ def _storage_from_dict(data: dict[str, Any] | None) -> StorageConfig:
     storage.analysis_urls = _coalesce_list(data, "analysisUrls", "analysisUrl")
     storage.logs_urls = _coalesce_list(data, "logsUrls", "logsUrl")
     storage.tests_urls = _coalesce_list(data, "testsUrls", "testsUrl")
+    storage.source_urls = _coalesce_list(data, "sourceUrls", "sourceUrl")
     return storage
 
 

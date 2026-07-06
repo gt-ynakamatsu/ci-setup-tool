@@ -10,14 +10,20 @@
     "basePaths": [],
     "logsDir": "logs",
     "releasesDir": "releases",
+    "analysisDir": "analysis",
     "testsDir": "tests",
     "sourceDir": "source",
+    "enableLogs": true,
+    "enableReleases": true,
+    "enableAnalysis": true,
+    "enableTests": true,
     "useDateSubfolder": true,
     "archiveSource": false,
     "releaseUrls": [],
     "analysisUrls": [],
     "logsUrls": [],
-    "testsUrls": []
+    "testsUrls": [],
+    "sourceUrls": []
   },
   "jenkins": {
     "jobName": "CISetup-CI",

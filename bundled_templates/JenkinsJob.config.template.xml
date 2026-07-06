@@ -25,6 +25,8 @@
     <scriptPath>CISetup/Jenkinsfile</scriptPath>
     <lightweight>false</lightweight>
   </definition>
-  <triggers/>
+  <triggers>
+{{JOB_TRIGGERS}}
+  </triggers>
   <disabled>false</disabled>
 </flow-definition>
