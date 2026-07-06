@@ -67,11 +67,17 @@ cisetup/
 ├── .coveragerc              … カバレッジ計測設定（source=cisetup, branch）
 │
 ├── cisetup/           … アプリ本体（package）
-│   ├── gui/                 … Tkinter GUI
-│   │   ├── app.py           … メインウィンドウ・全アクション
+│   ├── gui/                 … Tkinter GUI（Mixin 分割）
+│   │   ├── app.py           … シェル（ConfigureApp 合成・UI 配線）
+│   │   ├── deps.py          … 外部依存集約（Jenkins/Git/Teams 等・テスト patch 用）
+│   │   ├── fields.py / form_sync.py / repository.py / presets.py / file_picks.py / dialogs.py
+│   │   ├── steps/           … intro.py（冒頭）/ workflow.py（①〜⑥）
+│   │   ├── details/panels.py … 詳細設定 Expander
+│   │   ├── actions/ops.py   … 保存・Jenkins・Git・セットアップ実行
 │   │   ├── layout.py        … 配色・共通ウィジェット
-│   │   ├── commit_dialog.py … コミットメッセージ入力ダイアログ
-│   │   └── tooltip.py       … ヘルプ吹き出し
+│   │   ├── multi_value_field.py … ＋/− 複数入力欄
+│   │   ├── commit_dialog.py … コミットメッセージ入力
+│   │   └── tooltip.py       … 「?」ヘルプアイコンと吹き出し
 │   ├── models.py            … 設定/シークレットのデータモデル + JSON 変換（camelCase）
 │   ├── config_repository.py … 設定の保存・読込（標準/旧レイアウト対応）
 │   ├── paths.py             … リポジトリルート探索・レイアウト判定
@@ -105,13 +111,15 @@ cisetup/
 │   ├── rebuild_exe.py       … PyInstaller で dist\CISetup.exe を生成
 │   ├── Package-Distribution.ps1 … exe ビルド + 社内配布 zip 作成
 │   ├── make_icon.py         … icon_source.png から icon.png / icon.ico を生成
-│   ├── smoke_test.py        … C# 版との JSON 互換などを素早く確認
-│   └── adapt_docs_from_legacy.py … 旧ドキュメント移行用（一回限り・通常不要）
+│   ├── verify_icon.py       … アイコン整合チェック（任意）
+│   └── smoke_test.py        … JSON 互換などの高速スモークテスト
 │
 ├── tests/                   … pytest 一式（conftest.py + test_*.py）
 ├── docs/                    … ドキュメント
 │   ├── README-dist.md       … 配布 zip に同梱する利用者向け README
 │   ├── CI-GUIDE.md          … CI 構築手順書
+│   ├── CI-USERS-GUIDE.md    … リポジトリ利用者向け（push すると何が起きるか）
+│   ├── DESIGN.md            … 設計仕様書（アーキテクチャ・Mermaid 図）
 │   ├── GUI.md               … GUI 操作
 │   └── CISetup-CI-Guide.marp.md … Marp プレゼン資料
 └── dist/                    … 【生成物】CISetup.exe + 配布 zip
@@ -144,6 +152,12 @@ python configure.py --open C:\work\MyApp
 
 # テスト
 python -m pytest tests -q
+
+# カバレッジ（ターミナル + htmlcov/index.html）
+python -m pytest tests --cov=cisetup --cov-report=term-missing --cov-report=html
+
+# 静的解析（GUI パッケージ）
+python -m pyflakes cisetup/gui
 
 # スモークテスト（C# 互換の素早い確認）
 python tools/smoke_test.py
@@ -206,10 +220,11 @@ configure.py --help
 | [docs/README-dist.md](docs/README-dist.md) | 利用者（exe を使う人） | exe の起動方法・同梱物・初回セットアップ・困ったとき | 配布された exe をとりあえず動かしたい |
 | [docs/GUI.md](docs/GUI.md) | 利用者・開発者 | 設定 GUI の起動方法・操作の流れ・CLI 引数 | GUI の使い方をざっと知りたい |
 | [docs/CI-GUIDE.md](docs/CI-GUIDE.md) | 構築担当者 | **CI 構築の完全手順書**。ファイルサーバー/Teams/Jenkins/エージェント/プロジェクト設定、GATE A〜D、トラブルシューティング、設定値↔JSON 対応 | CI を一から構築する/エラーで詰まった |
+| [docs/CI-USERS-GUIDE.md](docs/CI-USERS-GUIDE.md) | リポジトリ利用者 | push すると何が起きるか・Teams 通知・成果物の見方（CISetup 開発者向けではない） | CI が入ったリポジトリで開発するだけの人 |
 | [docs/CISetup-CI-Guide.marp.md](docs/CISetup-CI-Guide.marp.md) | 構築担当者・説明者 | CI-GUIDE.md をスライド化した Marp プレゼン資料（全体像の説明・勉強会向け） | 全体像を俯瞰したい/人に説明する |
 | [bundled_templates/scripts/TEAMS-WORKFLOW.md](bundled_templates/scripts/TEAMS-WORKFLOW.md) | 構築担当者 | Teams 通知（Power Automate ワークフロー）の設定とカードの形式 | Teams 通知を設定/カスタムしたい |
 
-> exe 本体や各設定項目の意味は、GUI 内の各項目ヘルプ（吹き出し）にも記載しています。
+> exe 本体や各設定項目の意味は、GUI 内の各項目「?」ヘルプ（吹き出し）にも記載しています。
 
 ### 6.2 目的別の参照先（知りたいこと → どのファイル）
 
@@ -225,9 +240,9 @@ configure.py --help
 | ポート番号の変更（8086 など） | CI-GUIDE.md「6.10」 |
 | ビルドエージェントの起動・サービス化 | CI-GUIDE.md「8.」 |
 | 設定 GUI の各項目の意味・保存先 | GUI 内ヘルプ / CI-GUIDE.md「9. 設定値↔JSON 対応」 |
-| 保存先・閲覧 URL を「複数」設定する（＋/− 行追加） | CI-GUIDE.md「④ 保存先」の注記 / GUI の ④・③ の各「＋」ボタン |
+| 保存先・閲覧 URL を「複数」設定する（＋/− 行追加） | CI-GUIDE.md「③ 保存先」の注記 / GUI の ③・④ の各「＋」ボタン |
 | 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（書き込み先は `cisetup.local.json`、CI 側は `CI_FILE_SERVER`） |
-| 書き込み先設定がワークスペースのワイプで消える対策（同一 PC でエージェント運用時） | GUI ④「Jenkins エージェントのワークスペースパス」を設定 → 保存時に兄弟パスへ自動配置（CI-GUIDE.md「④ 保存先」の注記） |
+| 書き込み先設定がワークスペースのワイプで消える対策（同一 PC でエージェント運用時） | GUI ③「Jenkins エージェントのワークスペースパス」を設定 → 保存時に兄弟パスへ自動配置（CI-GUIDE.md「③ 保存先」の注記） |
 | 別 PC・共有アクセス不可のエージェントへ書き込み先を届ける | GUI ④「書き込み先を Jenkins のグローバル環境変数 (CI_FILE_SERVER) として登録する」を ON →「Jenkinsに反映」で Jenkins 本体に自動登録（単一値・管理者権限要） |
 | エラー・トラブルの対処 | CI-GUIDE.md「15. トラブルシューティング」 |
 | 配布された exe の使い方（利用者向け） | docs/README-dist.md |

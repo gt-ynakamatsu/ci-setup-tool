@@ -24,20 +24,27 @@ python configure.py --help
 ## 操作の流れ
 
 1. プロジェクトフォルダを指定
-2. ①〜⑤ を入力（Git / Teams / 保存先 / Jenkins）
+2. ①〜⑤ を入力（Git → **保存先** → Teams → Jenkins）
 3. **セットアップを実行** — チェックした処理だけを上から順に実行
 
-各項目の意味・保存先は入力欄の **ヘルプ（吹き出し）** に表示されます。
+各項目の意味・保存先はラベル横の **「?」ヘルプアイコン**（ホバーで吹き出し）に表示されます。文言は「【何を】【なぜ】【どこで使う】…」形式です。
+
+### 開発者向け（ソース構成）
+
+GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin を多重継承しています。
+画面フローは `steps/workflow.py`、副作用のある操作は `actions/ops.py`、外部 API 呼び出しは `deps.py` に集約されています。
+詳細は [DESIGN.md の 5.2 / 8 章](DESIGN.md) を参照。
 
 ### ⑥ セットアップを実行のチェックボックス
 
 | チェック | 内容 |
 |----------|------|
 | 1. 設定を保存 | `cisetup.config.json` / `Jenkinsfile` / `scripts` を再生成して保存（既定 ON） |
-| ローカルでビルド＆テスト（push せず現在のコードを検証） | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**。push 前に手元のコードを検証する用途（既定 OFF・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
+| ローカルでビルド＆テスト（push せず現在のコードを検証） | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**。push 前に手元のコードを検証する用途（既定 ON・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
 | 2. Jenkins に反映 | `apply_settings` でジョブ定義を Jenkins に登録（既定 ON） |
-| 3. Git push | CI 関連ファイルのみ commit / push（secrets/local は除外。既定 OFF） |
-| 4. テストビルドを実行 | Jenkins が**リモート Git のコード**をビルド（既定 OFF） |
+| 3. Git push | CI 関連ファイルのみ commit / push（secrets/local は除外。既定 ON） |
+| 4. テストビルドを実行 | Jenkins が**リモート Git のコード**をビルド（既定 ON） |
+| テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で成果物 zip も作成・保存（既定 ON） |
 
 > **「テストビルド」と「ローカルでビルド＆テスト」の違い**
 > 「テストビルド」は Jenkins がリモート Git から取得したコードをビルドするため、push していないローカルの変更は反映されません。
