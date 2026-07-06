@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from .layout import COLOR_CARD_BG, COLOR_STEP, _bg_of, font
+from .layout import COLOR_CARD_BG, COLOR_STEP, _bg_of, font, scaled
+
+_HELP_ICON_BORDER = "#C8C8C8"
+_HELP_ICON_SIZE_PX = 18
 
 
 class ToolTip:
@@ -68,17 +71,37 @@ def attach_tooltip(widget: tk.Widget, text: str) -> None:
         ToolTip(widget, text)
 
 
-def help_icon(parent: tk.Misc, text: str, *, bg: str | None = None) -> tk.Label:
-    """設定項目の横に表示する「?」ヘルプアイコン（ホバーで説明を表示）。"""
+def help_icon(parent: tk.Misc, text: str, *, bg: str | None = None) -> tk.Frame:
+    """設定項目の横に表示する「?」ヘルプアイコン（円枠・ホバーで説明を表示）。"""
     bg = bg if bg is not None else _bg_of(parent, COLOR_CARD_BG)
-    icon = tk.Label(
-        parent,
-        text="?",
-        font=font(11, bold=True),
-        fg=COLOR_STEP,
+    size = scaled(_HELP_ICON_SIZE_PX)
+    pad = max(1, scaled(1))
+    frame = tk.Frame(parent, bg=bg)
+    canvas = tk.Canvas(
+        frame,
+        width=size,
+        height=size,
         bg=bg,
+        highlightthickness=0,
+        borderwidth=0,
         cursor="question_arrow",
-        padx=2,
     )
-    attach_tooltip(icon, text)
-    return icon
+    canvas.pack()
+    canvas.create_oval(
+        pad,
+        pad,
+        size - pad,
+        size - pad,
+        outline=_HELP_ICON_BORDER,
+        width=1,
+        fill=bg,
+    )
+    canvas.create_text(
+        size // 2,
+        size // 2,
+        text="?",
+        fill=COLOR_STEP,
+        font=font(9, bold=True),
+    )
+    attach_tooltip(canvas, text)
+    return frame

@@ -368,5 +368,8 @@ def test_help_icon_creates_question_mark(app):
     row = tk.Frame(app)
     row.pack()
     icon = help_icon(row, "【なぜ】テスト用の説明")
-    assert icon.cget("text") == "?"
-    assert icon.cget("cursor") == "question_arrow"
+    canvas = icon.winfo_children()[0]
+    assert canvas.cget("cursor") == "question_arrow"
+    types = {canvas.type(item_id) for item_id in canvas.find_all()}
+    assert "oval" in types
+    assert "text" in types
