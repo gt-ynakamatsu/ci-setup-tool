@@ -7,7 +7,6 @@ assets/icon_source.png（詳細版）から icon.png / マルチサイズ icon.i
 """
 from __future__ import annotations
 
-import io
 import struct
 from pathlib import Path
 

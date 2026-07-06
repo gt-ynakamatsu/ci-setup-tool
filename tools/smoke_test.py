@@ -97,12 +97,13 @@ with tempfile.TemporaryDirectory() as tmp:
     jf = (root / "CISetup" / "Jenkinsfile").read_text(encoding="utf-8")
     check("Jenkinsfile にラベル反映", "label 'windows'" in jf)
     check("Jenkinsfile が CISetup/scripts 参照", "./CISetup/scripts/" in jf)
-    check("Jenkinsfile に cron", "cron(spec: '0 0 * * *'" in jf and "Asia/Tokyo" in jf)
+    check("Jenkinsfile に cron なし（ジョブ XML 側）", "cron(spec:" not in jf)
     check("Jenkinsfile に Checkout retry", "retry(3)" in jf)
     check("Jenkinsfile に BOM なし", not jf.startswith("\ufeff"))
     logs, releases, tests = repo.build_preview_paths(cfg)
     check("preview UNC パス", logs.startswith("\\\\fileserver\\ci"))
-    check("preview tests パス", tests.endswith("\\tests") or "\\tests\\" in tests)
+    # テストも他カテゴリと同じ入れ子 <root>\<project>\tests[\date]（releases と同じ階層）
+    check("preview tests パス", "\\YourProject\\tests" in tests)
 
 # 8. env scan は実行できる（結果は環境依存）
 results = environment_scan.scan()
