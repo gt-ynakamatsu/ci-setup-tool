@@ -180,6 +180,7 @@ class WorkflowStepsMixin:
         preview.pack(fill=tk.X, pady=(8, 0))
         self._preview_logs = tk.StringVar()
         self._preview_releases = tk.StringVar()
+        self._preview_analysis = tk.StringVar()
         self._preview_tests = tk.StringVar()
         self._preview_source = tk.StringVar()
         tk.Label(
@@ -193,6 +194,7 @@ class WorkflowStepsMixin:
         for title, var in (
             ("失敗時ログ（logs）", self._preview_logs),
             ("成果物 zip（releases）", self._preview_releases),
+            ("解析レポート（analysis）", self._preview_analysis),
             ("テスト成果物（tests）", self._preview_tests),
             ("開発環境 zip（source）・有効時", self._preview_source),
         ):

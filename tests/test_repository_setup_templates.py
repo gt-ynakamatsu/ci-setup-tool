@@ -463,6 +463,25 @@ def test_build_preview_tests_separated_with_date(sln_repo: Path):
     assert tests == r"\\fileserver\ci\MyApp\tests\20260101"
 
 
+def test_build_analysis_preview(sln_repo: Path):
+    # 解析レポートは releases / logs / tests と同じ category 構造（<root>/<analysisDir>[/date]）
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_server = r"\\fileserver\ci"
+    cfg.storage.use_date_subfolder = True
+    cfg.storage.analysis_dir = "analysis"
+    assert repo.build_analysis_preview(cfg, date_folder="20260101") == (
+        r"\\fileserver\ci\MyApp\analysis\20260101"
+    )
+    # base_path のみ・日付なし・カスタムフォルダ名
+    cfg.jenkins.ci_file_server = ""
+    cfg.storage.base_path = r"\\srv\share\MyApp"
+    cfg.storage.use_date_subfolder = False
+    cfg.storage.analysis_dir = "reports"
+    assert repo.build_analysis_preview(cfg) == r"\\srv\share\MyApp\reports"
+
+
 def test_build_source_preview(sln_repo: Path):
     # 開発環境 zip は releases / logs と同じ category 構造（<root>/<sourceDir>[/date]）
     repo = ConfigRepository()

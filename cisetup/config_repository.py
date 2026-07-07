@@ -236,6 +236,22 @@ class ConfigRepository:
             build(config.storage.tests_dir),
         )
 
+    def build_analysis_preview(
+        self, config: CISetupConfig, date_folder: str = "YYYYMMDD"
+    ) -> str:
+        """解析レポートの保存先プレビュー（代表＝先頭の書き込み先）。
+
+        releases / logs / tests と同じ category 構造で <root>/<analysisDir>[/date]
+        に配置する（ci-deploy-fileserver.ps1 の Analysis タイプと一致）。
+        """
+        file_server = config.jenkins.ci_file_server.strip()
+        base = config.storage.base_path.strip()
+        root = paths.join_location(file_server, config.project.name) if file_server else base
+        analysis_dir = config.storage.analysis_dir or "analysis"
+        if config.storage.use_date_subfolder:
+            return paths.join_location(root, analysis_dir, date_folder)
+        return paths.join_location(root, analysis_dir)
+
     def build_source_preview(
         self, config: CISetupConfig, date_folder: str = "YYYYMMDD"
     ) -> str:
