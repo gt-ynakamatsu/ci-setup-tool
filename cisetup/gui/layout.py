@@ -37,7 +37,13 @@ COLOR_SERVER_TITLE = "#CA5010"
 
 # ボタン配色（kind 別）
 _BUTTON_PALETTE = {
-    "secondary": {"bg": "#FFFFFF", "fg": COLOR_TEXT, "hover": "#EAF3FB", "border": "#C8C8C8"},
+    # 白・薄青カード・薄緑セクションのいずれとも差が出るよう、薄い青で塗る
+    "secondary": {
+        "bg": "#D6E8F7",
+        "fg": COLOR_TEXT,
+        "hover": "#B8D9F2",
+        "border": "#005A9E",
+    },
     "primary": {"bg": COLOR_RUN_TITLE, "fg": "#FFFFFF", "hover": "#0E6B0E", "border": COLOR_RUN_TITLE},
     "accent": {"bg": COLOR_STEP, "fg": "#FFFFFF", "hover": "#106EBE", "border": COLOR_STEP},
     "warn": {"bg": COLOR_SERVER_TITLE, "fg": "#FFFFFF", "hover": "#A8430D", "border": COLOR_SERVER_TITLE},
@@ -267,6 +273,7 @@ def button(
     palette = _BUTTON_PALETTE[kind]
     if bold is None:
         bold = kind != "secondary"
+    outline = 2 if kind == "secondary" else 1
     btn = tk.Button(
         parent,
         text=text,
@@ -278,7 +285,7 @@ def button(
         activeforeground=palette["fg"],
         relief=tk.FLAT,
         bd=0,
-        highlightthickness=1,
+        highlightthickness=outline,
         highlightbackground=palette["border"],
         highlightcolor=palette["border"],
         cursor="hand2",
