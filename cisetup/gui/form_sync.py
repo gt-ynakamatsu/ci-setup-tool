@@ -174,6 +174,7 @@ class FormSyncMixin:
             self._preview_logs.set(logs)
             self._preview_releases.set(releases)
             self._preview_tests.set(tests)
+            self._preview_analysis.set(self._repo.build_analysis_preview(self._config))
             source_path = self._repo.build_source_preview(self._config)
             self._preview_source.set(
                 source_path
@@ -211,7 +212,7 @@ class FormSyncMixin:
             if label is not None:
                 label.configure(fg=COLOR_TEXT if active else COLOR_DESC)
     def _update_path_statuses(self) -> None:
-        """自動入力/手入力されたファイルパスがリポジトリ内に実在するか表示する。"""
+        """ファイルパス欄の右側に、問題があるときだけ短い注意を出す（正常時は空欄）。"""
         if not self._path_status:
             return
         root = self._repository_root
@@ -226,11 +227,11 @@ class FormSyncMixin:
     ) -> tuple[str, str]:
         if not raw:
             if key == "project.test_project":
-                return ("— 未設定（Test はスキップ）", "#888888")
-            return ("— 未設定", "#888888")
+                return ("— 未設定", COLOR_DESC)
+            return ("", COLOR_DESC)
         if root is None:
-            return ("", "#888888")
+            return ("", COLOR_DESC)
         target = root / Path(raw.replace("\\", "/"))
         if target.is_file():
-            return ("✓ 存在", "#2a8a2a")
-        return ("⚠ 見つかりません", "#c0392b")
+            return ("", COLOR_DESC)
+        return ("ファイルなし", "#B45309")

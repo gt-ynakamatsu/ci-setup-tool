@@ -373,3 +373,14 @@ def test_help_icon_creates_question_mark(app):
     types = {canvas.type(item_id) for item_id in canvas.find_all()}
     assert "oval" in types
     assert "text" in types
+
+
+def test_path_status_text_only_warns_on_missing_file(sln_repo: Path):
+    from cisetup.gui.form_sync import FormSyncMixin
+
+    key = "project.solution_file"
+    rel = "MyApp.sln"
+    assert FormSyncMixin._path_status_text(key, rel, sln_repo)[0] == ""
+    assert FormSyncMixin._path_status_text(key, rel, None)[0] == ""
+    assert FormSyncMixin._path_status_text(key, "missing.sln", sln_repo)[0] == "ファイルなし"
+    assert FormSyncMixin._path_status_text("project.test_project", "", sln_repo)[0] == "— 未設定"

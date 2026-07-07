@@ -123,7 +123,7 @@ class DetailsMixin:
             frame,
             "テスト対象を空にすると CI の Test ステージはスキップされます。"
             "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます。"
-            "（各欄の右側に実在チェックを表示します）",
+            "（①でフォルダを開いたあと、見つからないパスだけ右側に表示します）",
         ).pack(anchor="w")
         btn_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         btn_row.pack(anchor="w", pady=(12, 8))
