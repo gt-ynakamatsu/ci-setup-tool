@@ -415,7 +415,7 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | `solution_file` | `solutionFile` | str | `""` | ビルド対象 `.sln`（リポジトリルート相対） | config |
 | `publish_project` | `publishProject` | str | `""` | `dotnet publish` 対象 `.csproj`（相対） | config |
 | `test_project` | `testProject` | str | `""` | テスト `.csproj`。空なら Test ステージをスキップ | config |
-| `artifact_prefix` | `artifactPrefix` | str | `""` | 成果物 zip のファイル名先頭 | config |
+| `artifact_prefix` | `artifactPrefix` | str | `""` | 成果物（.exe / zip）のファイル名先頭 | config |
 
 ### 6.2 `StorageConfig`（JSON: `storage`）
 
@@ -423,7 +423,7 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 |-------------|-----------|----|--------|------|--------|
 | `base_paths` | `basePaths` | list[str] | `[]` | プロジェクト名を付けずに使う書き込み先（複数可） | **local** |
 | `logs_dir` | `logsDir` | str | `"logs"` | 失敗時ログのフォルダ名 | config |
-| `releases_dir` | `releasesDir` | str | `"releases"` | 成果物 zip のフォルダ名 | config |
+| `releases_dir` | `releasesDir` | str | `"releases"` | 成果物のフォルダ名 | config |
 | `analysis_dir` | `analysisDir` | str | `"analysis"` | 解析レポートを置く `<root>` 配下のカテゴリフォルダ名 | config |
 | `tests_dir` | `testsDir` | str | `"tests"` | テスト結果を置く `<root>` 配下のカテゴリフォルダ名 | config |
 | `source_dir` | `sourceDir` | str | `"source"` | 開発環境一式 zip のフォルダ名 | config |
@@ -1121,7 +1121,7 @@ sequenceDiagram
 | Build | `ci-build.ps1` | `dotnet restore` → `dotnet build -c <cfg> --no-restore` | `buildCommand`（必須） | ビルド成果 |
 | Test | `ci-test.ps1` | `dotnet test`（TRX 出力）→ TRX 解析 | `testCommand`（空ならスキップ） | `artifacts\test\test-results.trx` / `test-summary.json` / `test-failures.log` |
 | Static Analysis | `ci-analyze.ps1` | Roslyn 全ルール有効でビルド→指摘を High/Medium/Low に分類 | `analyzeCommand`（空ならスキップ） | `artifacts\analysis\analysis-report.html` / `.md` / `.csv` / `analysis-summary.json` / `analysis-build.log` |
-| Publish Artifact | `ci-publish.ps1` | `dotnet publish`（framework-dependent）→ zip | `publishCommand` 実行 → `artifactGlob` で収集 → zip | `artifacts\release\*.zip` |
+| Publish Artifact | `ci-publish.ps1` | `dotnet publish`（framework-dependent + `PublishSingleFile`）→ **`.exe`**（+ 後方互換 zip） | `publishCommand` 実行 → `artifactGlob` で収集 → zip | `artifacts\release\*.exe` / `*.zip` |
 | Post: deploy | `ci-deploy-fileserver.ps1` | 各カテゴリを全書き込み先へコピー、配置先を `deploy-manifest.json` に記録 | 同左 | ファイルサーバー上の各フォルダ |
 | Post: notify | `ci-notify-teams.ps1` | 1 枚のアダプティブカードを送信 | 同左 | Teams 通知 |
 
@@ -1147,7 +1147,7 @@ artifacts\
 │   ├── analysis-summary.json   … high/medium/low/total
 │   └── analysis-build.log
 ├── publish\…                   … dotnet publish 出力（中間）
-├── release\*.zip               … 成果物 zip
+├── release\*.exe / *.zip       … 成果物（主: framework-dependent 単一 exe、副: zip）
 └── deploy-manifest.json        … 各 deploy が配置先を追記（buildNumber で世代管理）
 ```
 
@@ -1192,7 +1192,8 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
   `deploy -Type Test` でファイルサーバーへ → 失敗時は Teams に失敗テスト名とログリンク。
 - 解析: `ci-analyze.ps1` が `artifacts\analysis\` に出力 → `deploy -Type Analysis` →
   Teams に件数サマリーと HTML レポートボタン。
-- 成果物 zip: `ci-publish.ps1` が `artifacts\release\` に出力 → 成功時 `deploy -Type Artifact` →
+- 成果物: `ci-publish.ps1` が `artifacts\release\` に **framework-dependent 単一 `.exe`**
+  （および後方互換 zip）を出力 → 成功時 `deploy -Type Artifact` →
   Teams に成果物フォルダボタン。
 
 ---

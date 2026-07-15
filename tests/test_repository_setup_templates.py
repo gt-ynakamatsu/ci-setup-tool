@@ -283,6 +283,23 @@ def test_ci_config_exposes_analysis_dir():
     assert "AnalysisDir = (ConvertTo-PlatformPath" in text
 
 
+def test_ci_publish_framework_dependent_single_exe():
+    # CI 成果物は .NET ランタイム非同梱（self-contained=false）の単一 exe（PublishSingleFile）。
+    # RID (-r) 必須。release に .exe を出し、deploy も .exe/.zip を配置する。
+    publish = template_store.bundled_template_dir() / "scripts" / "ci-publish.ps1"
+    text = publish.read_text(encoding="utf-8-sig")
+    assert '"--self-contained", "false"' in text
+    assert '"-p:PublishSingleFile=true"' in text
+    assert '"-r", $platformTag' in text
+    assert "PublishSingleFile=false" not in text
+    assert "$exePath" in text
+
+    deploy = template_store.bundled_template_dir() / "scripts" / "ci-deploy-fileserver.ps1"
+    dtext = deploy.read_text(encoding="utf-8-sig")
+    assert ".exe" in dtext
+    assert "No release artifact (.exe / .zip)" in dtext
+
+
 def test_deploy_analysis_dest_uses_configured_folder():
     # 解析の配置先フォルダ名は設定値 $ci.AnalysisDir を使う（ハードコード 'analysis' 廃止）。
     # 入力元のローカル変数 artifacts/analysis はハードコードのまま（別物）。
