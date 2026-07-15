@@ -22,6 +22,13 @@ python tools/rebuild_exe.py
 
 または `tools\Build-Exe.bat /nopause`
 
+Linux から Windows `.exe` を出す場合:
+
+```bash
+python tools/setup_wine_python.py   # 初回のみ
+python tools/rebuild_exe.py --windows
+```
+
 ## 理由
 
 - `Setup-Project.bat` や配布 zip は exe を使う

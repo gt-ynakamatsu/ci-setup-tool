@@ -8,21 +8,24 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_exe_name_per_platform():
-    from tools.rebuild_exe import exe_name
+    from tools.rebuild_exe import DIST_EXE, exe_name
 
     assert exe_name("win32") == "CISetup.exe"
     assert exe_name("linux") == "CISetup"
     assert exe_name("darwin") == "CISetup"
+    assert DIST_EXE.name == "CISetup.exe"
 
 
 def test_dist_exe_exists_and_is_fresh():
-    """GUI/同梱物を直したあと exe が古いまま残っていないか確認する。"""
+    """GUI/同梱物を直したあと配布正本（Windows .exe）が古いまま残っていないか確認する。"""
     from tools.rebuild_exe import EXE, exe_is_stale, newest_source_mtime
 
     if not EXE.is_file():
         pytest.fail(
             "dist\\CISetup.exe がありません。"
-            " python tools/rebuild_exe.py を実行してください。"
+            " Windows: python tools/rebuild_exe.py\n"
+            " Linux:   python tools/setup_wine_python.py"
+            " && python tools/rebuild_exe.py --windows"
         )
 
     if exe_is_stale():
@@ -34,5 +37,5 @@ def test_dist_exe_exists_and_is_fresh():
             "dist\\CISetup.exe がソースより古いです。\n"
             f"  ソース最新: {src_time:%Y-%m-%d %H:%M:%S}\n"
             f"  exe:        {exe_time:%Y-%m-%d %H:%M:%S}\n"
-            "  修正後は python tools/rebuild_exe.py を実行してください。"
+            "  修正後は python tools/rebuild_exe.py [--windows] を実行してください。"
         )
