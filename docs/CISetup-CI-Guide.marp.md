@@ -131,6 +131,7 @@ MSI の **Service Logon Credentials** ≠ Jenkins の admin パスワード
 ```
 \\fileserver\ci\
 └── MyApp\
+    ├── releases\20260615\MyApp-42-win-x64.exe
     ├── releases\20260615\MyApp-42-win-x64.zip
     └── logs\20260615\build-42.log
 ```
@@ -508,7 +509,7 @@ Jenkins LTS インストール **後** に 1 回だけ実行
 | プロジェクト名 | Teams 通知・保存フォルダ名 |
 | ソリューション (.sln) | 参照... で選択可 |
 | Publish 対象 (.csproj) | 参照... で選択可 |
-| 成果物 zip プレフィックス | 例: `MyApp` → `MyApp-42-win-x64.zip` |
+| 成果物プレフィックス | 例: `MyApp` → `MyApp-42-win-x64.exe`（+ zip） |
 
 多くは ③ の自動検出で入力済み
 
