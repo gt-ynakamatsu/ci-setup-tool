@@ -249,7 +249,7 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 |------|---------|-------------------------------------|
 | **E-1** | 設定アプリ または Jenkins から **テストビルド** 実行 | Jenkins でビルド **成功**（青） |
 | **E-2** | Teams 通知 | 成功カードが届く（プロジェクト名・ビルド番号表示） |
-| **E-3** | 成果物 | `FILE_SHARE\{プロジェクト名}\releases\{日付}\*.zip` が存在（zip 作成 ON 時） |
+| **E-3** | 成果物 | `FILE_SHARE\{プロジェクト名}\releases\{日付}\*.exe`（および `*.zip`）が存在（成果物作成 ON 時） |
 | **E-4** | 静的解析 | `releases` または `analysis` 配下に `analysis-report.html` |
 | **E-5** | 手動再実行 | exe「今すぐビルド」でも E-1〜E-2 が再現できる |
 | **E-6** | （任意）マージ検知 | 対象ブランチへ push → 5 分以内に自動ビルド（履歴に SCM change） |
@@ -305,7 +305,7 @@ GUI の「詳細設定 → ビルド種別」で選択します。
 | **.NET**（既定） | .NET ソリューション | `dotnet restore/build/format/publish` を自動実行。Roslyn 静的解析つき |
 | **カスタムコマンド** | FPGA（Vivado 等）・組み込み C/C++・Python など | 各ステップで入力した任意コマンドを PowerShell として実行 |
 
-> **.NET の Release 成果物について**: publish は **framework-dependent**（`*-win-x64.zip`、exe＋DLL のみ）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（ビルド側に .NET SDK が必要なのと同様）。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。
+> **.NET の Release 成果物について**: publish は **framework-dependent 単一ファイル**（`*-win-x64.exe`、`.NET` ランタイム非同梱・アプリ依存は exe に取り込み）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（self-contained にするとランタイム込みで肥大化するため採用していません）。後方互換で同内容の `*-win-x64.zip` も出力します。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。
 
 カスタムコマンドで設定する項目（`cisetup.config.json` の `build` セクション）:
 
@@ -450,6 +450,7 @@ flowchart TB
 ```
 \\fileserver\ci\
 └── MyApp\                          # 成果物・ログ・解析・ソース・テスト（すべてプロジェクト配下）
+    ├── releases\20260615\MyApp-42-win-x64.exe
     ├── releases\20260615\MyApp-42-win-x64.zip
     ├── analysis\20260615\analysis-report.html
     ├── logs\20260615\build-42.log
@@ -1470,7 +1471,7 @@ cd C:\Jenkins
 | カテゴリ | ③ 保存フォルダ名 | ④ 閲覧 URL |
 |---------|-----------------|---------------------|
 | logs | 失敗時ログ（logs） | 失敗時ログ（logs） |
-| releases | 成果物 zip（releases） | 成果物 zip（releases） |
+| releases | 成果物（releases） | 成果物（releases） |
 | analysis | 解析レポート（analysis） | 解析レポート（analysis） |
 | tests | テスト成果物（tests） | テスト成果物（tests） |
 | source | 開発環境 zip（source）※ | 開発環境 zip（source）※ |
@@ -1645,7 +1646,7 @@ Get-ChildItem -Recurse $base | Sort-Object LastWriteTime -Descending | Select-Ob
 
 **ゲート:**
 
-- `releases\{日付}\*.zip` が存在（成果物 zip ON 時）
+- `releases\{日付}\*.exe`（および `*.zip`）が存在（成果物作成 ON 時）
 - `analysis\{日付}\analysis-report.html` が存在
 
 ### 11.4 自動トリガー（STEP E-6 / E-7・任意）
@@ -1684,7 +1685,7 @@ curl -X POST "http://<jenkins>:8086/job/CISetup-CI/buildWithParameters" \
 |-------------|------|
 | 設定変更 | 設定アプリ → ⑥「セットアップを実行」（保存→反映→push を自動） |
 | 手動ビルド | 設定アプリ ⑥ 実行後のテストビルド（または詳細設定「今すぐビルド」） |
-| 成果物 zip も作ってテスト | ⑥「成果物 zip も作成・保存する」にチェックして実行 |
+| 成果物も作ってテスト | ⑥「成果物 zip も作成・保存する」にチェックして実行（`.exe` + zip が出力されます） |
 | マージで自動ビルド | ② ブランチを対象に設定 + 詳細設定 pollSCM を有効に |
 | Webhook だけ確認 | 設定アプリ ④「テスト送信」 |
 | LDAP 追加後 | 設定アプリの API Token が有効か **接続テスト** で確認 |
@@ -2121,7 +2122,7 @@ JOB_NAME         =
 [ ] GATE D  D-6 セットアップ実行         ____
 [ ] GATE E  E-1 テストビルド SUCCESS     ____
 [ ] GATE E  E-2 Teams 通知               ____
-[ ] GATE E  E-3 成果物 zip               ____
+[ ] GATE E  E-3 成果物 exe/zip           ____
 ```
 
 ---
