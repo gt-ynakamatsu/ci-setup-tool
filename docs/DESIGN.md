@@ -1209,8 +1209,11 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
 ### 11.2 再ビルド（`tools\rebuild_exe.py`）
 
 - `pip install pyinstaller` の後 `python -m PyInstaller cisetup.spec --clean --noconfirm` を実行し、
-  `dist\CISetup.exe` を生成する。
-- exe 鮮度判定: `EXE_SOURCE_GLOBS = cisetup/**/*.py, configure.py, cisetup.spec, bundled_templates/**/*`
+  `dist\CISetup.exe` を生成する（配布正本。Python + tkinter 内蔵の自己完結 onefile。追加 pip 依存なし）。
+- Linux から同じ Windows `.exe` を出す場合は `tools/setup_wine_python.py` で Wine 上に Windows Python を入れ、
+  `python tools/rebuild_exe.py --windows` を使う（PyInstaller 自体はクロスコンパイル非対応のため）。
+- exe 鮮度判定: 配布正本 `dist/CISetup.exe` に対し、
+  `EXE_SOURCE_GLOBS = cisetup/**/*.py, configure.py, cisetup.spec, bundled_templates/**/*`
   の最新 mtime より exe が（`margin=1.0` 秒を超えて）古い、または exe が無ければ stale。
 
 ### 11.3 配布 zip（`tools\Package-Distribution.ps1`）

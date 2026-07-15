@@ -168,10 +168,21 @@ python tools/smoke_test.py
 `cisetup/` ・ `configure.py` ・ `cisetup.spec` ・ `bundled_templates/` を変更したら、
 **作業完了前に必ず exe を再ビルド** してください。古い exe は `tests/test_exe_freshness.py` が検出して失敗させます。
 
+配布正本は **Windows 向け `dist/CISetup.exe`**（PyInstaller onefile。Python ランタイム + tkinter を内蔵し利用者は Python 不要。追加の pip 依存は無く十数 MB 程度）。
+
 ```powershell
+# Windows
 python tools\rebuild_exe.py
 # または
 .\tools\Build-Exe.bat
+```
+
+```bash
+# Linux から Windows .exe を作る（Wine + Windows Python）
+python tools/setup_wine_python.py          # 初回のみ
+python tools/rebuild_exe.py --windows      # => dist/CISetup.exe
+# ホスト OS 向けのみ必要な場合
+python tools/rebuild_exe.py --native       # => dist/CISetup
 ```
 
 ---

@@ -7,7 +7,7 @@
 | **配布（推奨）** | `CISetup.exe` をダブルクリック（Python 不要） |
 | 開発 | `python configure.py` または `start_configure.bat` |
 | 初回セットアップ | `Setup-Project.bat [プロジェクトフォルダ]` |
-| ビルド | `python tools/rebuild_exe.py` または `tools\Build-Exe.bat` → `dist\CISetup.exe` |
+| ビルド | Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat` → `dist\CISetup.exe`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows` |
 | 配布 zip | `tools\Package-Distribution.ps1` |
 
 **開発ルール:** GUI・`configure.py`・`bundled_templates` を直したら、作業完了前に必ず exe を再ビルドする（`test_exe_freshness.py` で古い exe を検出）。
