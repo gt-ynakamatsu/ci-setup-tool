@@ -698,7 +698,7 @@ GUI 表示用に代表（先頭の書き込み先）のレイアウト例を返�
 | ③ | 成果物・ログの保存先 | 書き込み先ベース（複数可）/ 共有フォルダルート（CI_FILE_SERVER・複数可）/ カテゴリ別「保存フォルダ名」（logs / releases / analysis / tests / source）と有効チェック / 日付フォルダ / プレビュー / 格納先フォルダ作成 / エージェント兄弟パス / CI_FILE_SERVER グローバル登録 |
 | ④ | Teams 通知 | Webhook URL / ③ と同じカテゴリ表示名の閲覧 URL（logs / releases / analysis / tests / source、各複数可）/ テスト送信 |
 | ⑤ | Jenkins への接続 | Jenkins URL / ユーザー名 / API Token / 接続テスト |
-| ⑥ | セットアップを実行 | 4 チェックボックス（保存 / ローカルでビルド＆テスト / Jenkins 反映 / テストビルド）+ 実行ボタン + 「設定だけ保存」 + publish チェック + ローカル実行ログ欄 |
+| ⑥ | セットアップを実行 | 「セットアップを実行」（保存 → ローカル → Jenkins 反映 → テストビルド）+ 「設定だけ保存」+ 「ローカルでビルド＆テスト」+ publish チェック + ローカル実行ログ欄 |
 | — | 詳細設定（Expander） | ビルド種別 / 自動入力項目 / CI ジョブ / Jenkins サーバー初回設定 / 手動操作 |
 | — | ステータスバー | 状態表示 |
 
@@ -833,21 +833,19 @@ sequenceDiagram
 
 ### 9.2 「セットアップを実行」フロー（⑥）
 
-チェックボックスの既定は **保存=ON / ローカルでビルド＆テスト=ON / Jenkins 反映=ON / テストビルド=ON**。
+「セットアップを実行」は **保存 → ローカルでビルド＆テスト → Jenkins 反映 → テストビルド** を
+いつも同じ順で実行する（処理を選ぶチェックボックスはない）。
 CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は行わない。
-内部の実行順は常に **保存 → ローカル → Jenkins 反映 → テストビルド**（チェックされたものだけ）。
+`repositoryUrl` はアプリソースの checkout 用に必須。
 
-重要: **Jenkins 反映が選ばれている場合、保存を強制的に ON にする**
-（古い定義のまま反映するのを防ぐため）。Jenkins 反映時はアプリソースの checkout 用に
-`repositoryUrl` も必須。
+個別実行は「設定だけ保存」「ローカルでビルド＆テスト」、または詳細設定の手動操作。
 
-**ローカルでビルド＆テスト**（`local` ステップ）は、配置済みの `CISetup\scripts\ci-build.ps1` →
+**ローカルでビルド＆テスト**は、配置済みの `CISetup\scripts\ci-build.ps1` →
 `ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する**純粋なローカル処理**。
-**git 操作（fetch / pull / push）は一切なく、Jenkins も使わない**ため、保存の強制も
-`_require_jenkins_secrets()` も発生しない。ビルドが失敗したらテストは実行しない（最初の失敗で停止）。
+**git 操作（fetch / pull / push）は一切なく、Jenkins も使わない**。単独ボタンから実行した場合は
+保存の強制も `_require_jenkins_secrets()` も発生しない。ビルドが失敗したらテストは実行しない（最初の失敗で停止）。
 出力はバックグラウンドスレッドから `after` 経由で「ローカル実行ログ」欄へ流し込み、UI を固めない。
-配置済みスクリプトを実行する仕様のため、設定変更を反映するには先に「設定を保存」しておく
-（保存は強制しない設計）。
+配置済みスクリプトを実行する仕様のため、設定変更を反映するには先に「設定を保存」しておく。
 
 ```mermaid
 sequenceDiagram
@@ -862,14 +860,11 @@ sequenceDiagram
     U->>App: 「セットアップを実行」
     App->>Ops: _run_setup()
     Ops->>App: _form_to_config()
-    Ops->>Ops: do_save/do_local/do_jenkins/do_build を取得
-    Note over Ops: 1つも未選択なら ValueError
-    Ops->>Ops: if do_jenkins → do_save = True (強制保存)
     Ops->>Ops: _confirm_test_project()
-    Ops->>Ops: do_jenkins/do_build なら _require_jenkins_secrets()
-    Ops->>Ops: do_jenkins なら repositoryUrl 必須
+    Ops->>Ops: _require_jenkins_secrets()
+    Ops->>Ops: repositoryUrl 必須
     Ops->>U: 実行プラン確認ダイアログ
-    loop steps を順に (save→local→jenkins→build)
+    loop 保存 → ローカル → Jenkins 反映 → テストビルド
         alt save
             Ops->>Repo: save_all(root, config, secrets)
         else local
@@ -1215,7 +1210,7 @@ CISetup-<Version>/
 | カバレッジ | `.coveragerc`（`source=cisetup`、`branch=True`、`show_missing`） |
 | GUI テスト | `tkinter` を `importorskip`、ディスプレイ不可なら skip。`ConfigureApp` を生成し `withdraw()`、ダイアログ/通知をモンキーパッチで無効化 |
 | 外部依存のモック | `cisetup.gui.deps` を patch（`JenkinsClient` / `apply_settings` / `teams_service.send_test` / `run_local_ci` / `env_scan.scan` / `messagebox` 等）。`FakeClient` で Jenkins API を差し替え |
-| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序と強制保存（`test_run_setup_jenkins_forces_save`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
+| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序（`test_run_setup_ordering`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
 | 代表的なテストファイル | `test_gui_actions.py` / `test_repository_setup_templates.py` / `test_models.py` / `test_paths_presets_generator.py` / `test_jenkins_client.py` / `test_teams_service.py` / `test_git_env_recent.py` / `test_configure_cli.py` / `test_app_paths.py` / `test_exe_freshness.py` |
 | 補助 | `tools\smoke_test.py`（C# 版との JSON 互換などの素早い確認） |
 
