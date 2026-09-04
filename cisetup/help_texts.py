@@ -40,9 +40,9 @@ TEST_PROJECT = (
 )
 
 ARTIFACT_PREFIX = (
-    "【何を】成果物 zip のファイル名の先頭部分\n"
-    "【なぜ】保存先に複数ビルドの zip が並ぶとき、どのプロジェクトの成果物か判別するため\n"
-    "【例】MyApp → MyApp-42-win-x64.zip\n"
+    "【何を】成果物（.exe / zip）のファイル名の先頭部分\n"
+    "【なぜ】保存先に複数ビルドの成果物が並ぶとき、どのプロジェクトのものか判別するため\n"
+    "【例】MyApp → MyApp-42-win-x64.exe（および同名 zip）\n"
     "【保存先】cisetup.config.json → project.artifactPrefix"
 )
 
@@ -79,8 +79,8 @@ LOGS_DIR = (
 )
 
 RELEASES_DIR = (
-    "【③ 保存フォルダ】成果物 zip（releases）\n"
-    "【何を】ビルド成功時の zip を置くフォルダ名\n"
+    "【③ 保存フォルダ】成果物（releases）\n"
+    "【何を】ビルド成功時の .exe / zip を置くフォルダ名\n"
     "【④ 対応】同じカテゴリの Teams ボタン URL 欄（releases）\n"
     "【デフォルト】releases\n"
     "【保存先】cisetup.config.json → storage.releasesDir"
@@ -99,12 +99,12 @@ ANALYSIS_DIR = (
 USE_DATE_SUBFOLDER = (
     "【何を】保存先の下に日付フォルダ (YYYYMMDD) を作るか\n"
     "【なぜ】毎日のビルド成果物を上書きせず、日付ごとに履歴を残すため\n"
-    "【ON の例】...\\releases\\20260615\\MyApp-42-win-x64.zip\n"
+    "【ON の例】...\\releases\\20260615\\MyApp-42-win-x64.exe\n"
     "【保存先】cisetup.config.json → storage.useDateSubfolder"
 )
 
 RELEASE_URL = (
-    "【④ Teams ボタン】成果物 zip（releases）\n"
+    "【④ Teams ボタン】成果物（releases）\n"
     "【何を】成果物フォルダを開くための共有 URL（SharePoint / Web 等）\n"
     "【③ 対応】同じカテゴリの保存フォルダ名（releases）\n"
     "【どこで使う】Teams 通知の「成果物フォルダを開く」ボタン\n"

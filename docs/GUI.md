@@ -7,7 +7,7 @@
 | **配布（推奨）** | `CISetup.exe` をダブルクリック（Python 不要） |
 | 開発 | `python configure.py` または `start_configure.bat` |
 | 初回セットアップ | `Setup-Project.bat [プロジェクトフォルダ]` |
-| ビルド | `python tools/rebuild_exe.py` または `tools\Build-Exe.bat` → `dist\CISetup.exe` |
+| ビルド | Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat` → `dist\CISetup.exe`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows` |
 | 配布 zip | `tools\Package-Distribution.ps1` |
 
 **開発ルール:** GUI・`configure.py`・`bundled_templates` を直したら、作業完了前に必ず exe を再ビルドする（`test_exe_freshness.py` で古い exe を検出）。
@@ -44,7 +44,7 @@ GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin �
 | 2. Jenkins に反映 | `apply_settings` でジョブ定義を Jenkins に登録（既定 ON） |
 | 3. Git push | CI 関連ファイルのみ commit / push（secrets/local は除外。既定 ON） |
 | 4. テストビルドを実行 | Jenkins が**リモート Git のコード**をビルド（既定 ON） |
-| テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で成果物 zip も作成・保存（既定 ON） |
+| テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で **framework-dependent 単一 `.exe`**（+ zip）も作成・保存（既定 ON。ランタイムは同梱しない） |
 
 > **「テストビルド」と「ローカルでビルド＆テスト」の違い**
 > 「テストビルド」は Jenkins がリモート Git から取得したコードをビルドするため、push していないローカルの変更は反映されません。

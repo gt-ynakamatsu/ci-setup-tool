@@ -262,16 +262,22 @@ if ($Type -eq 'Source') {
     return
 }
 
-# ---- Artifact（リリース zip）----
+# ---- Artifact（リリース exe / zip）----
+# framework-dependent 単一 exe を主成果物とし、後方互換の zip もあれば一緒に配置する。
 $releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
 if (-not (Test-Path $releaseDir)) {
     Write-Warning "Release directory not found: $releaseDir"
     exit 0
 }
 
-$zipFiles = Get-ChildItem -Path $releaseDir -Filter '*.zip' -File
-if ($zipFiles.Count -eq 0) {
-    Write-Warning 'No zip artifact found to deploy.'
+$artifactFiles = @(Get-ChildItem -Path $releaseDir -File -ErrorAction SilentlyContinue | Where-Object {
+    $_.Extension -ieq '.exe' -or $_.Extension -ieq '.zip' -or (
+        $_.Extension -eq '' -and $_.Name -match '(win-x64|linux-x64|osx-x64|osx-arm64)$'
+    )
+} | Sort-Object Name -Unique)
+
+if ($artifactFiles.Count -eq 0) {
+    Write-Warning 'No release artifact (.exe / .zip) found to deploy.'
     exit 0
 }
 
@@ -280,9 +286,9 @@ foreach ($t in $targets) {
     if (Test-TargetUrl $t) { continue }
     $destDir = Get-CategoryDest -Target $t -CategoryDir $ci.ReleasesDir
     New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    foreach ($zip in $zipFiles) {
-        $destFile = Join-Path $destDir $zip.Name
-        Copy-Item -Path $zip.FullName -Destination $destFile -Force
+    foreach ($file in $artifactFiles) {
+        $destFile = Join-Path $destDir $file.Name
+        Copy-Item -Path $file.FullName -Destination $destFile -Force
         Write-Host "Artifact saved to $destFile"
     }
     if (-not $firstDest) { $firstDest = $destDir }
