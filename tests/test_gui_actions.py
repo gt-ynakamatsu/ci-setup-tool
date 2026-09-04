@@ -23,7 +23,6 @@ def app(sln_repo: Path):
     # ダイアログ系はブロック・ポップアップを避けるため無効化する
     application._info = lambda *a, **k: None
     application._ask = lambda *a, **k: True
-    application._prompt_commit = lambda: "commit msg"
     yield application
     application.destroy()
 
@@ -166,87 +165,59 @@ def test_create_storage_folders_invokes_repo(app, tmp_path):
     assert (tmp_path / "logs").is_dir()
 
 
-# --------------------------------------------------------------- git / setup
-
-def test_git_push_invokes_service(app, monkeypatch, sln_repo):
-    captured = {}
-    pusher = lambda root, msg: captured.setdefault("args", (root, msg)) or "staged"
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", pusher)
-    app._git_push()
-    assert captured["args"][0] == sln_repo
-    assert captured["args"][1] == "commit msg"
-
-
-def test_git_push_cancelled(app, monkeypatch):
-    monkeypatch.setattr(app, "_ask", lambda *a, **k: False)
-    called = {}
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("x", True))
-    app._git_push()
-    assert "x" not in called
-
+# --------------------------------------------------------------- setup
 
 def test_run_setup_runs_all_steps(app, fake_jenkins, monkeypatch):
     seq = []
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("apply"))
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._fields["jenkins.job_name"].set("MyApp-CI")
-    # 全ステップは既定で有効（build はビルド実行後に push される順）
     app._run_setup()
-    assert seq == ["local", "apply", "push"]
+    assert seq == ["local", "apply"]
     assert fake_jenkins.last.triggered == ("MyApp-CI", True)
 
 
 def test_run_setup_skips_unchecked_steps(app, fake_jenkins, monkeypatch):
-    # push / build / local をオフにすると Git push とビルドは実行されない。
-    pushed = {}
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: None)
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: pushed.setdefault("x", True))
     _set_jenkins_secrets(app)
     app._fields["jenkins.job_name"].set("MyApp-CI")
     app._step_local_var.set(False)
     app._step_build_var.set(False)
-    app._step_push_var.set(False)
     app._run_setup()
-    assert "x" not in pushed  # push されない
     assert fake_jenkins.last is None  # build もされない
 
 
-def test_run_setup_push_forces_save(app, monkeypatch, sln_repo):
-    # 「設定を保存」をオフにして「Git push」だけ選んでも、push 前に必ず save_all される
+def test_run_setup_jenkins_forces_save(app, monkeypatch, sln_repo):
+    # 「設定を保存」をオフにして「Jenkins に反映」だけ選んでも、反映前に必ず save_all される
     seq = []
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("jenkins"))
+    _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._step_save_var.set(False)
     app._step_local_var.set(False)
-    app._step_jenkins_var.set(False)
+    app._step_jenkins_var.set(True)
     app._step_build_var.set(False)
-    app._step_push_var.set(True)
     app._run_setup()
-    # save が push より前に実行される
-    assert seq == ["save", "push"]
+    assert seq == ["save", "jenkins"]
 
 
 def test_run_setup_local_only_no_git_no_jenkins(app, fake_jenkins, monkeypatch):
-    # 「ローカルでビルド＆テスト」だけ選択 → git push / pull も apply_settings /
-    # trigger_build も呼ばれず、ローカルランナーだけが実行される。
+    # 「ローカルでビルド＆テスト」だけ選択 → apply_settings / trigger_build も呼ばれず、
+    # ローカルランナーだけが実行される。
     called = {}
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: called.setdefault("local", (a, k)))
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: called.setdefault("apply", True))
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: called.setdefault("push", True))
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: called.setdefault("save", True))
     app._step_save_var.set(False)
     app._step_local_var.set(True)
     app._step_jenkins_var.set(False)
-    app._step_push_var.set(False)
     app._step_build_var.set(False)
     app._run_setup()
     assert "local" in called
     assert "apply" not in called
-    assert "push" not in called
     assert "save" not in called  # ローカルは保存を強制しない
     assert fake_jenkins.last is None  # trigger_build されない
 
@@ -260,18 +231,16 @@ def test_run_setup_local_does_not_require_jenkins_secrets(app, monkeypatch):
     app._step_save_var.set(False)
     app._step_local_var.set(True)
     app._step_jenkins_var.set(False)
-    app._step_push_var.set(False)
     app._step_build_var.set(False)
     app._run_setup()  # 例外が出なければ OK
 
 
 def test_run_setup_local_ordering(app, fake_jenkins, monkeypatch):
-    # save → local → jenkins → push → build の順で実行される。
+    # save → local → jenkins → build の順で実行される。
     seq = []
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("jenkins"))
-    monkeypatch.setattr(deps_mod.git_service, "push_ci_files", lambda *a, **k: seq.append("push"))
     monkeypatch.setattr(app, "_build_now", lambda: seq.append("build"))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
@@ -279,10 +248,20 @@ def test_run_setup_local_ordering(app, fake_jenkins, monkeypatch):
     app._step_save_var.set(True)
     app._step_local_var.set(True)
     app._step_jenkins_var.set(True)
-    app._step_push_var.set(True)
     app._step_build_var.set(True)
     app._run_setup()
-    assert seq == ["save", "local", "jenkins", "push", "build"]
+    assert seq == ["save", "local", "jenkins", "build"]
+
+
+def test_run_setup_jenkins_requires_git_url(app):
+    _set_jenkins_secrets(app)
+    app._fields["git.repository_url"].set("")
+    app._step_save_var.set(False)
+    app._step_local_var.set(False)
+    app._step_jenkins_var.set(True)
+    app._step_build_var.set(False)
+    with pytest.raises(ValueError, match="Git リポジトリ URL"):
+        app._run_setup()
 
 
 def test_run_setup_requires_at_least_one_step(app):
@@ -290,7 +269,6 @@ def test_run_setup_requires_at_least_one_step(app):
     app._step_local_var.set(False)
     app._step_jenkins_var.set(False)
     app._step_build_var.set(False)
-    app._step_push_var.set(False)
     with pytest.raises(ValueError):
         app._run_setup()
 

@@ -73,7 +73,7 @@ if "%BB_RUN%"=="py" (
 )
 
 echo.
-echo GUI で ①〜⑤ を入力し、「セットアップを実行」で保存・Jenkins 反映・Git push まで行えます。
+echo GUI で ①〜⑤ を入力し、「セットアップを実行」で保存・Jenkins 反映まで行えます。
 echo.
 goto :EndOk
 

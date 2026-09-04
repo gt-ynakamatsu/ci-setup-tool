@@ -39,18 +39,19 @@ GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin �
 
 | チェック | 内容 |
 |----------|------|
-| 1. 設定を保存 | `cisetup.config.json` / `Jenkinsfile` / `scripts` を再生成して保存（既定 ON） |
-| ローカルでビルド＆テスト（push せず現在のコードを検証） | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**。push 前に手元のコードを検証する用途（既定 ON・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
-| 2. Jenkins に反映 | `apply_settings` でジョブ定義を Jenkins に登録（既定 ON） |
-| 3. Git push | CI 関連ファイルのみ commit / push（secrets/local は除外。既定 ON） |
-| 4. テストビルドを実行 | Jenkins が**リモート Git のコード**をビルド（既定 ON） |
+| 1. 設定を保存 | `cisetup.config.json` / 作業用 `Jenkinsfile` / `scripts` を再生成して保存（既定 ON） |
+| ローカルでビルド＆テスト（この PC のコードを検証） | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**（既定 ON・ログは「ローカルビルド＆テストの実行ログ」欄に表示） |
+| 2. Jenkins に反映 | `apply_settings` でジョブ定義（パイプライン一式）を Jenkins に登録（既定 ON） |
+| 3. テストビルドを実行 | Jenkins が**顧客 Git のアプリソース**を checkout してビルド（既定 ON） |
 | テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で **framework-dependent 単一 `.exe`**（+ zip）も作成・保存（既定 ON。ランタイムは同梱しない） |
 
 > **「テストビルド」と「ローカルでビルド＆テスト」の違い**
-> 「テストビルド」は Jenkins がリモート Git から取得したコードをビルドするため、push していないローカルの変更は反映されません。
-> 「ローカルでビルド＆テスト」は **push せずに現在のローカルコード**を、配置済み CI スクリプトで検証します（git 操作なし）。先に「設定を保存」しておくと最新スクリプトで検証できます。
+> 「テストビルド」は Jenkins が顧客 Git からアプリソースを取得してビルドするため、未コミットのローカル変更は反映されません。
+> 「ローカルでビルド＆テスト」は **この PC の作業コピー**を、配置済み CI スクリプトで検証します（git 操作なし）。先に「設定を保存」しておくと最新スクリプトで検証できます。
 
-内部の実行順は常に **保存 → ローカル → Jenkins 反映 → Git push → テストビルド**（チェックしたものだけ）。ローカルはビルドが失敗するとテストを実行しません。
+内部の実行順は常に **保存 → ローカル → Jenkins 反映 → テストビルド**（チェックしたものだけ）。ローカルはビルドが失敗するとテストを実行しません。
+
+CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を push する必要はありません。Git URL / ブランチ / 認証は、Jenkins がアプリソースを checkout するためだけに使います。
 
 > **⑤ Jenkins URL は「どの画面の URL?」** … Jenkins にログインした直後の **ホーム画面（ダッシュボード）** を開いたときの、**ブラウザのアドレスバーの URL**（`http://ホスト:ポート/`）です。
 > 左上の「Jenkins」ロゴをクリックするとホーム画面に戻れます。`/job/...` は含めず、`Manage Jenkins → System` の「Jenkins URL」と同じ値。別 PC からは `localhost` ではなくホスト名/IP を使います。詳細は [CI-GUIDE.md の 6.9](CI-GUIDE.md)。

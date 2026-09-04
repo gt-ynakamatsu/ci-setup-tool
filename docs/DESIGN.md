@@ -129,7 +129,6 @@ flowchart TB
 
     subgraph Integrations["外部連携モジュール"]
         JC["JenkinsClient<br/>(jenkins_client.py)"]
-        GS["GitService<br/>(git_service.py)"]
         TEAMS["TeamsService<br/>(teams_service.py)"]
         ENV["EnvironmentScan<br/>(environment_scan.py)"]
         LC["LocalCI<br/>(local_ci.py)"]
@@ -151,13 +150,12 @@ flowchart TB
     STEPS & DET & SYNC & DLG --> REPO
     OPS --> DEPS
     DLG --> DEPS
-    DEPS --> JC & GS & TEAMS & ENV & LC
+    DEPS --> JC & TEAMS & ENV & LC
     REPO --> MODELS & PATHS & TS & JFG
     PS --> TS
     REPO -->|save_all / extract| CIDIR
     JFG -->|Jenkinsfile 生成| CIDIR
     JC -->|API| JENKINS
-    GS -->|push| GIT
     TEAMS -->|テスト送信| TEAMSCH
     LC -->|ci-build/ci-test| CIDIR
     JENKINS -->|clone/checkout| GIT
@@ -174,7 +172,7 @@ flowchart TB
 - **`ConfigRepository`** が「ディスクへの読み書き」と「整形・検証・機微情報の分離」を担う。
 - **`TemplateStore`** が同梱テンプレート（`bundled_templates/`）をリポジトリの `CISetup\` 配下へ展開する。
   ソース実行時はパッケージ同梱フォルダ、exe 実行時は `_MEIPASS` から読む。
-- **`JenkinsClient` / `GitService` / `TeamsService`** が外部システムとの通信を担う。
+- **`JenkinsClient` / `TeamsService`** が外部システムとの通信を担う。Git は Jenkins ジョブがアプリソースを checkout するときに使う。
 - 配置後の**ランタイム挙動は Jenkins 上の `ci-*.ps1`** が担い、CISetup アプリは関与しない。
 
 ---
@@ -243,7 +241,6 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `jenkinsfile_generator.py` | テンプレートのプレースホルダ置換で `Jenkinsfile` を生成 | `generate_jenkinsfile`、`build_agent_declaration` |
 | `jenkins_client.py` | Jenkins API（接続・Crumb・資格情報 upsert・ジョブ upsert・ビルド起動・サーバー初回設定）、ファイルサーバー書き込みテスト | `JenkinsClient`、`apply_settings`、`test_file_server_write`、`extract_agent_secret`、`format_jenkins_error` |
 | `teams_service.py` | Teams アダプティブカード（テスト送信）の生成と送信、URL 検証 | `send_test`、`build_test_card_payload`、`validate_url`、`normalize_url` |
-| `git_service.py` | CI ファイルのみの add/commit/push、auto-sync（pull --rebase）、secrets/local のステージ検出 | `push_ci_files`、`contains_staged_secrets`、`contains_staged_local`、`DEFAULT_COMMIT_MESSAGE` |
 | `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1` をローカルで実行（git 操作なし）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
 | `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins サービスの有無チェック | `scan`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
@@ -262,13 +259,12 @@ cisetup/gui/
   repository.py       … RepositoryMixin（設定の読み書き・プロジェクト切替）
   presets.py          … PresetMixin（プリセット適用）
   file_picks.py       … FilePickMixin（フォルダ・ファイル選択）
-  dialogs.py          … DialogMixin（確認・エラー表示・コミット前確認）
+  dialogs.py          … DialogMixin（確認・エラー表示）
   constants.py        … 環境チェック用リンク定数
   util.py             … DPI 有効化・safe_int 等
   deps.py             … 外部依存の集約（テスト patch 用）
   multi_value_field.py … ＋/− で増減する複数入力欄（書き込み先・URL）
   layout.py           … 配色・共通ウィジェット・DPI 倍率フォント
-  commit_dialog.py    … コミットメッセージ入力ダイアログ
   tooltip.py          … `help_icon`（「?」）とホバー時のヘルプ吹き出し
   steps/
     intro.py          … IntroStepsMixin（はじめての方へ・環境チェック・プリセット）
@@ -276,7 +272,7 @@ cisetup/gui/
   details/
     panels.py         … DetailsMixin（詳細設定 Expander）
   actions/
-    ops.py            … ActionsMixin（保存・Jenkins・Git・セットアップ実行等）
+    ops.py            … ActionsMixin（保存・Jenkins・セットアップ実行等）
 ```
 
 | モジュール | 役割 | 主要なクラス / 関数 |
@@ -285,15 +281,14 @@ cisetup/gui/
 | `steps/intro.py` | 冒頭カード（初心者向け・環境スキャン・プリセット） | `IntroStepsMixin` |
 | `steps/workflow.py` | ①フォルダ〜⑥実行のメインフロー（③保存先・④ Teams 含む） | `WorkflowStepsMixin` |
 | `details/panels.py` | 詳細設定 Expander 内の追加項目 | `DetailsMixin` |
-| `actions/ops.py` | 保存のみ・セットアップ実行・Jenkins 反映・Git push・ローカル CI 等 | `ActionsMixin` |
+| `actions/ops.py` | 保存のみ・セットアップ実行・Jenkins 反映・ローカル CI 等 | `ActionsMixin` |
 | `form_sync.py` | フォーム値と `CISetupConfig` の相互変換、パスプレビュー | `FormSyncMixin` |
 | `fields.py` | ラベル付き入力欄・チェックボックスの生成 | `FieldMixin` |
 | `repository.py` | `ConfigRepository` 経由の読み込み・保存・最近使ったプロジェクト | `RepositoryMixin` |
 | `dialogs.py` | 非同期ダイアログ・確認・ステータスバー | `DialogMixin` |
-| `deps.py` | Jenkins / Git / Teams / 環境スキャン等の外部呼び出し集約 | モジュール属性（`JenkinsClient`、`apply_settings`、`git_service` 等） |
+| `deps.py` | Jenkins / Teams / 環境スキャン等の外部呼び出し集約 | モジュール属性（`JenkinsClient`、`apply_settings` 等） |
 | `multi_value_field.py` | 書き込み先ベースパス・Teams URL 等の複数行入力 | `MultiValueField` |
 | `layout.py` | 配色定数・カード/ボタン/スクロール/Expander・フォント | `card`、`button`、`ScrollableFrame`、`Expander`、`font` |
-| `commit_dialog.py` | コミットメッセージ入力 | `prompt_commit_message`、`CommitMessageDialog` |
 | `tooltip.py` | ツールチップ | `attach_tooltip`、`ToolTip` |
 | `__init__.py` | `run_app` / `ConfigureApp` の再公開 | — |
 
@@ -360,7 +355,6 @@ flowchart LR
     subgraph Services["cisetup コア"]
         REPO["ConfigRepository"]
         JC["jenkins_client"]
-        GS["git_service"]
         TS["teams_service"]
         LC["local_ci"]
         ES["environment_scan"]
@@ -369,7 +363,7 @@ flowchart LR
     W & I & D --> F
     F --> REPO
     OPS & DLG --> DEPS
-    DEPS --> JC & GS & TS & LC & ES
+    DEPS --> JC & TS & LC & ES
     OPS --> REPO
 ```
 
@@ -581,7 +575,7 @@ secrets（`git_username`、未設定時のみ）へ退避する。
 
 > 補足: `.gitignore` には `CISetup/cisetup.secrets.local.json` と `CISetup/cisetup.local.json`
 > （およびルート直下の旧名）が自動追記される（`template_store._ensure_secrets_gitignore`）。
-> `git_service.push_ci_files` もステージから自動的に外すため、万一 ignore 漏れでも push されない（[9.5](#95-git-push)）。
+> GUI から顧客 Git へ CI 定義を push する機能はない。Jenkins はジョブ内蔵のパイプラインで動く。
 
 ---
 
@@ -704,7 +698,7 @@ GUI 表示用に代表（先頭の書き込み先）のレイアウト例を返�
 | ③ | 成果物・ログの保存先 | 書き込み先ベース（複数可）/ 共有フォルダルート（CI_FILE_SERVER・複数可）/ カテゴリ別「保存フォルダ名」（logs / releases / analysis / tests / source）と有効チェック / 日付フォルダ / プレビュー / 格納先フォルダ作成 / エージェント兄弟パス / CI_FILE_SERVER グローバル登録 |
 | ④ | Teams 通知 | Webhook URL / ③ と同じカテゴリ表示名の閲覧 URL（logs / releases / analysis / tests / source、各複数可）/ テスト送信 |
 | ⑤ | Jenkins への接続 | Jenkins URL / ユーザー名 / API Token / 接続テスト |
-| ⑥ | セットアップを実行 | 5 チェックボックス（保存 / ローカルでビルド＆テスト / Jenkins 反映 / Git push / テストビルド）+ 実行ボタン + 「設定だけ保存」 + publish チェック + ローカル実行ログ欄 |
+| ⑥ | セットアップを実行 | 4 チェックボックス（保存 / ローカルでビルド＆テスト / Jenkins 反映 / テストビルド）+ 実行ボタン + 「設定だけ保存」 + publish チェック + ローカル実行ログ欄 |
 | — | 詳細設定（Expander） | ビルド種別 / 自動入力項目 / CI ジョブ / Jenkins サーバー初回設定 / 手動操作 |
 | — | ステータスバー | 状態表示 |
 
@@ -751,10 +745,10 @@ stateDiagram-v2
 ### 8.6 非同期実行とエラー表示
 
 各アクションは `DialogMixin._run_async` でデーモンスレッド実行し、例外（`ValueError` / `deps.JenkinsError` /
-`deps.LocalCIError` / `deps.git_service.GitError` / `OSError`）を捕捉して `deps.messagebox.showerror` と
+`deps.LocalCIError` / `OSError`）を捕捉して `deps.messagebox.showerror` と
 ステータスへ反映する。メッセージに「書き込み先ベース」を含む場合は ③ 保存先の書き込み先ベース欄へ
 フォーカスする（`DialogMixin._focus_storage_paths`）。
-確認ダイアログ・コミット入力はメインスレッドへ `after` でマーシャリングし、`threading.Event` で待つ。
+確認ダイアログはメインスレッドへ `after` でマーシャリングし、`threading.Event` で待つ。
 
 ### 8.7 ソース構成（Mixin 分割）
 
@@ -765,9 +759,9 @@ stateDiagram-v2
 | シェル | `app.py` | ウィンドウ初期化・Mixin 合成・`_build_ui` 配線 |
 | 画面 | `steps/intro.py` / `steps/workflow.py` | 冒頭カード・①〜⑥ UI |
 | 詳細 | `details/panels.py` | 詳細設定 Expander |
-| 操作 | `actions/ops.py` | 保存・Jenkins 反映・Git push・セットアップ実行 |
+| 操作 | `actions/ops.py` | 保存・Jenkins 反映・セットアップ実行 |
 | 横断 | `fields.py` / `form_sync.py` / `repository.py` 等 | 入力欄・モデル同期・プロジェクト読込 |
-| 依存 | `deps.py` | Jenkins / Git / Teams / 環境スキャン / `messagebox` の集約 |
+| 依存 | `deps.py` | Jenkins / Teams / 環境スキャン / `messagebox` の集約 |
 
 `actions/ops.py` と `dialogs.py` は `from . import deps` 経由で外部モジュールを呼び出す。
 テストでは `cisetup.gui.deps` を monkeypatch すれば、操作系のモックが一括で効く。
@@ -839,12 +833,13 @@ sequenceDiagram
 
 ### 9.2 「セットアップを実行」フロー（⑥）
 
-チェックボックスの既定は **保存=ON / ローカルでビルド＆テスト=ON / Jenkins 反映=ON / Git push=OFF / テストビルド=ON**。
-CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は不要（既定 OFF）。
-内部の実行順は常に **保存 → ローカル → Jenkins 反映 → Git push → テストビルド**（チェックされたものだけ）。
+チェックボックスの既定は **保存=ON / ローカルでビルド＆テスト=ON / Jenkins 反映=ON / テストビルド=ON**。
+CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は行わない。
+内部の実行順は常に **保存 → ローカル → Jenkins 反映 → テストビルド**（チェックされたものだけ）。
 
-重要: **Jenkins 反映または Git push が選ばれている場合、保存を強制的に ON にする**
-（古い定義のまま push/反映するのを防ぐため）。
+重要: **Jenkins 反映が選ばれている場合、保存を強制的に ON にする**
+（古い定義のまま反映するのを防ぐため）。Jenkins 反映時はアプリソースの checkout 用に
+`repositoryUrl` も必須。
 
 **ローカルでビルド＆テスト**（`local` ステップ）は、配置済みの `CISetup\scripts\ci-build.ps1` →
 `ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する**純粋なローカル処理**。
@@ -862,23 +857,19 @@ sequenceDiagram
     participant Deps as gui.deps
     participant Repo as ConfigRepository
     participant JC as jenkins_client
-    participant GS as git_service
     participant LC as local_ci
 
     U->>App: 「セットアップを実行」
     App->>Ops: _run_setup()
     Ops->>App: _form_to_config()
-    Ops->>Ops: do_save/do_local/do_jenkins/do_push/do_build を取得
+    Ops->>Ops: do_save/do_local/do_jenkins/do_build を取得
     Note over Ops: 1つも未選択なら ValueError
-    Ops->>Ops: if do_jenkins or do_push → do_save = True (強制保存)
+    Ops->>Ops: if do_jenkins → do_save = True (強制保存)
     Ops->>Ops: _confirm_test_project()
     Ops->>Ops: do_jenkins/do_build なら _require_jenkins_secrets()
-    Ops->>Ops: do_push なら repositoryUrl 必須
+    Ops->>Ops: do_jenkins なら repositoryUrl 必須
     Ops->>U: 実行プラン確認ダイアログ
-    alt do_push
-        Ops->>U: コミットメッセージ入力
-    end
-    loop steps を順に (save→local→jenkins→push→build)
+    loop steps を順に (save→local→jenkins→build)
         alt save
             Ops->>Repo: save_all(root, config, secrets)
         else local
@@ -887,16 +878,13 @@ sequenceDiagram
         else jenkins
             Ops->>Deps: apply_settings(...)
             Deps->>JC: apply_settings(config, secrets)
-        else push
-            Ops->>Deps: git_service.push_ci_files(...)
-            Deps->>GS: push_ci_files(root, commit_message)
         else build
             Ops->>Ops: _build_now()
             Ops->>Deps: JenkinsClient.trigger_build(...)
             Deps->>JC: trigger_build(...)
         end
     end
-    Ops->>U: 完了通知 (push 未実行なら注意文)
+    Ops->>U: 完了通知
 ```
 
 `_build_now` は `JenkinsClient.trigger_build(job_name, publish_var)` を呼ぶ。`publish_var` は
@@ -989,48 +977,11 @@ sequenceDiagram
 空値（Webhook 未設定・Git ユーザー名未設定）はスキップする。HTTP エラーは
 `format_jenkins_error` で 401/403 を分かりやすい日本語メッセージに整形する。
 
-### 9.5 Git push
+### 9.5 Git（顧客リポジトリの checkout のみ）
 
-```mermaid
-sequenceDiagram
-    participant App as ConfigureApp
-    participant Ops as ActionsMixin
-    participant Deps as gui.deps
-    participant GS as git_service
-    participant G as git CLI
-
-    App->>Ops: _git_push()
-    Ops->>Ops: _confirm_test_project / 確認ダイアログ / コミットメッセージ
-    Ops->>Ops: save_all (最新の定義を生成)
-    Ops->>Deps: git_service.push_ci_files(...)
-    Deps->>GS: push_ci_files(root, message)
-    GS->>G: git add cisetup [.gitignore]
-    GS->>G: git diff --cached --name-only
-    alt cisetup.local.json がステージ
-        GS->>G: git reset HEAD -- cisetup.local.json (静かに除外)
-    end
-    alt cisetup.secrets.local.json がステージ
-        GS->>G: git reset HEAD -- secrets
-        GS-->>App: GitError (secrets は push しない)
-    end
-    alt 変更なし
-        GS-->>App: GitError (commit する変更がありません)
-    end
-    GS->>G: git commit -m message
-    GS->>G: git push
-    alt non-fast-forward で拒否
-        GS->>G: git pull --rebase
-        alt rebase 失敗
-            GS->>G: git rebase --abort
-            GS-->>App: GitError (手動解決を促す)
-        else
-            GS->>G: git push (再試行)
-        end
-    end
-```
-
-`_run_git` は `GIT_TERMINAL_PROMPT=0` 等で対話を抑止し、ローカル操作 30 秒 / リモート 120 秒で
-タイムアウトする。`add` 対象は `cisetup`（と存在すれば `.gitignore`）のみで、リポジトリ全体は触らない。
+GUI から顧客 Git へ CI 定義を commit / push する機能はない（`git_service` は廃止）。
+② で入力する Git URL / ブランチ / 認証は、Jenkins ジョブがアプリソースを checkout するためだけに使う。
+`cisetup.local.json` と secrets は `.gitignore` により Git 非追跡のまま残る。
 
 ### 9.6 Jenkins 上の CI パイプライン実行
 
@@ -1263,8 +1214,8 @@ CISetup-<Version>/
 | フレームワーク | `pytest`（`tests/` 配下、`conftest.py` で `ROOT` を `sys.path` に追加、`sln_repo` フィクスチャ提供） |
 | カバレッジ | `.coveragerc`（`source=cisetup`、`branch=True`、`show_missing`） |
 | GUI テスト | `tkinter` を `importorskip`、ディスプレイ不可なら skip。`ConfigureApp` を生成し `withdraw()`、ダイアログ/通知をモンキーパッチで無効化 |
-| 外部依存のモック | `cisetup.gui.deps` を patch（`JenkinsClient` / `apply_settings` / `git_service.push_ci_files` / `teams_service.send_test` / `run_local_ci` / `env_scan.scan` / `messagebox` 等）。`FakeClient` で Jenkins API を差し替え |
-| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序と強制保存（`test_run_setup_push_forces_save`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
+| 外部依存のモック | `cisetup.gui.deps` を patch（`JenkinsClient` / `apply_settings` / `teams_service.send_test` / `run_local_ci` / `env_scan.scan` / `messagebox` 等）。`FakeClient` で Jenkins API を差し替え |
+| 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序と強制保存（`test_run_setup_jenkins_forces_save`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
 | 代表的なテストファイル | `test_gui_actions.py` / `test_repository_setup_templates.py` / `test_models.py` / `test_paths_presets_generator.py` / `test_jenkins_client.py` / `test_teams_service.py` / `test_git_env_recent.py` / `test_configure_cli.py` / `test_app_paths.py` / `test_exe_freshness.py` |
 | 補助 | `tools\smoke_test.py`（C# 版との JSON 互換などの素早い確認） |
 
@@ -1276,8 +1227,8 @@ CISetup-<Version>/
   できない。書き込み先は UNC / ローカル（同期済みフォルダ）を指定し、共有 URL は閲覧用（`*_urls`）に入れる。
 - **`Jenkinsfile` の `CI_FILE_SERVER` 既定値は単一**: 複数書き込み先のうち先頭が既定値になる。ただし
   個人 ID 入りの値はコミット前に空へ退避されるため、通常は空（= `cisetup.local.json` / Jenkins 側から取得）。
-- **`cisetup.local.json` / secrets は `.gitignore` 登録 + push 時除外**: 保存時に ignore へ追記し、
-  `push_ci_files` もステージから外す。閲覧 URL の変更だけでは Git への再コミットは不要。
+- **`cisetup.local.json` / secrets は `.gitignore` 登録**: 保存時に ignore へ追記する。
+  閲覧 URL の変更だけでは顧客 Git への再コミットは不要（CI 定義は Jenkins ジョブ内蔵）。
 - **アプリ本体・CI パイプラインとも Windows/Linux 両対応**: CISetup 自体（GUI・Jenkins/Git/Teams
   設定）は `tkinter` + 標準ライブラリのみで Linux でも動作し、生成・配置する `ci-*.ps1` も
   Windows PowerShell 5.1 / PowerShell 7 (`pwsh`) の両方で動く。`Jenkinsfile` が `isUnix()` で
@@ -1327,7 +1278,7 @@ CISetup-<Version>/
 |----------|----------------|
 | GUI 画面順・ステップ番号 | [8.1](#81-画面構成)、[8.8 画面フロー図](#87-ソース構成mixin-分割)、[15.1](#151-設定値--json-早見表)、[docs/GUI.md](GUI.md) / [CI-GUIDE.md](CI-GUIDE.md) 9 章 |
 | Mixin / モジュール追加・分割 | [5.2](#52-gui-サブパッケージcisetupgui)、[5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[3.1](#31-コンポーネント図)、[8.7](#87-ソース構成mixin-分割) |
-| 外部 API 呼び出し経路 | [5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[9.2](#92-セットアップを実行フロー⑥)〜[9.5](#95-git-push)、[13](#13-テスト戦略)（`deps` patch） |
+| 外部 API 呼び出し経路 | [5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[9.2](#92-セットアップを実行フロー⑥)〜[9.5](#95-git顧客リポジトリの-checkout-のみ)、[13](#13-テスト戦略)（`deps` patch） |
 | 保存先ルール・local.json | [7.4](#74-save_all-の処理順)、[7.5](#75-書き込み先の実効ルートと後勝ち) |
 | CI パイプライン段階 | [9.6](#96-jenkins-上の-ci-パイプライン実行)、[10 章](#10-ci-パイプライン詳細) |
 | exe 同梱範囲 | [11 章](#11-ビルド配布) |

@@ -15,7 +15,6 @@ if str(ROOT) not in sys.path:
 from cisetup import (
     config_repository,
     environment_scan,
-    git_service,
     help_texts,
     jenkins_client,
     teams_service,
@@ -79,11 +78,7 @@ check("401 整形", "401" in jenkins_client.format_jenkins_error(401, ""))
 jnlp = "<jnlp><application-desc><argument>-secret</argument><argument>abc123</argument></application-desc></jnlp>"
 check("JNLP secret 抽出", jenkins_client.extract_agent_secret(jnlp) == "abc123")
 
-# 6. git secrets guard
-check("secrets ステージ検出", git_service.contains_staged_secrets("cisetup/cisetup.secrets.local.json"))
-check("通常ファイルは非検出", not git_service.contains_staged_secrets("cisetup/cisetup.config.json"))
-
-# 7. save_all -> camelCase ファイル生成 + Jenkinsfile
+# 6. save_all -> camelCase ファイル生成 + Jenkinsfile
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     (root / "YourProject.sln").write_text("dummy", encoding="utf-8")

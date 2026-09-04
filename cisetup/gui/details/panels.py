@@ -299,15 +299,11 @@ class DetailsMixin:
         specs = [
             ("保存のみ", self._save_only),
             ("Jenkins に反映のみ", self._apply_jenkins),
-            ("Git push のみ", self._git_push),
             ("今すぐビルド", self._build_now),
             ("再読み込み", self._reload),
         ]
         for text, func in specs:
             btn = button(wrap, text, lambda f=func: self._run_async(f), padx=16)
-            if text == "Git push のみ":
-                self._git_push_btn = btn
-                btn.configure(state=tk.DISABLED)
             btn.pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))
     def _build_statusbar(self, parent: tk.Frame) -> None:
         bar = tk.Frame(parent, bg=COLOR_WINDOW_BG)

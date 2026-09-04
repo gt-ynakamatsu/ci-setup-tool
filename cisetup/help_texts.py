@@ -377,10 +377,10 @@ JENKINS_AGENT_ROOT = (
 LOCAL_BUILD_TEST = (
     "【何を】配置済みの ci-build.ps1 / ci-test.ps1 をこの PC でそのまま実行し、"
     "現在のローカルコード（作業コピー）をビルド＆テストします\n"
-    "【なぜ】push 前に手元の変更が通るか確認し、壊れたコードをリモートに送らないため\n"
-    "【git 操作なし】fetch / pull / push を一切行いません。push 前に手元の変更を確認する用途です\n"
-    "【テストビルドとの違い】「テストビルド」は Jenkins がリモート Git のコードをビルド。"
-    "こちらは push せずにローカルのコードを検証します\n"
+    "【なぜ】Jenkins を待たずに手元の変更が通るか確認するため\n"
+    "【git 操作なし】fetch / pull / push を一切行いません\n"
+    "【テストビルドとの違い】「テストビルド」は Jenkins が顧客 Git のアプリソースを checkout してビルド。"
+    "こちらは手元の作業コピーを検証します\n"
     "【おすすめ】先に「設定を保存」を実行すると最新のスクリプトで検証できます\n"
     "【実行内容】cisetup\\scripts\\ci-build.ps1 → ci-test.ps1"
     "（ビルドが失敗したらテストは実行しません）"
@@ -402,12 +402,6 @@ STEP_JENKINS = (
     "【何を】Jenkins ジョブにパイプライン一式（スクリプト・設定・checkout）を内蔵し、"
     "Credentials・トリガーもサーバーへ反映します\n"
     "【なぜ】顧客 Git に CI 定義を置かず、Jenkins 内部だけで CI を回すため"
-)
-
-STEP_PUSH = (
-    "【何を】（任意）アプリのソースなど、Git へ上げたい変更を push します\n"
-    "【通常は不要】CI の Jenkinsfile / スクリプト / 閲覧 URL は Jenkins ジョブ側で完結します。"
-    "顧客リポジトリへ CI 定義を載せる必要はありません"
 )
 
 STEP_BUILD = (

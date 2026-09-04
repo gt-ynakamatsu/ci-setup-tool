@@ -5,7 +5,7 @@ from __future__ import annotations
 from tkinter import messagebox
 
 from .. import environment_scan as env_scan
-from .. import git_service, teams_service
+from .. import teams_service
 from ..jenkins_client import (
     JenkinsClient,
     JenkinsError,
@@ -20,7 +20,6 @@ __all__ = [
     "LocalCIError",
     "apply_settings",
     "env_scan",
-    "git_service",
     "messagebox",
     "run_local_ci",
     "teams_service",

@@ -15,7 +15,6 @@ class ActionsMixin:
         state = tk.NORMAL if has_root else tk.DISABLED
         self._redetect_btn.configure(state=state)
         self._redeploy_btn.configure(state=state)
-        self._git_push_btn.configure(state=state)
     def _ensure_repo(self) -> Path:
         if self._repository_root is None:
             raise ValueError("先にプロジェクトフォルダを選んでください。")
@@ -170,26 +169,6 @@ class ActionsMixin:
         self._info("格納先フォルダを作成", "\n".join(lines))
         self._set_status(f"格納先フォルダを作成しました（{len(result.created)} 件）")
         self._update_teams_url_states()
-    def _git_push(self) -> None:
-        root = self._ensure_repo()
-        self._form_to_config()
-        if not self._confirm_test_project():
-            self._set_status("push を中断しました（テスト対象を設定してください）")
-            return
-        if not self._ask(
-            "Git push",
-            "CI 関連ファイルだけ commit / push します。\n"
-            "cisetup.secrets.local.json は含めません。\n\n続行しますか？",
-        ):
-            return
-        commit_message = self._prompt_commit()
-        if commit_message is None:
-            return
-        self._repo.save_all(root, self._config, self._secrets)
-        self._sync_saved_fields()
-        staged = deps.git_service.push_ci_files(root, commit_message)
-        self._info("Git push", f"Git push が完了しました。\n\n{staged}")
-        self._set_status("Git push 完了")
     def _run_setup(self) -> None:
         root = self._ensure_repo()
         self._form_to_config()
@@ -198,14 +177,13 @@ class ActionsMixin:
         do_local = self._step_local_var.get()
         do_jenkins = self._step_jenkins_var.get()
         do_build = self._step_build_var.get()
-        do_push = self._step_push_var.get()
-        if not (do_save or do_local or do_jenkins or do_build or do_push):
+        if not (do_save or do_local or do_jenkins or do_build):
             raise ValueError("実行する処理を 1 つ以上選んでください。")
-        # 「Jenkins に反映」「Git push」は最新のローカル保存（config.json / Jenkinsfile / scripts 再生成）が
-        # 前提。単独の各ボタンと同様に必ず保存してから実行する（保存をスキップすると古い定義のまま
-        # push / 反映されてしまうため）。「ローカルでビルド＆テスト」は配置済みスクリプトをそのまま
-        # 実行する純粋なローカル処理のため、保存は強制しない（git 操作も Jenkins も使わない）。
-        if do_jenkins or do_push:
+        # 「Jenkins に反映」は最新のローカル保存（config.json / 作業用 scripts 再生成）が前提。
+        # 単独の各ボタンと同様に必ず保存してから実行する。
+        # 「ローカルでビルド＆テスト」は配置済みスクリプトをそのまま実行する純粋なローカル処理のため、
+        # 保存は強制しない（Jenkins も使わない）。
+        if do_jenkins:
             do_save = True
 
         if (do_save or do_local or do_jenkins or do_build) and not self._confirm_test_project():
@@ -213,8 +191,8 @@ class ActionsMixin:
             return
         if do_jenkins or do_build:
             self._require_jenkins_secrets()
-        if do_push and not self._config.git.repository_url.strip():
-            raise ValueError("Git リポジトリ URL を入力してください。")
+        if do_jenkins and not self._config.git.repository_url.strip():
+            raise ValueError("Git リポジトリ URL を入力してください（Jenkins がアプリソースを checkout します）。")
 
         steps: list[tuple[str, str]] = []
         if do_save:
@@ -223,20 +201,12 @@ class ActionsMixin:
             steps.append(("local", "ローカルでビルド＆テスト"))
         if do_jenkins:
             steps.append(("jenkins", "Jenkins に反映"))
-        if do_push:
-            steps.append(("push", "Git push"))
         if do_build:
             steps.append(("build", "テストビルドを実行"))
 
         plan = "\n".join(f"  {i}. {label}" for i, (_, label) in enumerate(steps, 1))
         if not self._ask("セットアップを実行", f"次を順番に実行します。\n\n{plan}\n\n続行しますか？"):
             return
-
-        commit_message = None
-        if do_push:
-            commit_message = self._prompt_commit()
-            if commit_message is None:
-                return
 
         total = len(steps)
         for index, (kind, label) in enumerate(steps, 1):
@@ -250,18 +220,14 @@ class ActionsMixin:
                 deps.apply_settings(self._config, self._secrets)
             elif kind == "build":
                 self._build_now()
-            elif kind == "push":
-                deps.git_service.push_ci_files(root, commit_message)
 
         self._set_status("セットアップが完了しました。")
         done = "\n".join(f"・{label}" for _, label in steps)
-        suffix = (
-            ""
-            if do_push
-            else "\n\nGit push は実行していません。"
-            "CI は Jenkins ジョブに内蔵されるため、CI 定義を顧客 Git へ push する必要はありません。"
+        self._info(
+            "セットアップ",
+            f"選択した処理が完了しました:\n\n{done}\n\n"
+            "CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を載せる必要はありません。",
         )
-        self._info("セットアップ", f"選択した処理が完了しました:\n\n{done}{suffix}")
     def _run_local_build_test(self, root: Path) -> None:
         """配置済み ci-build.ps1 → ci-test.ps1 をローカルで実行する（git 操作なし）。
 
