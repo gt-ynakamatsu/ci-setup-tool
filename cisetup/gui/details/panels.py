@@ -298,6 +298,7 @@ class DetailsMixin:
         wrap.pack(anchor="w")
         specs = [
             ("保存のみ", self._save_only),
+            ("ローカルでビルド＆テスト", self._local_build_test_only),
             ("Jenkins に反映のみ", self._apply_jenkins),
             ("今すぐビルド", self._build_now),
             ("再読み込み", self._reload),

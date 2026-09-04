@@ -386,11 +386,11 @@ class WorkflowStepsMixin:
         section_title(frame, "⑥ セットアップを実行", COLOR_RUN_TITLE).pack(anchor="w", pady=(0, 6))
         tk.Label(
             frame,
-            text="チェックした処理だけを上から順番に実行します。\n"
-            "CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を載せる必要はありません。\n"
-            "「テストビルド」は Jenkins が顧客 Git からアプリソースを checkout してビルドします。\n"
-            "「ローカルでビルド＆テスト」は git 操作なしで、この PC 上の作業コピーを検証します。\n"
-            "まず 保存 → Jenkins 反映 で設定を載せ、準備ができたらテストビルドで確認する運用がおすすめです。",
+            text="「セットアップを実行」で次を順番に行います: 設定の保存 → この PC でのビルド＆テスト →\n"
+            "Jenkins に反映 → テストビルド。CI の手順は Jenkins ジョブに内蔵されるため、"
+            "顧客 Git へ CI 定義を載せる必要はありません。\n"
+            "個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」、"
+            "または詳細設定の手動操作を使ってください。",
             font=font(12),
             fg="#555555",
             bg=COLOR_RUN_BG,
@@ -398,33 +398,6 @@ class WorkflowStepsMixin:
             justify=tk.LEFT,
             wraplength=self._px(860),
         ).pack(anchor="w", pady=(0, 12))
-
-        self._step_save_var = tk.BooleanVar(value=True)
-        self._step_local_var = tk.BooleanVar(value=True)
-        self._step_jenkins_var = tk.BooleanVar(value=True)
-        self._step_build_var = tk.BooleanVar(value=True)
-        options = tk.Frame(frame, bg=COLOR_RUN_BG)
-        options.pack(anchor="w", pady=(0, 12))
-        for text, var, help_text in (
-            ("1. 設定を保存", self._step_save_var, help_texts.STEP_SAVE),
-            ("ローカルでビルド＆テスト（この PC のコードを検証）", self._step_local_var, help_texts.LOCAL_BUILD_TEST),
-            ("2. Jenkins に反映", self._step_jenkins_var, help_texts.STEP_JENKINS),
-            ("3. テストビルドを実行", self._step_build_var, help_texts.STEP_BUILD),
-        ):
-            opt_row = tk.Frame(options, bg=COLOR_RUN_BG)
-            opt_row.pack(anchor="w")
-            cb = tk.Checkbutton(
-                opt_row,
-                text=text,
-                variable=var,
-                font=font(12),
-                bg=COLOR_RUN_BG,
-                activebackground=COLOR_RUN_BG,
-                anchor="w",
-            )
-            cb.pack(side=tk.LEFT)
-            if help_text:
-                help_icon(opt_row, help_text, bg=COLOR_RUN_BG).pack(side=tk.LEFT, padx=(4, 0))
 
         row = tk.Frame(frame, bg=COLOR_RUN_BG)
         row.pack(anchor="w")
@@ -435,6 +408,15 @@ class WorkflowStepsMixin:
             row,
             "設定だけ保存",
             lambda: self._run_async(self._save_only),
+            size_px=15,
+            padx=20,
+            pady=10,
+            bold=False,
+        ).pack(side=tk.LEFT, padx=(10, 0))
+        button(
+            row,
+            "ローカルでビルド＆テスト",
+            lambda: self._run_async(self._local_build_test_only),
             size_px=15,
             padx=20,
             pady=10,

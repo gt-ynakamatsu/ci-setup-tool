@@ -172,38 +172,19 @@ class ActionsMixin:
     def _run_setup(self) -> None:
         root = self._ensure_repo()
         self._form_to_config()
-
-        do_save = self._step_save_var.get()
-        do_local = self._step_local_var.get()
-        do_jenkins = self._step_jenkins_var.get()
-        do_build = self._step_build_var.get()
-        if not (do_save or do_local or do_jenkins or do_build):
-            raise ValueError("実行する処理を 1 つ以上選んでください。")
-        # 「Jenkins に反映」は最新のローカル保存（config.json / 作業用 scripts 再生成）が前提。
-        # 単独の各ボタンと同様に必ず保存してから実行する。
-        # 「ローカルでビルド＆テスト」は配置済みスクリプトをそのまま実行する純粋なローカル処理のため、
-        # 保存は強制しない（Jenkins も使わない）。
-        if do_jenkins:
-            do_save = True
-
-        if (do_save or do_local or do_jenkins or do_build) and not self._confirm_test_project():
+        if not self._confirm_test_project():
             self._set_status("セットアップを中断しました（テスト対象を設定してください）")
             return
-        if do_jenkins or do_build:
-            self._require_jenkins_secrets()
-        if do_jenkins and not self._config.git.repository_url.strip():
+        self._require_jenkins_secrets()
+        if not self._config.git.repository_url.strip():
             raise ValueError("Git リポジトリ URL を入力してください（Jenkins がアプリソースを checkout します）。")
 
-        steps: list[tuple[str, str]] = []
-        if do_save:
-            steps.append(("save", "設定を保存"))
-        if do_local:
-            steps.append(("local", "ローカルでビルド＆テスト"))
-        if do_jenkins:
-            steps.append(("jenkins", "Jenkins に反映"))
-        if do_build:
-            steps.append(("build", "テストビルドを実行"))
-
+        steps: list[tuple[str, str]] = [
+            ("save", "設定を保存"),
+            ("local", "ローカルでビルド＆テスト"),
+            ("jenkins", "Jenkins に反映"),
+            ("build", "テストビルドを実行"),
+        ]
         plan = "\n".join(f"  {i}. {label}" for i, (_, label) in enumerate(steps, 1))
         if not self._ask("セットアップを実行", f"次を順番に実行します。\n\n{plan}\n\n続行しますか？"):
             return
@@ -225,9 +206,18 @@ class ActionsMixin:
         done = "\n".join(f"・{label}" for _, label in steps)
         self._info(
             "セットアップ",
-            f"選択した処理が完了しました:\n\n{done}\n\n"
+            f"次の処理が完了しました:\n\n{done}\n\n"
             "CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を載せる必要はありません。",
         )
+    def _local_build_test_only(self) -> None:
+        root = self._ensure_repo()
+        self._form_to_config()
+        if not self._confirm_test_project():
+            self._set_status("ローカルビルド＆テストを中断しました（テスト対象を設定してください）")
+            return
+        self._run_local_build_test(root)
+        self._set_status("ローカルビルド＆テストが完了しました")
+        self._info("ローカルでビルド＆テスト", "この PC でのビルド＆テストが完了しました。")
     def _run_local_build_test(self, root: Path) -> None:
         """配置済み ci-build.ps1 → ci-test.ps1 をローカルで実行する（git 操作なし）。
 
