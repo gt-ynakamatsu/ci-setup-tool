@@ -69,14 +69,13 @@ cisetup/
 ├── cisetup/           … アプリ本体（package）
 │   ├── gui/                 … Tkinter GUI（Mixin 分割）
 │   │   ├── app.py           … シェル（ConfigureApp 合成・UI 配線）
-│   │   ├── deps.py          … 外部依存集約（Jenkins/Git/Teams 等・テスト patch 用）
+│   │   ├── deps.py          … 外部依存集約（Jenkins/Teams 等・テスト patch 用）
 │   │   ├── fields.py / form_sync.py / repository.py / presets.py / file_picks.py / dialogs.py
 │   │   ├── steps/           … intro.py（冒頭）/ workflow.py（①〜⑥）
 │   │   ├── details/panels.py … 詳細設定 Expander
-│   │   ├── actions/ops.py   … 保存・Jenkins・Git・セットアップ実行
+│   │   ├── actions/ops.py   … 保存・Jenkins・セットアップ実行
 │   │   ├── layout.py        … 配色・共通ウィジェット
 │   │   ├── multi_value_field.py … ＋/− 複数入力欄
-│   │   ├── commit_dialog.py … コミットメッセージ入力
 │   │   └── tooltip.py       … 「?」ヘルプアイコンと吹き出し
 │   ├── models.py            … 設定/シークレットのデータモデル + JSON 変換（camelCase）
 │   ├── config_repository.py … 設定の保存・読込（標準/旧レイアウト対応）
@@ -87,7 +86,6 @@ cisetup/
 │   ├── ci_preset_catalog.py … ビルドプリセット定義（.NET / Python など）
 │   ├── jenkins_client.py    … Jenkins API（接続/認証情報/ジョブ/エージェント/ビルド）
 │   ├── teams_service.py     … Teams 通知カードの生成・送信
-│   ├── git_service.py       … Git push・secrets ステージ検出
 │   ├── local_ci.py          … ローカルでビルド＆テスト（ci-build/ci-test を実行・git 操作なし）
 │   ├── environment_scan.py  … 開発環境スキャン（git/java 等）
 │   ├── recent_project.py    … 直近プロジェクトの記憶

@@ -111,7 +111,7 @@ Jenkins 導入・Teams Webhook・アプリ操作をスライド形式で網羅�
 
 ■ プロジェクトごと（毎回・アプリだけで完結）
   □ 8. exe ①〜⑤ を入力（フォルダ/Git/保存先/Teams/Jenkins接続）（9章）
-  □ 9. exe ⑥「セットアップを実行」（保存→Jenkins反映→Git push）（9章）
+  □ 9. exe ⑥「セットアップを実行」（保存→Jenkins反映）（9章）
   □ 10. テストビルドで Teams 通知・成果物を確認（11章）
 ```
 
@@ -233,13 +233,12 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 | **D-3** | 設定アプリ ③ 保存先 = `FILE_SHARE` | 開発 PC | プレビューに UNC パス表示 |
 | **D-4** | 設定アプリ ④ Teams Webhook + **テスト送信** | 開発 PC | Teams にテストカードが届く |
 | **D-5** | 設定アプリ ⑤ 接続テスト（再確認） | 開発 PC | 成功 |
-| **D-6** | 設定アプリ ⑥ **セットアップを実行** | 開発 PC | ダイアログ「セットアップが完了」、Git push 成功（[9章](#9-phase-6--プロジェクトごとの-ci-設定)） |
+| **D-6** | 設定アプリ ⑥ **セットアップを実行** | 開発 PC | ダイアログ「セットアップが完了」（[9章](#9-phase-6--プロジェクトごとの-ci-設定)） |
 
 **D-6 で自動されること**
 
-- `cisetup.config.json` / `cisetup.secrets.local.json` / `Jenkinsfile` 保存
-- Jenkins にジョブ・Credentials 登録
-- CI ファイルのみ Git commit & push（secrets は含めない）
+- `cisetup.config.json` / `cisetup.secrets.local.json` / `cisetup.local.json` 保存
+- Jenkins にジョブ・Credentials 登録（パイプラインはジョブ内蔵。顧客 Git への CI 定義 push はしない）
 
 ---
 
@@ -879,7 +878,7 @@ start_configure.bat
 | **空欄**（既定） | 最初の検証・ノードが1台だけのとき。`agent any` で柔軟に動く |
 | `windows` など固定 | 複数ノードがあり、Windows 専用 PC にだけビルドさせたいとき |
 
-ラベルを後から変えた場合は、**「Jenkins サーバーを初期設定」をもう一度実行**してノードのラベルを更新してください（Jenkinsfile も保存・push が必要）。
+ラベルを後から変えた場合は、**「Jenkins サーバーを初期設定」をもう一度実行**してノードのラベルを更新してください（⑥ で保存・Jenkins 反映も必要）。
 
 ---
 
@@ -1540,18 +1539,17 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 #### ⑥ セットアップを実行（STEP D-6）
 
 1. 画面最下部 **「セットアップを実行」** をクリック
-2. コミットメッセージを入力（既定のままで可）→ OK
-3. 進行: 保存 → （ローカル）→ Jenkins 反映 → Git push → （テストビルド）
-4. **ゲート:** 「セットアップが完了しました」→ テストビルドを **はい**
+2. 進行: 保存 → （ローカル）→ Jenkins 反映 → （テストビルド）
+3. **ゲート:** 「セットアップが完了しました」→ テストビルドを **はい**
 
-> **push 前にローカルで検証したいとき:** 「ローカルでビルド＆テスト（push せず現在のコードを検証）」を ON にすると、
+> **手元で検証したいとき:** 「ローカルでビルド＆テスト」を ON にすると、
 > 配置済みの `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**して手元のコードを確認できます。
 > **git 操作（fetch / pull / push）は一切行いません**。先に「設定を保存」しておくと最新スクリプトで検証できます。
 >
 > | 項目 | テストビルド | ローカルでビルド＆テスト |
 > |------|--------------|--------------------------|
 > | 実行場所 | Jenkins エージェント | 手元の PC |
-> | 対象コード | **リモート Git** のコード | **ローカルの作業コピー**（未 push 可） |
+> | 対象コード | **顧客 Git** のアプリソース | **ローカルの作業コピー** |
 > | git 操作 | あり（チェックアウト） | **なし** |
 > | 用途 | 本番経路の確認・Teams 通知 | push 前の素早い動作確認 |
 
@@ -1570,7 +1568,7 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 | 症状 | 確認 STEP |
 |------|-----------|
 | 接続テスト失敗 | B-5 / D-5（Token・URL） |
-| Git push 失敗 | リポジトリの push 権限、リモート URL |
+| Jenkins 反映で Git URL エラー | ② のリポジトリ URL（Jenkins がアプリソースを checkout するため） |
 | セットアップ後ビルドが始まらない | GATE C（エージェント Offline） |
 
 ---
@@ -1686,7 +1684,7 @@ curl -X POST "http://<jenkins>:8086/job/CISetup-CI/buildWithParameters" \
 
 | やりたいこと | 操作 |
 |-------------|------|
-| 設定変更 | 設定アプリ → ⑥「セットアップを実行」（保存→反映→push を自動） |
+| 設定変更 | 設定アプリ → ⑥「セットアップを実行」（保存→Jenkins 反映） |
 | 手動ビルド | 設定アプリ ⑥ 実行後のテストビルド（または詳細設定「今すぐビルド」） |
 | 成果物も作ってテスト | ⑥「成果物 zip も作成・保存する」にチェックして実行（`.exe` + zip が出力されます） |
 | マージで自動ビルド | ② ブランチを対象に設定 + 詳細設定 pollSCM を有効に |
@@ -1880,15 +1878,15 @@ Console Output の先頭付近に `Waiting for next available executor` や `The
 
 | 症状 | 原因 | 対処 |
 |------|------|------|
-| `指定されたテスト ソース ファイル "...Tests.dll" が見つかりませんでした` → `dotnet test failed (exit code 1)` | 旧 `ci-test.ps1` が `dotnet test --no-build` を使用。テストプロジェクトがビルド対象の `.sln` に含まれていないと DLL が生成されず VSTest が見つけられない | 最新の CISetup では `--no-build` を外し、`dotnet test` 自身に restore/build を任せるよう修正済み。**GUI から最新の config／scripts を再配置し、リモートへ push** すれば解消する（古いコミットのままだと再発） |
+| `指定されたテスト ソース ファイル "...Tests.dll" が見つかりませんでした` → `dotnet test failed (exit code 1)` | 旧 `ci-test.ps1` が `dotnet test --no-build` を使用。テストプロジェクトがビルド対象の `.sln` に含まれていないと DLL が生成されず VSTest が見つけられない | 最新の CISetup では `--no-build` を外し、`dotnet test` 自身に restore/build を任せるよう修正済み。**GUI から最新の scripts を再配置し、「Jenkins に反映」**すれば解消する |
 
 ### Post Actions の Teams 通知が「Argument types do not match」で失敗
 
 | 症状 | 原因 | 対処 |
 |------|------|------|
-| `ci-notify-teams.ps1 : Argument types do not match`（`System.ArgumentException`） | Windows PowerShell 5.1 の不具合。関数内で要素を追加した `Generic.List` を `@(...)` で配列化するとこの例外になる | 最新の CISetup では該当箇所（`ci-notify-teams.ps1` のアクション配列、`ci-test.ps1` のテストサマリー）を `.ToArray()` に変更済み。**GUI から再配置 → push** で反映する |
+| `ci-notify-teams.ps1 : Argument types do not match`（`System.ArgumentException`） | Windows PowerShell 5.1 の不具合。関数内で要素を追加した `Generic.List` を `@(...)` で配列化するとこの例外になる | 最新の CISetup では該当箇所（`ci-notify-teams.ps1` のアクション配列、`ci-test.ps1` のテストサマリー）を `.ToArray()` に変更済み。**GUI から再配置 → Jenkins に反映** で反映する |
 
-> 上記2件はいずれも「修正は最新スクリプトに入っているが、Jenkins がリモートの**古いコミット**を checkout していると再発する」パターンです。設定アプリでスクリプトを再配置し、push して初めて反映されます。
+> 上記2件はいずれも「修正は最新スクリプトに入っているが、Jenkins ジョブに古いパイプラインが残っていると再発する」パターンです。設定アプリでスクリプトを再配置し、「Jenkins に反映」して初めて反映されます。
 
 ---
 
@@ -2061,7 +2059,7 @@ python -m pytest tests --cov=cisetup --cov-report=html
     □ （任意）start-agent.bat 作成・タスクスケジューラ登録（暫定運用）
     □ ファイルサーバー書き込みテスト成功（エージェント PC で）
 □ exe ①〜⑤  プロジェクト設定を入力
-□ exe ⑥  「セットアップを実行」（保存 → Jenkins 反映 → Git push）
+□ exe ⑥  「セットアップを実行」（保存 → Jenkins 反映）
 □ テストビルド成功 / Teams 通知 / zip 保存 / 定期実行
 ```
 

@@ -7,7 +7,6 @@ import pytest
 tk = pytest.importorskip("tkinter")
 from tkinter import TclError  # noqa: E402
 
-from cisetup.gui.commit_dialog import CommitMessageDialog  # noqa: E402
 from cisetup.gui.tooltip import ToolTip, attach_tooltip, help_icon  # noqa: E402
 
 
@@ -326,26 +325,6 @@ def test_deploy_local_to_agent_requires_write_target(app):
 
 def test_ensure_repo(app, sln_repo):
     assert app._ensure_repo() == sln_repo
-
-
-def test_commit_dialog_ok(app):
-    dlg = CommitMessageDialog(app, "default msg")
-    dlg._ok()
-    assert dlg.result == "default msg"
-
-
-def test_commit_dialog_cancel(app):
-    dlg = CommitMessageDialog(app, "x")
-    dlg._cancel()
-    assert dlg.result is None
-
-
-def test_commit_dialog_empty_stays_open(app):
-    dlg = CommitMessageDialog(app, "x")
-    dlg._var.set("   ")
-    dlg._ok()
-    assert dlg.result is None
-    dlg.destroy()
 
 
 def test_tooltip_show_hide(app):

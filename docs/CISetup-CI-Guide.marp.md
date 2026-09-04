@@ -443,7 +443,7 @@ dist\
 | ⑥ | Git（URL / 認証） |
 | ⑦ | Teams Webhook |
 | ⑧ | CI ジョブ設定（cron 等） |
-| ⑨ | **保存 → Jenkins 反映 → Git push** |
+| ⑨ | **保存 → Jenkins 反映** |
 
 ---
 
@@ -560,21 +560,21 @@ Jenkins LTS インストール **後** に 1 回だけ実行
 
 ---
 
-## ⑨ 完了 — 3 ボタンを順に
+## ⑨ 完了 — 保存して Jenkins に反映
 
 ```
 ① すべて保存
     ↓
 ② Jenkins に設定を反映
-    ↓
-③ Git push（CI ファイル）
 ```
 
-| 保存先 | Git commit |
+CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を push する必要はありません。
+
+| 保存先 | Git 追跡 |
 |--------|-----------|
-| `cisetup.config.json` | ✅ する |
-| `Jenkinsfile`, `scripts/` | ✅ する |
-| `cisetup.secrets.local.json` | ❌ **しない** |
+| `cisetup.config.json` | 作業コピーに残る（顧客 Git へ載せる必要なし） |
+| `Jenkinsfile`, `scripts/` | 同上（Jenkins ジョブへ埋め込まれる） |
+| `cisetup.secrets.local.json` / `cisetup.local.json` | ❌ **しない** |
 
 ---
 
@@ -657,7 +657,7 @@ java -jar agent.jar -url "http://jenkins:8086/" `
 
 | やりたいこと | 操作 |
 |-------------|------|
-| 設定変更 | 設定アプリ 編集 → ⑨ 保存 → 反映 → Git push |
+| 設定変更 | 設定アプリ 編集 → ⑨ 保存 → Jenkins 反映 |
 | 手動ビルド | Jenkins → Build Now |
 | 別 PJ 追加 | 設定アプリ ③〜⑨ を新 PJ で繰り返す |
 | Webhook 変更 | 設定アプリ ⑦ 更新 → ⑨ 反映 |

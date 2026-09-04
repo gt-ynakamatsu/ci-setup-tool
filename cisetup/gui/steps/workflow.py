@@ -387,12 +387,10 @@ class WorkflowStepsMixin:
         tk.Label(
             frame,
             text="チェックした処理だけを上から順番に実行します。\n"
-            "「テストビルド」は Jenkins がリモート Git のコードをビルドするため、"
-            "最新の変更を確認するときは「Git push」も一緒に有効にしてください"
-            "（push してからビルドする順で実行します）。\n"
-            "「ローカルでビルド＆テスト」は push せずに現在のローカルコードを検証します"
-            "（git 操作なし。push 前の動作確認に便利）。\n"
-            "まず 保存 → Jenkins 反映 だけで設定を反映し、準備ができたら push＋テストビルドで確認する運用がおすすめです。",
+            "CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を載せる必要はありません。\n"
+            "「テストビルド」は Jenkins が顧客 Git からアプリソースを checkout してビルドします。\n"
+            "「ローカルでビルド＆テスト」は git 操作なしで、この PC 上の作業コピーを検証します。\n"
+            "まず 保存 → Jenkins 反映 で設定を載せ、準備ができたらテストビルドで確認する運用がおすすめです。",
             font=font(12),
             fg="#555555",
             bg=COLOR_RUN_BG,
@@ -404,16 +402,14 @@ class WorkflowStepsMixin:
         self._step_save_var = tk.BooleanVar(value=True)
         self._step_local_var = tk.BooleanVar(value=True)
         self._step_jenkins_var = tk.BooleanVar(value=True)
-        self._step_push_var = tk.BooleanVar(value=False)
         self._step_build_var = tk.BooleanVar(value=True)
         options = tk.Frame(frame, bg=COLOR_RUN_BG)
         options.pack(anchor="w", pady=(0, 12))
         for text, var, help_text in (
             ("1. 設定を保存", self._step_save_var, help_texts.STEP_SAVE),
-            ("ローカルでビルド＆テスト（push せず現在のコードを検証）", self._step_local_var, help_texts.LOCAL_BUILD_TEST),
+            ("ローカルでビルド＆テスト（この PC のコードを検証）", self._step_local_var, help_texts.LOCAL_BUILD_TEST),
             ("2. Jenkins に反映", self._step_jenkins_var, help_texts.STEP_JENKINS),
-            ("3. Git push", self._step_push_var, help_texts.STEP_PUSH),
-            ("4. テストビルドを実行", self._step_build_var, help_texts.STEP_BUILD),
+            ("3. テストビルドを実行", self._step_build_var, help_texts.STEP_BUILD),
         ):
             opt_row = tk.Frame(options, bg=COLOR_RUN_BG)
             opt_row.pack(anchor="w")

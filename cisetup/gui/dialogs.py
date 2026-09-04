@@ -4,22 +4,9 @@ import threading
 import tkinter as tk
 
 from . import deps
-from .commit_dialog import prompt_commit_message
 
 
 class DialogMixin:
-    def _prompt_commit(self) -> str | None:
-        result: dict[str, str | None] = {}
-        done = threading.Event()
-
-        def ask() -> None:
-            result["value"] = prompt_commit_message(self, deps.git_service.DEFAULT_COMMIT_MESSAGE)
-            done.set()
-
-        self.after(0, ask)
-        done.wait()
-        return result.get("value")
-
     def _ask(self, title: str, message: str) -> bool:
         result: dict[str, bool] = {}
         done = threading.Event()
@@ -56,7 +43,7 @@ class DialogMixin:
         def worker() -> None:
             try:
                 func()
-            except (ValueError, deps.JenkinsError, deps.LocalCIError, deps.git_service.GitError, OSError) as exc:
+            except (ValueError, deps.JenkinsError, deps.LocalCIError, OSError) as exc:
                 msg = str(exc)
                 if "書き込み先ベース" in msg:
                     self.after(0, self._focus_storage_paths)
