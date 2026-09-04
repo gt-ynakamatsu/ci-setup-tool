@@ -41,6 +41,22 @@ def test_local_roundtrip():
     assert legacy.ci_file_servers == [r"\\s\c"]
 
 
+def test_local_view_urls_roundtrip():
+    local = CISetupLocal(
+        release_urls=["https://r"],
+        analysis_urls=["https://a"],
+        logs_urls=["https://l"],
+        tests_urls=["https://t"],
+        source_urls=["https://s"],
+    )
+    data = local_to_dict(local)
+    assert data["releaseUrls"] == ["https://r"]
+    assert local_from_dict(data) == local
+    legacy = local_from_dict({"releaseUrl": "https://only"})
+    assert legacy.release_urls == ["https://only"]
+    assert local_from_dict({}).release_urls == []
+
+
 def test_local_agent_workspace_path_roundtrip():
     local = CISetupLocal(
         base_paths=[r"C:\OneDrive\CI"],

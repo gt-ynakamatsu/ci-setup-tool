@@ -15,6 +15,7 @@ from .models import (
     config_from_dict,
     config_to_dict,
     default_config,
+    local_from_config,
     local_from_dict,
     local_to_dict,
     migrate_from_legacy,
@@ -57,7 +58,7 @@ class ConfigRepository:
         else:
             return default_config()
 
-        # 個人 ID を含みうる書き込み先（複数可）は git 非追跡のローカルファイルから復元する。
+        # 個人 ID を含みうる書き込み先・閲覧 URL は git 非追跡のローカルファイルから復元する。
         local = self.load_local(repository_root)
         if local.base_paths:
             config.storage.base_paths = list(local.base_paths)
@@ -65,6 +66,16 @@ class ConfigRepository:
             config.jenkins.ci_file_servers = list(local.ci_file_servers)
         if local.agent_workspace_path:
             config.jenkins.agent_workspace_path = local.agent_workspace_path
+        if local.release_urls:
+            config.storage.release_urls = list(local.release_urls)
+        if local.analysis_urls:
+            config.storage.analysis_urls = list(local.analysis_urls)
+        if local.logs_urls:
+            config.storage.logs_urls = list(local.logs_urls)
+        if local.tests_urls:
+            config.storage.tests_urls = list(local.tests_urls)
+        if local.source_urls:
+            config.storage.source_urls = list(local.source_urls)
         return config
 
     def load_local(self, repository_root: Path) -> CISetupLocal:
@@ -104,23 +115,24 @@ class ConfigRepository:
         # 最新の scripts / テンプレートを CISetup/ 以下へ上書き配置
         extract_to_repository(repository_root, overwrite=True)
 
-        # 個人 ID / マシン固有の書き込み先（複数可）は git 非追跡のローカルファイルへ。
-        local = CISetupLocal(
-            base_paths=list(config.storage.base_paths),
-            ci_file_servers=list(config.jenkins.ci_file_servers),
-            agent_workspace_path=config.jenkins.agent_workspace_path,
-        )
+        # 個人 ID / マシン固有の書き込み先・Teams 閲覧 URL は git 非追跡のローカルファイルへ。
+        local = local_from_config(config)
         paths.local_path(repository_root).write_text(
             json.dumps(local_to_dict(local), indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
             newline="\n",
         )
 
-        # コミットされる config.json / Jenkinsfile には書き込み先・機械固有パスを残さない（空にする）。
+        # コミットされる config.json / Jenkinsfile には書き込み先・機械固有パス・閲覧 URL を残さない。
         committed = copy.deepcopy(config)
         committed.storage.base_paths = []
         committed.jenkins.ci_file_servers = []
         committed.jenkins.agent_workspace_path = ""
+        committed.storage.release_urls = []
+        committed.storage.analysis_urls = []
+        committed.storage.logs_urls = []
+        committed.storage.tests_urls = []
+        committed.storage.source_urls = []
 
         paths.config_path(repository_root).write_text(
             json.dumps(config_to_dict(committed), indent=2, ensure_ascii=False) + "\n",
@@ -160,11 +172,8 @@ class ConfigRepository:
         if not ws:
             return None
         if local is None:
-            local = CISetupLocal(
-                base_paths=list(config.storage.base_paths),
-                ci_file_servers=list(config.jenkins.ci_file_servers),
-            )
-        # 兄弟パス側は basePaths / ciFileServers のみ（エージェントが読むのはこの 2 つ）。
+            local = local_from_config(config)
+        # 兄弟パス側はエージェントが読む値のみ（agentWorkspacePath は含めない）。
         data = local_to_dict(local)
         data.pop("agentWorkspacePath", None)
         payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"

@@ -173,12 +173,19 @@ class CISetupLocal:
     OneDrive 等の書き込み先パスは個人名 ID を含むことがあるため、
     コミットされる cisetup.config.json には保存せず、このローカルファイルに保持する。
     書き込み先は複数指定できる（後方互換で単一文字列キーも読める）。
+    Teams 通知の閲覧 URL（SharePoint 等）も環境ごとに変わりうるため同様に local へ置く。
     """
 
     base_paths: list[str] = field(default_factory=list)
     ci_file_servers: list[str] = field(default_factory=list)
     # 同一 PC の Jenkins エージェントのワークスペースパス（機械固有・git 非追跡）。
     agent_workspace_path: str = ""
+    # Teams 通知カードの「フォルダを開く」ボタン用 URL（git 非追跡）。
+    release_urls: list[str] = field(default_factory=list)
+    analysis_urls: list[str] = field(default_factory=list)
+    logs_urls: list[str] = field(default_factory=list)
+    tests_urls: list[str] = field(default_factory=list)
+    source_urls: list[str] = field(default_factory=list)
 
     @property
     def base_path(self) -> str:
@@ -313,7 +320,26 @@ def local_from_dict(data: dict[str, Any]) -> CISetupLocal:
     local.base_paths = _coalesce_list(data, "basePaths", "basePath")
     local.ci_file_servers = _coalesce_list(data, "ciFileServers", "ciFileServer")
     local.agent_workspace_path = str(data.get("agentWorkspacePath", "") or "").strip()
+    local.release_urls = _coalesce_list(data, "releaseUrls", "releaseUrl")
+    local.analysis_urls = _coalesce_list(data, "analysisUrls", "analysisUrl")
+    local.logs_urls = _coalesce_list(data, "logsUrls", "logsUrl")
+    local.tests_urls = _coalesce_list(data, "testsUrls", "testsUrl")
+    local.source_urls = _coalesce_list(data, "sourceUrls", "sourceUrl")
     return local
+
+
+def local_from_config(config: CISetupConfig) -> CISetupLocal:
+    """GUI 上の config から git 非追跡の local 値を切り出す。"""
+    return CISetupLocal(
+        base_paths=list(config.storage.base_paths),
+        ci_file_servers=list(config.jenkins.ci_file_servers),
+        agent_workspace_path=config.jenkins.agent_workspace_path,
+        release_urls=list(config.storage.release_urls),
+        analysis_urls=list(config.storage.analysis_urls),
+        logs_urls=list(config.storage.logs_urls),
+        tests_urls=list(config.storage.tests_urls),
+        source_urls=list(config.storage.source_urls),
+    )
 
 
 def local_to_dict(local: CISetupLocal) -> dict[str, Any]:
