@@ -433,11 +433,11 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | `enable_tests` | `enableTests` | bool | `True` | tests カテゴリを使うか（false でフォルダ作成・CI 配置をスキップ） | config |
 | `use_date_subfolder` | `useDateSubfolder` | bool | `True` | 各カテゴリ配下に日付フォルダ `YYYYMMDD` を作るか | config |
 | `archive_source` | `archiveSource` | bool | `False` | pull 済みソースツリーを zip 化して保存するか（source カテゴリの有効フラグを兼ねる） | config |
-| `release_urls` | `releaseUrls` | list[str] | `[]` | 成果物フォルダの閲覧 URL（Teams ボタン用・複数可） | config |
-| `analysis_urls` | `analysisUrls` | list[str] | `[]` | 解析レポートの閲覧 URL（複数可） | config |
-| `logs_urls` | `logsUrls` | list[str] | `[]` | ログフォルダの閲覧 URL（複数可） | config |
-| `tests_urls` | `testsUrls` | list[str] | `[]` | テスト成果物（tests）の閲覧 URL（Teams ボタン用・複数可） | config |
-| `source_urls` | `sourceUrls` | list[str] | `[]` | 開発環境 zip（source）の閲覧 URL（Teams ボタン用・複数可） | config |
+| `release_urls` | `releaseUrls` | list[str] | `[]` | 成果物フォルダの閲覧 URL（Teams ボタン用・複数可） | **local** |
+| `analysis_urls` | `analysisUrls` | list[str] | `[]` | 解析レポートの閲覧 URL（複数可） | **local** |
+| `logs_urls` | `logsUrls` | list[str] | `[]` | ログフォルダの閲覧 URL（複数可） | **local** |
+| `tests_urls` | `testsUrls` | list[str] | `[]` | テスト成果物（tests）の閲覧 URL（Teams ボタン用・複数可） | **local** |
+| `source_urls` | `sourceUrls` | list[str] | `[]` | 開発環境 zip（source）の閲覧 URL（Teams ボタン用・複数可） | **local** |
 
 `base_path` / `release_url` / `analysis_url` / `logs_url` / `tests_url` / `source_url` は後方互換アクセサ
 （プロパティ）で、対応するリストの先頭要素を読み書きする。`base_paths` は機微（個人 ID を含みうる）
@@ -557,13 +557,14 @@ Jenkins 管理者権限（Groovy 実行）が必要。Groovy へ埋め込む値�
 | `base_paths` | `basePaths` | list[str] | `[]` | 書き込み先ベース（個人 ID を含みうる） |
 | `ci_file_servers` | `ciFileServers` | list[str] | `[]` | CI_FILE_SERVER 群（個人 ID を含みうる） |
 | `agent_workspace_path` | `agentWorkspacePath` | str | `""` | 同一 PC のエージェントのワークスペースパス（機械固有）。兄弟パスへの自動配置に使用 |
+| `release_urls` ほか `*_urls` | `releaseUrls` 等 | list[str] | `[]` | Teams 通知の閲覧 URL（SharePoint 等） |
 
 `base_path` / `ci_file_server`（単数）は後方互換アクセサ。**local** に保存（git 非追跡）。
-`agent_workspace_path` が設定されていると、`save_all` は書き込み先設定（`basePaths` / `ciFileServers`）を
+`agent_workspace_path` が設定されていると、`save_all` は書き込み先設定と閲覧 URL を
 エージェントの**兄弟パス**（`ci-config.ps1` の `externalLocalPath` と同一式:
 `<ワークスペースの親>\<ワークスペース名>.cisetup.local.json`）へ自動配置する
 （`ConfigRepository.deploy_local_to_agent`）。兄弟パス側の JSON には `agentWorkspacePath` は含めない
-（エージェントが読むのは `basePaths` / `ciFileServers` のみ）。ワークスペース内に `CISetup\`（旧 `cisetup\`）があれば
+（エージェントが読むのは `basePaths` / `ciFileServers` / 閲覧 URL）。ワークスペース内に `CISetup\`（旧 `cisetup\`）があれば
 ベストエフォートで `<ワークスペース>\CISetup\cisetup.local.json` にも配置する。
 
 ### 6.9 機微情報・個人 ID の分離方針
@@ -571,17 +572,18 @@ Jenkins 管理者権限（Groovy 実行）が必要。Groovy へ埋め込む値�
 3 段階に分離する。
 
 1. **secrets**（`cisetup.secrets.local.json`）: 認証情報・Webhook。
-2. **local**（`cisetup.local.json`）: 個人 ID を含みうる書き込み先（`base_paths` / `ci_file_servers`）。
+2. **local**（`cisetup.local.json`）: 個人 ID を含みうる書き込み先（`base_paths` / `ci_file_servers`）と
+   Teams 閲覧 URL（`release_urls` 等）。
 3. **config**（`cisetup.config.json`、コミット対象）: 上記以外。コミット時は `base_paths` と
-   `ci_file_servers` を**空にして**書き出す（`save_all` 内で `committed` のクローンを作り、両者を `[]` にする）。
+   `ci_file_servers` および閲覧 URL を**空にして**書き出す（`save_all` 内で `committed` のクローンを作り空にする）。
    機械固有の `agent_workspace_path` も同様に `""` へ退避する。
 
 加えて Git URL に `user@` が埋め込まれていれば `split_repository_url` で除去し、ユーザー名は
 secrets（`git_username`、未設定時のみ）へ退避する。
 
-> 補足: `.gitignore` には `CISetup/cisetup.secrets.local.json`（と旧名）が自動追記される
-> （`template_store._ensure_secrets_gitignore`）。`cisetup.local.json` は `.gitignore` には
-> 追記されないが、`git_service.push_ci_files` がステージから自動的に外すため push されない（[9.5](#95-git-push)）。
+> 補足: `.gitignore` には `CISetup/cisetup.secrets.local.json` と `CISetup/cisetup.local.json`
+> （およびルート直下の旧名）が自動追記される（`template_store._ensure_secrets_gitignore`）。
+> `git_service.push_ci_files` もステージから自動的に外すため、万一 ignore 漏れでも push されない（[9.5](#95-git-push)）。
 
 ---
 
@@ -637,7 +639,7 @@ flowchart TB
     A["Git URL から userinfo 除去<br/>(split_repository_url)<br/>未設定なら username を secrets へ"] --> B["validate(config, root)"]
     B --> C["CISetup/ ディレクトリ作成（旧 cisetup/ は自動移行）"]
     C --> D["extract_to_repository(overwrite=True)<br/>最新の scripts/テンプレートを上書き配置"]
-    D -->     E["cisetup.local.json 書き出し<br/>(base_paths / ci_file_servers / agent_workspace_path)"]
+    D -->     E["cisetup.local.json 書き出し<br/>(書き込み先 / 閲覧 URL / agent_workspace_path)"]
     E --> F["committed = deepcopy(config)<br/>base_paths=[] / ci_file_servers=[] / agent_workspace_path=''"]
     F --> G["cisetup.config.json 書き出し (committed)"]
     G --> H["cisetup.secrets.local.json 書き出し"]
@@ -1271,8 +1273,8 @@ CISetup-<Version>/
   できない。書き込み先は UNC / ローカル（同期済みフォルダ）を指定し、共有 URL は閲覧用（`*_urls`）に入れる。
 - **`Jenkinsfile` の `CI_FILE_SERVER` 既定値は単一**: 複数書き込み先のうち先頭が既定値になる。ただし
   個人 ID 入りの値はコミット前に空へ退避されるため、通常は空（= `cisetup.local.json` / Jenkins 側から取得）。
-- **`cisetup.local.json` は `.gitignore` 未登録**: push 時にステージから自動除外する設計のため、
-  別経路で誤って add すると理屈上は追跡されうる（push 経路では `push_ci_files` が常に外す）。
+- **`cisetup.local.json` / secrets は `.gitignore` 登録 + push 時除外**: 保存時に ignore へ追記し、
+  `push_ci_files` もステージから外す。閲覧 URL の変更だけでは Git への再コミットは不要。
 - **アプリ本体・CI パイプラインとも Windows/Linux 両対応**: CISetup 自体（GUI・Jenkins/Git/Teams
   設定）は `tkinter` + 標準ライブラリのみで Linux でも動作し、生成・配置する `ci-*.ps1` も
   Windows PowerShell 5.1 / PowerShell 7 (`pwsh`) の両方で動く。`Jenkinsfile` が `isUnix()` で
@@ -1301,7 +1303,7 @@ CISetup-<Version>/
 | カテゴリ有効フラグ（不要カテゴリを作成・配置しない） | `storage.enableLogs` / `enableReleases` / `enableAnalysis` / `enableTests`（source は `archiveSource`） | config |
 | 日付フォルダ | `storage.useDateSubfolder` | config |
 | 開発環境一式 zip | `storage.archiveSource` | config |
-| 解析/成果物/ログ/テスト/開発環境 zip 閲覧 URL（④ Teams） | `storage.analysisUrls` / `releaseUrls` / `logsUrls` / `testsUrls` / `sourceUrls` | config |
+| 解析/成果物/ログ/テスト/開発環境 zip 閲覧 URL（④ Teams） | `storage.analysisUrls` / `releaseUrls` / `logsUrls` / `testsUrls` / `sourceUrls` | **local** |
 | ジョブ名 | `jenkins.jobName` | config |
 | cron / pollSCM | `jenkins.cronSchedule` / `pollSchedule` | config |
 | エージェントラベル | `jenkins.agentLabel` | config |

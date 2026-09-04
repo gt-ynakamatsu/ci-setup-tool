@@ -220,10 +220,12 @@ def test_extract_to_repository(tmp_path: Path):
     # PowerShell スクリプトは BOM 付き
     ps1 = tmp_path / paths.CI_FOLDER / "scripts" / "ci-build.ps1"
     assert ps1.read_bytes().startswith(b"\xef\xbb\xbf")
-    # .gitignore に secrets 追記
+    # .gitignore に secrets / local 追記
     gi = (tmp_path / ".gitignore").read_text(encoding="utf-8")
     assert "CISetup/cisetup.secrets.local.json" in gi
     assert "cisetup.secrets.local.json" in gi
+    assert "CISetup/cisetup.local.json" in gi
+    assert "cisetup.local.json" in gi
 
 
 def test_bundled_ps1_sources_are_utf8_bom():
@@ -283,6 +285,14 @@ def test_ci_config_exposes_analysis_dir():
     assert "AnalysisDir = (ConvertTo-PlatformPath" in text
 
 
+def test_ci_config_overlays_view_urls_from_local():
+    # Teams 閲覧 URL は cisetup.local.json を優先する（git 非追跡）。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-config.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "ReleaseUrls   = Get-ConfigList $data @('releaseUrls', 'releaseUrl')" in text
+    assert "if ($localOverrides.ReleaseUrls.Count -gt 0) { $releaseUrls = $localOverrides.ReleaseUrls }" in text
+
+
 def test_deploy_analysis_dest_uses_configured_folder():
     # 解析の配置先フォルダ名は設定値 $ci.AnalysisDir を使う（ハードコード 'analysis' 廃止）。
     # 入力元のローカル変数 artifacts/analysis はハードコードのまま（別物）。
@@ -322,6 +332,8 @@ def test_gitignore_already_has_marker(tmp_path: Path):
     ]
     assert lines.count("CISetup/cisetup.secrets.local.json") == 1
     assert lines.count("cisetup.secrets.local.json") == 1
+    assert lines.count("CISetup/cisetup.local.json") == 1
+    assert lines.count("cisetup.local.json") == 1
 
 
 def test_read_template_missing():
@@ -761,20 +773,27 @@ def test_save_all_keeps_personal_paths_out_of_git(sln_repo: Path):
     cfg.storage.base_path = r"C:\Users\taro\OneDrive - Co\CI\MyApp"
     cfg.jenkins.ci_file_server = r"\\fileserver\ci"
     cfg.git.repository_url = "http://taro@172.29.162.37/kallithea/x/ipu-test-app"
+    cfg.storage.release_urls = ["https://sharepoint.example/releases?user=taro"]
+    cfg.storage.logs_urls = ["https://sharepoint.example/logs"]
     sec = CISetupSecrets()
     repo.save_all(sln_repo, cfg, sec)
 
-    # コミットされる config.json には個人 ID 入りの書き込み先・URL ユーザー名を残さない
+    # コミットされる config.json には個人 ID 入りの書き込み先・URL ユーザー名・閲覧 URL を残さない
     saved = json.loads(paths.config_path(sln_repo).read_text(encoding="utf-8"))
     assert saved["storage"]["basePaths"] == []
     assert saved["jenkins"]["ciFileServers"] == []
+    assert saved["storage"]["releaseUrls"] == []
+    assert saved["storage"]["logsUrls"] == []
     assert saved["git"]["repositoryUrl"] == "http://172.29.162.37/kallithea/x/ipu-test-app"
     assert "taro" not in json.dumps(saved)
+    assert "sharepoint.example" not in json.dumps(saved)
 
-    # ローカルファイル（git 非追跡）に書き込み先が保存される
+    # ローカルファイル（git 非追跡）に書き込み先・閲覧 URL が保存される
     local = json.loads(paths.local_path(sln_repo).read_text(encoding="utf-8"))
     assert local["basePaths"] == [r"C:\Users\taro\OneDrive - Co\CI\MyApp"]
     assert local["ciFileServers"] == [r"\\fileserver\ci"]
+    assert local["releaseUrls"] == ["https://sharepoint.example/releases?user=taro"]
+    assert local["logsUrls"] == ["https://sharepoint.example/logs"]
 
     # ユーザー名は secrets に移動
     saved_sec = json.loads(paths.secrets_path(sln_repo).read_text(encoding="utf-8"))
@@ -791,11 +810,15 @@ def test_load_config_overlays_local(sln_repo: Path):
     cfg = _valid_config(sln_repo)
     cfg.storage.base_path = r"C:\Users\taro\OneDrive\CI"
     cfg.jenkins.ci_file_server = r"\\srv\ci"
+    cfg.storage.release_urls = ["https://teams.example/releases"]
+    cfg.storage.analysis_urls = ["https://teams.example/analysis"]
     repo.save_all(sln_repo, cfg, CISetupSecrets())
 
     loaded = repo.load_config(sln_repo)
     assert loaded.storage.base_path == r"C:\Users\taro\OneDrive\CI"
     assert loaded.jenkins.ci_file_server == r"\\srv\ci"
+    assert loaded.storage.release_urls == ["https://teams.example/releases"]
+    assert loaded.storage.analysis_urls == ["https://teams.example/analysis"]
 
 
 def test_save_all_persists_agent_workspace_path_local_only(sln_repo: Path, tmp_path: Path):
@@ -824,6 +847,7 @@ def test_save_all_auto_deploys_to_agent_sibling(sln_repo: Path, tmp_path: Path):
     cfg = _valid_config(sln_repo)
     cfg.jenkins.ci_file_server = r"\\fileserver\ci"
     cfg.storage.base_path = r"C:\local\CI\MyApp"
+    cfg.storage.release_urls = ["https://share/releases"]
     ws = tmp_path / "agent_ws" / "IPU_TEST_APP"
     ws.mkdir(parents=True)
     cfg.jenkins.agent_workspace_path = str(ws)
@@ -834,6 +858,7 @@ def test_save_all_auto_deploys_to_agent_sibling(sln_repo: Path, tmp_path: Path):
     data = json.loads(sibling.read_text(encoding="utf-8"))
     assert data["ciFileServers"] == [r"\\fileserver\ci"]
     assert data["basePaths"] == [r"C:\local\CI\MyApp"]
+    assert data["releaseUrls"] == ["https://share/releases"]
     # 兄弟パス側には機械固有パスは含めない
     assert "agentWorkspacePath" not in data
 

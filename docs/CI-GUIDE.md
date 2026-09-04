@@ -1495,10 +1495,13 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 | 値 | 保存先 | Git に push |
 |----|--------|:-----------:|
 | 書き込み先ベース / `CI_FILE_SERVER`（複数可） | `CISetup/cisetup.local.json`（**git 非追跡**） | ❌ されない |
+| Teams 閲覧 URL（releases / logs / analysis / tests / source） | `CISetup/cisetup.local.json`（**git 非追跡**） | ❌ されない |
+| Teams Webhook | `cisetup.secrets.local.json`（**git 非追跡**） | ❌ されない |
 | Git URL のユーザー名 | 保存時に自動除去し `cisetup.secrets.local.json` の `gitUsername` へ | ❌ されない |
 | Git URL 本体（ユーザー名なし） | `cisetup.config.json` | ✅ される |
 
 - 書き込み先（複数）は GUI のローカルファイル `cisetup.local.json`（`basePaths` / `ciFileServers` 配列）に保持され、`cisetup.config.json` と生成 `Jenkinsfile` には**空**で出力されます。
+- Teams 通知の閲覧 URL（`releaseUrls` 等）も同じ `cisetup.local.json` に保持されます。変更しても Git への再コミットは不要です（エージェントへは「設定を保存」時の兄弟パス配置、または手動コピー）。
 - **CI 実行側の書き込み先は次の優先順で解決**します（いずれも Git には乗りません）。
   - ジョブの **ビルドパラメータ `CI_FILE_SERVER`**（単一）を入れて実行 — 指定時はそれを単一の書き込み先として使用
   - エージェント/グローバルの **環境変数 `CI_FILE_SERVER`**（単一・パラメータが空のとき）
@@ -1752,7 +1755,7 @@ Phase 6（exe ①〜⑥）だけ繰り返す。ジョブ名はフォルダを選
 | `jenkins.checkoutRetryCount` | `3`。Checkout ステージの git 取得失敗時リトライ回数（[6.8b](#68b-cron定期実行失敗時の自動リトライ)） |
 | `jenkins.retryWrapperEnabled` | `true`/`false`。cron 失敗時に別建てジョブ + Naginator で再実行するか（既定 `false`、[6.8b](#68b-cron定期実行失敗時の自動リトライ)） |
 | `jenkins.retryMaxCount` / `retryDelaySeconds` | 上記有効時の最大リトライ回数・再試行間隔（秒） |
-| `storage.releaseUrls` / `analysisUrls` / `logsUrls` / `testsUrls` / `sourceUrls` | 閲覧用 URL（配列・複数可）。Teams 通知のボタンに使用。③ の各カテゴリと同名 |
+| `storage.releaseUrls` / `analysisUrls` / `logsUrls` / `testsUrls` / `sourceUrls` | （committed では空）。実値は `cisetup.local.json`。Teams 通知のボタンに使用 |
 | `storage.logsDir` / `releasesDir` / `analysisDir` / `testsDir` / `sourceDir` | 各カテゴリの格納サブフォルダ名（全カテゴリ設定可能。既定 `logs` / `releases` / `analysis` / `tests` / `source`）。配置先は `<保存先>/<プロジェクト>/<このフォルダ名>/[日付]` |
 | `storage.enableLogs` / `enableReleases` / `enableAnalysis` / `enableTests` | `true`/`false`。各カテゴリを使うか（既定すべて `true`）。`false` にすると「格納先フォルダを作成」でもフォルダを作らず、CI の配置(deploy)でもそのカテゴリをスキップする。プロジェクトで不要なカテゴリを切るための設定。source カテゴリは `archiveSource` が有効フラグを兼ねる |
 | `storage.archiveSource` | `true`/`false`。開発環境一式（ソース）を zip 化して保存するか（既定 `false`。source カテゴリの有効フラグを兼ねる） |
@@ -1760,14 +1763,16 @@ Phase 6（exe ①〜⑥）だけ繰り返す。ジョブ名はフォルダを選
 | `git.repositoryUrl` | `https://git.../MyApp.git` |
 | `git.branch` | `master`（マージ検知の対象ブランチ） |
 
-> 書き込み先（`jenkins.ciFileServers` / `storage.basePaths`）は個人 ID を含みうるため `cisetup.config.json` には**空配列**で出力され、実値は `cisetup.local.json` に保持されます（下表）。旧単一キー（`ciFileServer` / `basePath` / `releaseUrl` …）も読み込み時に配列へ正規化されます。
+> 書き込み先（`jenkins.ciFileServers` / `storage.basePaths`）および Teams 閲覧 URL（`storage.releaseUrls` 等）は `cisetup.config.json` には**空配列**で出力され、実値は `cisetup.local.json` に保持されます（下表）。旧単一キー（`ciFileServer` / `basePath` / `releaseUrl` …）も読み込み時に配列へ正規化されます。
 
-### cisetup.local.json（Git に入れない・書き込み先の実値）
+### cisetup.local.json（Git に入れない・書き込み先と Teams 閲覧 URL の実値）
 
 | キー | 内容 |
 |------|------|
 | `ciFileServers` | 書き込み先（配列）。各先の下に `\<プロジェクト名>\...` を作成 |
 | `basePaths` | 書き込み先（配列）。プロジェクト名を付けずそのまま使用 |
+| `releaseUrls` / `analysisUrls` / `logsUrls` / `testsUrls` / `sourceUrls` | Teams 通知の「フォルダを開く」ボタン用 URL（配列） |
+| `agentWorkspacePath` | 同一 PC のエージェントワークスペース（兄弟パス配置用。エージェント側 JSON には含めない） |
 
 Jenkins エージェント上では、通常 `<ワークスペース>\CISetup\cisetup.local.json` に置きます。ワークスペースのワイプ（フレッシュクローン）で失われた場合に備え、`<ワークスペース>\..\<ワークスペース名>.cisetup.local.json`（ワークスペースの兄弟パス）に同じ内容を置いておくと、そちらがフォールバックとして自動的に使われます（詳細は上記「個人 ID を Git に push しない仕組み」の注記を参照）。
 
