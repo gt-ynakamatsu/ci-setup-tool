@@ -255,7 +255,12 @@ class ActionsMixin:
 
         self._set_status("セットアップが完了しました。")
         done = "\n".join(f"・{label}" for _, label in steps)
-        suffix = "" if do_push else "\n\nGit push は実行していません。動作確認後に「Git push」を付けて再実行してください。"
+        suffix = (
+            ""
+            if do_push
+            else "\n\nGit push は実行していません。"
+            "CI は Jenkins ジョブに内蔵されるため、CI 定義を顧客 Git へ push する必要はありません。"
+        )
         self._info("セットアップ", f"選択した処理が完了しました:\n\n{done}{suffix}")
     def _run_local_build_test(self, root: Path) -> None:
         """配置済み ci-build.ps1 → ci-test.ps1 をローカルで実行する（git 操作なし）。

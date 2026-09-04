@@ -37,7 +37,8 @@ class IntroStepsMixin:
             frame,
             text=(
                 "① アプリのフォルダ → ② 社内 Git → ③ 保存先 → ④ Teams → ⑤ Jenkins 接続 を入力し、\n"
-                "最後に「セットアップを実行」を押すと、保存・Jenkins 登録・Git push まで自動で行います。\n"
+                "最後に「セットアップを実行」を押すと、保存と Jenkins 登録まで自動で行います。\n"
+                "CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を push する必要はありません。\n"
                 "むずかしい項目は「詳細設定（ふだんは開かなくて OK）」にまとめてあり、ほとんど自動で入力されます。"
             ),
             font=font(12),

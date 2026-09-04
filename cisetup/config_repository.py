@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import warnings
 from dataclasses import dataclass, field
@@ -12,6 +11,7 @@ from .models import (
     CISetupConfig,
     CISetupLocal,
     CISetupSecrets,
+    committed_config,
     config_from_dict,
     config_to_dict,
     default_config,
@@ -123,16 +123,8 @@ class ConfigRepository:
             newline="\n",
         )
 
-        # コミットされる config.json / Jenkinsfile には書き込み先・機械固有パス・閲覧 URL を残さない。
-        committed = copy.deepcopy(config)
-        committed.storage.base_paths = []
-        committed.jenkins.ci_file_servers = []
-        committed.jenkins.agent_workspace_path = ""
-        committed.storage.release_urls = []
-        committed.storage.analysis_urls = []
-        committed.storage.logs_urls = []
-        committed.storage.tests_urls = []
-        committed.storage.source_urls = []
+        # コミットされる config.json には書き込み先・機械固有パス・閲覧 URL を残さない。
+        committed = committed_config(config)
 
         paths.config_path(repository_root).write_text(
             json.dumps(config_to_dict(committed), indent=2, ensure_ascii=False) + "\n",
@@ -146,7 +138,8 @@ class ConfigRepository:
         )
 
         template = read_template("Jenkinsfile.template")
-        generate_jenkinsfile(template, paths.jenkinsfile_path(repository_root), committed)
+        # パイプライン正本は Jenkins ジョブ。ローカル Jenkinsfile は同じ内容を作業用に残す。
+        generate_jenkinsfile(template, paths.jenkinsfile_path(repository_root), config)
 
         # 同一 PC でエージェントを動かす場合、書き込み先設定をワイプで消えない兄弟パスへ配置する。
         # 配置に失敗しても保存自体は成功させる（握りつぶさず警告する）。

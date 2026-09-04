@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any
 
@@ -340,6 +341,20 @@ def local_from_config(config: CISetupConfig) -> CISetupLocal:
         tests_urls=list(config.storage.tests_urls),
         source_urls=list(config.storage.source_urls),
     )
+
+
+def committed_config(config: CISetupConfig) -> CISetupConfig:
+    """Git / 顧客リポジトリへ出してよい形（書き込み先・閲覧 URL・機械固有パスを空にする）。"""
+    committed = copy.deepcopy(config)
+    committed.storage.base_paths = []
+    committed.jenkins.ci_file_servers = []
+    committed.jenkins.agent_workspace_path = ""
+    committed.storage.release_urls = []
+    committed.storage.analysis_urls = []
+    committed.storage.logs_urls = []
+    committed.storage.tests_urls = []
+    committed.storage.source_urls = []
+    return committed
 
 
 def local_to_dict(local: CISetupLocal) -> dict[str, Any]:

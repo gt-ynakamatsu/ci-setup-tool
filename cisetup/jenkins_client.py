@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from xml.sax.saxutils import escape as _sax_escape
 
+from .jenkinsfile_generator import render_jenkinsfile
 from .models import CISetupConfig, CISetupSecrets
 from .template_store import read_template
 
@@ -32,21 +33,12 @@ def trigger_job_name(job_name: str) -> str:
 
 
 def build_job_triggers_xml(config: CISetupConfig) -> str:
-    """Pipeline ジョブ XML 用のトリガー断片（pollSCM / cron）。
+    """Pipeline ジョブ XML 用のトリガー断片。
 
-    Jenkinsfile の triggers は「Jenkins に反映」でジョブ XML を上書きすると登録が消えうるため、
-    poll（SCMTrigger）と cron（TimerTrigger）をジョブ XML 側に持たせる。
-    retry_wrapper_enabled 時の cron はラッパー Freestyle ジョブ側のみ（二重起動防止）。
+    パイプラインはジョブ内蔵（CpsFlowDefinition）のため poll は Jenkinsfile の pollSCM。
+    cron（TimerTrigger）だけジョブ XML に残す（retry ラッパー時はラッパー側のみ）。
     """
     parts: list[str] = []
-    poll = config.jenkins.poll_schedule.strip()
-    if poll:
-        parts.append(
-            "    <hudson.triggers.SCMTrigger>\n"
-            f"      <spec>{_escape_xml(poll)}</spec>\n"
-            "      <ignorePostCommitHooks>false</ignorePostCommitHooks>\n"
-            "    </hudson.triggers.SCMTrigger>"
-        )
     if not config.jenkins.retry_wrapper_enabled:
         cron = config.jenkins.cron_schedule.strip()
         if cron:
@@ -318,11 +310,10 @@ class JenkinsClient:
         self._request("POST", f"job/{encoded}/disable")
 
     def upsert_pipeline_job(self, config: CISetupConfig) -> None:
+        pipeline = render_jenkinsfile(read_template("Jenkinsfile.template"), config)
         template = read_template("JenkinsJob.config.template.xml")
         job_xml = (
-            template.replace("{{GIT_URL}}", _escape_xml(config.git.repository_url))
-            .replace("{{GIT_CREDENTIAL_ID}}", _escape_xml(config.git.credential_id))
-            .replace("{{GIT_BRANCH}}", _escape_xml(config.git.branch))
+            template.replace("{{PIPELINE_SCRIPT}}", _escape_xml(pipeline))
             .replace("{{JOB_TRIGGERS}}", build_job_triggers_xml(config))
         )
         encoded = urllib.parse.quote(config.jenkins.job_name, safe="")
