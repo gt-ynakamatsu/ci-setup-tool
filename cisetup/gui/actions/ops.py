@@ -180,6 +180,7 @@ class ActionsMixin:
             raise ValueError("Git リポジトリ URL を入力してください（Jenkins がアプリソースを checkout します）。")
 
         steps: list[tuple[str, str]] = [
+            ("pull", "最新のコードを取り込む（git pull）"),
             ("save", "設定を保存"),
             ("local", "ローカルでビルド＆テスト"),
             ("jenkins", "Jenkins に反映"),
@@ -192,11 +193,13 @@ class ActionsMixin:
         total = len(steps)
         for index, (kind, label) in enumerate(steps, 1):
             self._set_status(f"{index}/{total} {label}...")
-            if kind == "save":
+            if kind == "pull":
+                self._pull_latest(root)
+            elif kind == "save":
                 self._repo.save_all(root, self._config, self._secrets)
                 self._sync_saved_fields()
             elif kind == "local":
-                self._run_local_build_test(root)
+                self._run_local_build_test(root, clear_log=False)
             elif kind == "jenkins":
                 deps.apply_settings(self._config, self._secrets)
             elif kind == "build":
@@ -209,23 +212,34 @@ class ActionsMixin:
             f"次の処理が完了しました:\n\n{done}\n\n"
             "CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を載せる必要はありません。",
         )
+    def _pull_latest(self, root: Path) -> None:
+        """ビルド＆テストの前にリモートの最新を取り込む（取り込み方向のみ）。
+
+        実行ログ欄はここで初期化する。後続のビルド＆テストは同じ欄へ追記していく。
+        """
+        self.after(0, lambda: self._set_text(self._run_log_text, ""))
+        summary = deps.git_service.pull_latest(root, self._config.git.branch)
+        self.after(0, lambda: self._append_text(self._run_log_text, f"==> {summary}"))
     def _local_build_test_only(self) -> None:
         root = self._ensure_repo()
         self._form_to_config()
         if not self._confirm_test_project():
             self._set_status("ローカルビルド＆テストを中断しました（テスト対象を設定してください）")
             return
-        self._run_local_build_test(root)
+        self._set_status("最新のコードを取り込んでいます...")
+        self._pull_latest(root)
+        self._run_local_build_test(root, clear_log=False)
         self._set_status("ローカルビルド＆テストが完了しました")
-        self._info("ローカルでビルド＆テスト", "この PC でのビルド＆テストが完了しました。")
-    def _run_local_build_test(self, root: Path) -> None:
-        """配置済み ci-build.ps1 → ci-test.ps1 をローカルで実行する（git 操作なし）。
+        self._info("ローカルでビルド＆テスト", "最新を取り込み、この PC でのビルド＆テストが完了しました。")
+    def _run_local_build_test(self, root: Path, clear_log: bool = True) -> None:
+        """配置済み ci-build.ps1 → ci-test.ps1 をこの PC で実行する。
 
         出力はバックグラウンドスレッドから ``after`` 経由で実行ログ欄へ流し込み、
         UI を固めないようにする（他のアクションと同じスレッド方式）。
         """
         configuration = self._loaded_default_configuration or "Release"
-        self.after(0, lambda: self._set_text(self._run_log_text, ""))
+        if clear_log:
+            self.after(0, lambda: self._set_text(self._run_log_text, ""))
 
         def emit(line: str) -> None:
             self.after(0, lambda value=line: self._append_text(self._run_log_text, value))

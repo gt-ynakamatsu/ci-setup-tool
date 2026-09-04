@@ -7,7 +7,8 @@
 | **配布（推奨）** | `CISetup.exe` をダブルクリック（Python 不要） |
 | 開発 | `python configure.py` または `start_configure.bat` |
 | 初回セットアップ | `Setup-Project.bat [プロジェクトフォルダ]` |
-| ビルド | 配布正本は `dist\CISetup.exe`。Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows`（`--native` は `dist/CISetup` になり社内配布用ではない） || 配布 zip | `tools\Package-Distribution.ps1` |
+| ビルド | 配布正本は `dist\CISetup.exe`。Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows`（`--native` は `dist/CISetup` になり社内配布用ではない） |
+| 配布 zip | `tools\Package-Distribution.ps1` |
 
 **開発ルール:** GUI・`configure.py`・`bundled_templates` を直したら、作業完了前に **`CISetup.exe` を再ビルド**する（`test_exe_freshness.py` で古い成果物を検出）。Linux では `--native` ではなく `--windows`（Wine）を使う。
 
@@ -24,7 +25,7 @@ python configure.py --help
 
 1. プロジェクトフォルダを指定
 2. ①〜⑤ を入力（Git → **保存先** → Teams → Jenkins）
-3. **セットアップを実行** — 保存 → ローカルビルド＆テスト → Jenkins 反映 → テストビルド を順番に実行
+3. **セットアップを実行** — 最新を取り込む（git pull）→ 保存 → ローカルビルド＆テスト → Jenkins 反映 → テストビルド を順番に実行
 
 各項目の意味・保存先はラベル横の **「?」ヘルプアイコン**（ホバーで吹き出し）に表示されます。文言は「【何を】【なぜ】【どこで使う】…」形式です。
 
@@ -40,21 +41,25 @@ GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin �
 
 | 順 | 内容 |
 |----|------|
-| 1. 設定を保存 | `cisetup.config.json` / 作業用 `Jenkinsfile` / `scripts` を再生成して保存 |
-| 2. ローカルでビルド＆テスト | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**。fetch / pull / push といった **git 操作は一切なし**（ログは「ローカルビルド＆テストの実行ログ」欄） |
-| 3. Jenkins に反映 | `apply_settings` でジョブ定義（パイプライン一式）を Jenkins に登録 |
-| 4. テストビルドを実行 | Jenkins が**顧客 Git のアプリソース**を checkout してビルド |
+| 1. 最新のコードを取り込む | `git fetch` → `git merge --ff-only` で ② のブランチの最新を取り込む。**push はしない** |
+| 2. 設定を保存 | `cisetup.config.json` / 作業用 `Jenkinsfile` / `scripts` を再生成して保存 |
+| 3. ローカルでビルド＆テスト | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**（ログは「ローカルビルド＆テストの実行ログ」欄） |
+| 4. Jenkins に反映 | `apply_settings` でジョブ定義（パイプライン一式）を Jenkins に登録 |
+| 5. テストビルドを実行 | Jenkins が**顧客 Git のアプリソース**を checkout してビルド |
 | （任意）テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で **framework-dependent 単一 `.exe`**（+ zip）も作成・保存（既定 ON。ランタイムは同梱しない） |
 
-個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」、または詳細設定の手動操作を使います。
+個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」（こちらも取り込んでから実行）、または詳細設定の手動操作を使います。
+
+> **なぜ先に取り込むか** … 古いコードをテストしても意味がないためです。Jenkins のテストビルドは顧客 Git の最新を checkout するので、手元も同じ状態に揃えてから検証します。
+> 取り込みは **fast-forward のみ**で、履歴は書き換えません。リモートと分岐している場合はエラーにして手動解決を促します（`git status` の確認 → commit / stash か `git pull --rebase`）。
 
 > **「テストビルド」と「ローカルでビルド＆テスト」の違い**
-> 「テストビルド」は Jenkins が顧客 Git からアプリソースを取得してビルドするため、未コミットのローカル変更は反映されません。
-> 「ローカルでビルド＆テスト」は **この PC の作業コピー**を、配置済み CI スクリプトで検証します（git 操作なし）。先に「設定を保存」しておくと最新スクリプトで検証できます。
+> 「テストビルド」は Jenkins エージェント上で、「ローカルでビルド＆テスト」はこの PC で、同じ CI スクリプトを実行します。
+> ローカル側は取り込み後の作業コピーが対象なので、未コミットの手元の変更も含めて検証できます。
 
 ローカルはビルドが失敗するとテストを実行しません。
 
-CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を push する必要はありません。Git URL / ブランチ / 認証は、Jenkins がアプリソースを checkout するためだけに使います。
+CI の手順は Jenkins ジョブに内蔵されるため、顧客 Git へ CI 定義を push する必要はありません。Git URL / ブランチ / 認証は、最新の取り込みと、Jenkins がアプリソースを checkout するために使います。
 
 > **⑤ Jenkins URL は「どの画面の URL?」** … Jenkins にログインした直後の **ホーム画面（ダッシュボード）** を開いたときの、**ブラウザのアドレスバーの URL**（`http://ホスト:ポート/`）です。
 > 左上の「Jenkins」ロゴをクリックするとホーム画面に戻れます。`/job/...` は含めず、`Manage Jenkins → System` の「Jenkins URL」と同じ値。別 PC からは `localhost` ではなくホスト名/IP を使います。詳細は [CI-GUIDE.md の 6.9](CI-GUIDE.md)。
