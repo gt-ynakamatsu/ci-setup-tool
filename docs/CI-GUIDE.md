@@ -1978,10 +1978,14 @@ python configure.py --open C:\work\MyApp
 
 ### 16.8 ソース変更時の注意
 
+GUI / テンプレートを直したら **Windows 上で `CISetup.exe` を作り直す**こと。
+Linux（Cloud Agent 含む）で `rebuild_exe.py` を実行しても `dist/CISetup`（Linux バイナリ）しか出ず、
+社内配布用の exe にはなりません。PyInstaller はクロスコンパイルできません。
+
 | 変更したファイル | 再配布が必要？ | 理由 |
 |----------------|--------------|------|
-| `cisetup/**` | zip 再作成 | アプリ本体 |
-| `bundled_templates/**` | zip 再作成 | 配布先プロジェクトの CI テンプレート正本 |
+| `cisetup/**` | **Windows で exe 再ビルド** + zip 再作成 | アプリ本体 |
+| `bundled_templates/**` | **Windows で exe 再ビルド** + zip 再作成 | 配布先プロジェクトの CI テンプレート正本 |
 | `docs/**` | zip 再作成（同梱） | 手順書 |
 
 **テンプレート変更後の確認**

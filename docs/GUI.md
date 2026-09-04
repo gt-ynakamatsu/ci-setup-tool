@@ -7,10 +7,9 @@
 | **配布（推奨）** | `CISetup.exe` をダブルクリック（Python 不要） |
 | 開発 | `python configure.py` または `start_configure.bat` |
 | 初回セットアップ | `Setup-Project.bat [プロジェクトフォルダ]` |
-| ビルド | Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat` → `dist\CISetup.exe`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows` |
-| 配布 zip | `tools\Package-Distribution.ps1` |
+| ビルド | 配布正本は `dist\CISetup.exe`。Windows: `python tools/rebuild_exe.py` / `tools\Build-Exe.bat`。Linux から `.exe` を作る場合は `python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows`（`--native` は `dist/CISetup` になり社内配布用ではない） || 配布 zip | `tools\Package-Distribution.ps1` |
 
-**開発ルール:** GUI・`configure.py`・`bundled_templates` を直したら、作業完了前に必ず exe を再ビルドする（`test_exe_freshness.py` で古い exe を検出）。
+**開発ルール:** GUI・`configure.py`・`bundled_templates` を直したら、作業完了前に **`CISetup.exe` を再ビルド**する（`test_exe_freshness.py` で古い成果物を検出）。Linux では `--native` ではなく `--windows`（Wine）を使う。
 
 ### コマンドライン
 

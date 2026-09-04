@@ -1158,8 +1158,10 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
 
 - `pip install pyinstaller` の後 `python -m PyInstaller cisetup.spec --clean --noconfirm` を実行し、
   `dist\CISetup.exe` を生成する（配布正本。Python + tkinter 内蔵の自己完結 onefile。追加 pip 依存なし）。
-- Linux から同じ Windows `.exe` を出す場合は `tools/setup_wine_python.py` で Wine 上に Windows Python を入れ、
-  `python tools/rebuild_exe.py --windows` を使う（PyInstaller 自体はクロスコンパイル非対応のため）。
+- **社内配布の正本は `dist\CISetup.exe`。** PyInstaller はクロスコンパイルできない。
+  Linux の `--native` では `dist/CISetup`（拡張子なし）になり、これは配布用 exe ではない。
+  Linux から同じ Windows `.exe` を出す場合は `tools/setup_wine_python.py` で Wine 上に Windows Python を入れ、
+  `python tools/rebuild_exe.py --windows` を使う。
 - exe 鮮度判定: 配布正本 `dist/CISetup.exe` に対し、
   `EXE_SOURCE_GLOBS = cisetup/**/*.py, configure.py, cisetup.spec, bundled_templates/**/*`
   の最新 mtime より exe が（`margin=1.0` 秒を超えて）古い、または exe が無ければ stale。
@@ -1181,9 +1183,12 @@ CISetup-<Version>/
 
 ### 11.4 exe 鮮度チェック（`tests\test_exe_freshness.py`）
 
-`dist\CISetup.exe` が無い、または `exe_is_stale()` が真（ソースより古い）のとき `pytest.fail`。
-すなわち `cisetup/` / `configure.py` / `cisetup.spec` / `bundled_templates/` を変更したら exe の
-再ビルドが必要。**本書はドキュメントのみの追加であり exe には影響しない**（exe はドキュメントを同梱しない）。
+実行ファイル（Windows では `dist\CISetup.exe`、Linux では `dist/CISetup`）が無い、
+または `exe_is_stale()` が真（ソースより古い）のとき `pytest.fail`。
+すなわち `cisetup/` / `configure.py` / `cisetup.spec` / `bundled_templates/` を変更したら
+再ビルドが必要。**利用者が動かす社内配布物は Windows の `CISetup.exe` なので、GUI 変更後は
+Windows 上で必ず exe を作り直す。** Linux 上のビルドだけでは足りない。
+**本書はドキュメントのみの追加であり exe には影響しない**（exe はドキュメントを同梱しない）。
 
 ---
 
