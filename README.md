@@ -30,10 +30,10 @@ sudo apt install python3-tk   # tkinter が同梱されていないディスト�
 python3 configure.py
 ```
 
-配布用バイナリ（PyInstaller）も同じ `cisetup.spec` から Linux 上でビルドできますが、
-PyInstaller は実行環境向けのバイナリしか生成できない（クロスコンパイル不可）ため、
-Linux 用バイナイルが必要な場合は **Linux 上で** `python tools/rebuild_exe.py` を実行してください
-（`dist/CISetup`（拡張子なし）が生成されます）。
+**社内配布の成果物は Windows の `CISetup.exe` です。** PyInstaller はクロスコンパイルできないため、
+既定の Linux ビルド（`--native`）では `dist/CISetup`（拡張子なし）しか出ません。
+Windows 用 exe は Windows 上で `python tools/rebuild_exe.py` するか、Linux では
+`python tools/setup_wine_python.py` の後 `python tools/rebuild_exe.py --windows` を使います。
 
 **生成される CI パイプライン（`ci-*.ps1` + `Jenkinsfile`）も Windows / Linux 両対応です。**
 `Jenkinsfile` はエージェントが Windows か Linux/Unix かを実行時に `isUnix()` で判定し、
@@ -106,7 +106,7 @@ cisetup/
 │
 ├── tools/                   … ビルド・配布・保守スクリプト（開発者専用）
 │   ├── Build-Exe.bat        … exe ビルド（rebuild_exe.py を実行）
-│   ├── rebuild_exe.py       … PyInstaller で dist\CISetup.exe を生成
+│   ├── rebuild_exe.py       … PyInstaller で実行ファイルを生成（Windows では dist\CISetup.exe）
 │   ├── Package-Distribution.ps1 … exe ビルド + 社内配布 zip 作成
 │   ├── make_icon.py         … icon_source.png から icon.png / icon.ico を生成
 │   ├── verify_icon.py       … アイコン整合チェック（任意）
@@ -120,7 +120,7 @@ cisetup/
 │   ├── DESIGN.md            … 設計仕様書（アーキテクチャ・Mermaid 図）
 │   ├── GUI.md               … GUI 操作
 │   └── CISetup-CI-Guide.marp.md … Marp プレゼン資料
-└── dist/                    … 【生成物】CISetup.exe + 配布 zip
+└── dist/                    … 【生成物・Git 非追跡】Windows では CISetup.exe、Linux では CISetup + 配布 zip
 ```
 
 ### ルート直下ファイルの役割
@@ -164,7 +164,9 @@ python tools/smoke_test.py
 ### exe の再ビルド（重要）
 
 `cisetup/` ・ `configure.py` ・ `cisetup.spec` ・ `bundled_templates/` を変更したら、
-**作業完了前に必ず exe を再ビルド** してください。古い exe は `tests/test_exe_freshness.py` が検出して失敗させます。
+**作業完了前に必ず Windows 上で `CISetup.exe` を再ビルド**してください。
+利用者が動かすのはこの exe です。ソースだけ直して exe を作らないと、配布 zip は古い GUI のままになります。
+古い / 無い exe は `tests/test_exe_freshness.py` が検出して失敗させます。
 
 配布正本は **Windows 向け `dist/CISetup.exe`**（PyInstaller onefile。Python ランタイム + tkinter を内蔵し利用者は Python 不要。追加の pip 依存は無く十数 MB 程度）。
 
@@ -173,15 +175,19 @@ python tools/smoke_test.py
 python tools\rebuild_exe.py
 # または
 .\tools\Build-Exe.bat
+# => dist\CISetup.exe
 ```
 
 ```bash
 # Linux から Windows .exe を作る（Wine + Windows Python）
 python tools/setup_wine_python.py          # 初回のみ
 python tools/rebuild_exe.py --windows      # => dist/CISetup.exe
-# ホスト OS 向けのみ必要な場合
+# ホスト OS 向けのみ必要な場合（社内配布用ではない）
 python tools/rebuild_exe.py --native       # => dist/CISetup
 ```
+
+Linux で `--windows` を付けずに実行すると `dist/CISetup`（Linux 向け）だけが生成されます。
+これは鮮度テスト用であり、**社内配布用の `CISetup.exe` にはなりません。**
 
 ---
 
