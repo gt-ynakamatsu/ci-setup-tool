@@ -43,7 +43,13 @@ class DialogMixin:
         def worker() -> None:
             try:
                 func()
-            except (ValueError, deps.JenkinsError, deps.LocalCIError, OSError) as exc:
+            except (
+                ValueError,
+                deps.JenkinsError,
+                deps.LocalCIError,
+                deps.git_service.GitError,
+                OSError,
+            ) as exc:
                 msg = str(exc)
                 if "書き込み先ベース" in msg:
                     self.after(0, self._focus_storage_paths)

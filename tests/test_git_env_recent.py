@@ -5,8 +5,106 @@ from pathlib import Path
 
 import pytest
 
-from cisetup import environment_scan
+from cisetup import environment_scan, git_service
 from cisetup.recent_project import RecentProjectStore
+
+
+# ------------------------------------------------------------- git pull (mock)
+
+class FakeGit:
+    """subprocess.run を差し替えて git の挙動を再現する。"""
+
+    def __init__(self, revs=None, branch="main", fail_on=None, timeout_on=None):
+        # rev-parse HEAD の戻り値（呼ばれた順に消費し、尽きたら最後の値を返す）
+        self.revs = list(revs or ["aaaaaaaaaaaa", "aaaaaaaaaaaa"])
+        self.branch = branch
+        self.fail_on = fail_on
+        self.timeout_on = timeout_on
+        self.commands: list[list[str]] = []
+
+    def run(self, cmd, **kwargs):
+        args = cmd[1:]  # drop 'git'
+        self.commands.append(args)
+        sub = args[0]
+        if self.timeout_on == sub:
+            raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 1))
+        if self.fail_on == sub:
+            return subprocess.CompletedProcess(cmd, 1, "", "boom")
+        stdout = ""
+        if args[:2] == ["rev-parse", "--abbrev-ref"]:
+            stdout = self.branch
+        elif args[:2] == ["rev-parse", "HEAD"]:
+            stdout = self.revs.pop(0) if len(self.revs) > 1 else self.revs[0]
+        return subprocess.CompletedProcess(cmd, 0, stdout, "")
+
+
+def test_pull_latest_fast_forwards(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit(revs=["aaaaaaaaaaaa", "bbbbbbbbbbbb"])
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    summary = git_service.pull_latest(tmp_path, "main")
+    assert "取り込みました" in summary
+    assert ["fetch", "origin", "main"] in fake.commands
+    assert ["merge", "--ff-only", "FETCH_HEAD"] in fake.commands
+
+
+def test_pull_latest_already_up_to_date(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", FakeGit(revs=["aaaaaaaaaaaa"]).run)
+    assert "既に最新" in git_service.pull_latest(tmp_path, "main")
+
+
+def test_pull_latest_uses_current_branch_when_unset(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit(branch="develop")
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    git_service.pull_latest(tmp_path)
+    assert ["fetch", "origin", "develop"] in fake.commands
+
+
+def test_pull_latest_detached_head(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", FakeGit(branch="HEAD").run)
+    with pytest.raises(git_service.GitError, match="detached HEAD"):
+        git_service.pull_latest(tmp_path)
+
+
+def test_pull_latest_not_a_repo(tmp_path: Path):
+    with pytest.raises(git_service.GitError, match="Git リポジトリ"):
+        git_service.pull_latest(tmp_path, "main")
+
+
+def test_pull_latest_diverged_reports_manual_fix(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", FakeGit(fail_on="merge").run)
+    with pytest.raises(git_service.GitError, match="fast-forward"):
+        git_service.pull_latest(tmp_path, "main")
+
+
+def test_pull_latest_never_pushes(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit()
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    git_service.pull_latest(tmp_path, "main")
+    assert "push" not in [c[0] for c in fake.commands]
+
+
+def test_pull_latest_fetch_timeout(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setattr(subprocess, "run", FakeGit(timeout_on="fetch").run)
+    with pytest.raises(git_service.GitTimeout):
+        git_service.pull_latest(tmp_path, "main")
+
+
+def test_pull_latest_git_not_found(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+
+    def boom(cmd, **kwargs):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    with pytest.raises(git_service.GitError, match="git コマンドを起動"):
+        git_service.pull_latest(tmp_path, "main")
 
 
 # ----------------------------------------------------------- environment scan

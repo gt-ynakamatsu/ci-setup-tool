@@ -1,8 +1,8 @@
-"""ローカル（Jenkins / git を介さない）での CI ビルド & テスト実行。
+"""ローカル（Jenkins を介さない）での CI ビルド & テスト実行。
 
 配置済みの `CISetup/scripts/ci-build.ps1` → `ci-test.ps1` を、リポジトリの
-作業コピーに対してそのまま PowerShell で実行する。fetch / pull / push といった
-git 操作は一切行わないため、push 前に手元のコードを検証する用途に使う。
+作業コピーに対してそのまま PowerShell で実行する。このモジュール自体は git を
+呼ばない（最新の取り込みは呼び出し側の `git_service.pull_latest` が担当する）。
 各スクリプトは自前で `ci-config.ps1` を読み込み `Set-Location $ci.Root` するため、
 ここでは cwd をリポジトリルートにして起動するだけでよい。
 """
@@ -98,7 +98,7 @@ def run_local_ci(
     configuration: str = "Release",
     on_output: Callable[[str], None] | None = None,
 ) -> None:
-    """ローカルでビルド→テストを順に実行する（git 操作なし）。
+    """ローカルでビルド→テストを順に実行する。
 
     `CISetup/scripts/ci-build.ps1` を実行し、成功した場合のみ `ci-test.ps1` を実行する。
     いずれかが見つからない / 失敗した場合は :class:`LocalCIError` を送出する。
@@ -111,12 +111,12 @@ def run_local_ci(
     configuration = (configuration or "Release").strip() or "Release"
 
     if on_output is not None:
-        on_output("==> ローカルビルドを開始します（git 操作なし）")
+        on_output("==> ローカルビルドを開始します")
     _run_script(root, scripts / "ci-build.ps1", configuration, on_output, "ビルド")
 
     if on_output is not None:
         on_output("")
-        on_output("==> ローカルテストを開始します（git 操作なし）")
+        on_output("==> ローカルテストを開始します")
     _run_script(root, scripts / "ci-test.ps1", configuration, on_output, "テスト")
 
     if on_output is not None:

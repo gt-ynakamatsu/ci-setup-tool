@@ -46,7 +46,7 @@ flowchart LR
 
 ## ローカルで事前確認したいとき
 
-push 前に手元で同じビルド/テストを回せます（git 操作なし）:
+push 前に手元で同じビルド/テストを回せます（スクリプト自体は git を触りません。最新で試すときは先に `git pull` してください）:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\CISetup\scripts\ci-build.ps1 -Configuration Release

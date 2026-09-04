@@ -169,18 +169,20 @@ def test_create_storage_folders_invokes_repo(app, tmp_path):
 
 def test_run_setup_runs_all_steps(app, fake_jenkins, monkeypatch):
     seq = []
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", lambda *a, **k: seq.append("pull") or "ok")
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("apply"))
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._fields["jenkins.job_name"].set("MyApp-CI")
     app._run_setup()
-    assert seq == ["local", "apply"]
+    assert seq == ["pull", "local", "apply"]
     assert fake_jenkins.last.triggered == ("MyApp-CI", True)
 
 
 def test_run_setup_ordering(app, fake_jenkins, monkeypatch):
     seq = []
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", lambda *a, **k: seq.append("pull") or "ok")
     monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("jenkins"))
@@ -189,7 +191,39 @@ def test_run_setup_ordering(app, fake_jenkins, monkeypatch):
     app._fields["git.repository_url"].set("http://git/x.git")
     app._fields["jenkins.job_name"].set("MyApp-CI")
     app._run_setup()
-    assert seq == ["save", "local", "jenkins", "build"]
+    assert seq == ["pull", "save", "local", "jenkins", "build"]
+
+
+def test_run_setup_pulls_configured_branch(app, fake_jenkins, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        deps_mod.git_service,
+        "pull_latest",
+        lambda root, branch: captured.setdefault("args", (root, branch)) or "ok",
+    )
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: None)
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: None)
+    _set_jenkins_secrets(app)
+    app._fields["git.repository_url"].set("http://git/x.git")
+    app._fields["git.branch"].set("develop")
+    app._run_setup()
+    assert captured["args"][1] == "develop"
+
+
+def test_run_setup_stops_when_pull_fails(app, fake_jenkins, monkeypatch):
+    called = {}
+
+    def boom(*a, **k):
+        raise deps_mod.git_service.GitError("取り込みに失敗")
+
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", boom)
+    monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: called.setdefault("save", True))
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: called.setdefault("local", True))
+    _set_jenkins_secrets(app)
+    app._fields["git.repository_url"].set("http://git/x.git")
+    with pytest.raises(deps_mod.git_service.GitError):
+        app._run_setup()
+    assert called == {}  # 取り込みに失敗したら以降は実行しない
 
 
 def test_run_setup_requires_git_url(app):
@@ -199,19 +233,19 @@ def test_run_setup_requires_git_url(app):
         app._run_setup()
 
 
-def test_local_build_test_only_no_git_no_jenkins(app, fake_jenkins, monkeypatch):
-    called = {}
-    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: called.setdefault("local", (a, k)))
-    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: called.setdefault("apply", True))
-    monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: called.setdefault("save", True))
+def test_local_build_test_only_pulls_then_runs(app, fake_jenkins, monkeypatch):
+    seq = []
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", lambda *a, **k: seq.append("pull") or "ok")
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: seq.append("local"))
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: seq.append("apply"))
+    monkeypatch.setattr(app._repo, "save_all", lambda *a, **k: seq.append("save"))
     app._local_build_test_only()
-    assert "local" in called
-    assert "apply" not in called
-    assert "save" not in called
+    assert seq == ["pull", "local"]  # Jenkins 反映も保存もしない
     assert fake_jenkins.last is None
 
 
 def test_local_build_test_only_does_not_require_jenkins_secrets(app, monkeypatch):
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", lambda *a, **k: "ok")
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: None)
     app._fields["secrets.jenkins_url"].set("")
     app._fields["secrets.jenkins_user"].set("")

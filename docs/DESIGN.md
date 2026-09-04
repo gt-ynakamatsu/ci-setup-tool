@@ -241,7 +241,8 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `jenkinsfile_generator.py` | テンプレートのプレースホルダ置換で `Jenkinsfile` を生成 | `generate_jenkinsfile`、`build_agent_declaration` |
 | `jenkins_client.py` | Jenkins API（接続・Crumb・資格情報 upsert・ジョブ upsert・ビルド起動・サーバー初回設定）、ファイルサーバー書き込みテスト | `JenkinsClient`、`apply_settings`、`test_file_server_write`、`extract_agent_secret`、`format_jenkins_error` |
 | `teams_service.py` | Teams アダプティブカード（テスト送信）の生成と送信、URL 検証 | `send_test`、`build_test_card_payload`、`validate_url`、`normalize_url` |
-| `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1` をローカルで実行（git 操作なし）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
+| `git_service.py` | リモート最新の取り込み（`fetch` → `merge --ff-only`）。push はしない | `pull_latest`、`GitError`、`GitTimeout` |
+| `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1` をローカルで実行（このモジュール自体は git を呼ばない）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
 | `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins サービスの有無チェック | `scan`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
 | `help_texts.py` | 各設定項目の GUI ツールチップ文言（保存先 JSON キーまで明記） | 文字列定数群 |
@@ -698,7 +699,7 @@ GUI 表示用に代表（先頭の書き込み先）のレイアウト例を返�
 | ③ | 成果物・ログの保存先 | 書き込み先ベース（複数可）/ 共有フォルダルート（CI_FILE_SERVER・複数可）/ カテゴリ別「保存フォルダ名」（logs / releases / analysis / tests / source）と有効チェック / 日付フォルダ / プレビュー / 格納先フォルダ作成 / エージェント兄弟パス / CI_FILE_SERVER グローバル登録 |
 | ④ | Teams 通知 | Webhook URL / ③ と同じカテゴリ表示名の閲覧 URL（logs / releases / analysis / tests / source、各複数可）/ テスト送信 |
 | ⑤ | Jenkins への接続 | Jenkins URL / ユーザー名 / API Token / 接続テスト |
-| ⑥ | セットアップを実行 | 「セットアップを実行」（保存 → ローカル → Jenkins 反映 → テストビルド）+ 「設定だけ保存」+ 「ローカルでビルド＆テスト」+ publish チェック + ローカル実行ログ欄 |
+| ⑥ | セットアップを実行 | 「セットアップを実行」（取り込み → 保存 → ローカル → Jenkins 反映 → テストビルド）+ 「設定だけ保存」+ 「ローカルでビルド＆テスト」+ publish チェック + ローカル実行ログ欄 |
 | — | 詳細設定（Expander） | ビルド種別 / 自動入力項目 / CI ジョブ / Jenkins サーバー初回設定 / 手動操作 |
 | — | ステータスバー | 状態表示 |
 
@@ -833,18 +834,26 @@ sequenceDiagram
 
 ### 9.2 「セットアップを実行」フロー（⑥）
 
-「セットアップを実行」は **保存 → ローカルでビルド＆テスト → Jenkins 反映 → テストビルド** を
-いつも同じ順で実行する（処理を選ぶチェックボックスはない）。
+「セットアップを実行」は **最新の取り込み → 保存 → ローカルでビルド＆テスト → Jenkins 反映 →
+テストビルド** をいつも同じ順で実行する（処理を選ぶチェックボックスはない）。
 CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は行わない。
-`repositoryUrl` はアプリソースの checkout 用に必須。
+`repositoryUrl` は取り込みと Jenkins 側の checkout に使うため必須。
 
 個別実行は「設定だけ保存」「ローカルでビルド＆テスト」、または詳細設定の手動操作。
 
+**最新の取り込み**（`pull` ステップ）は `git_service.pull_latest` が `git fetch <remote> <branch>` →
+`git merge --ff-only FETCH_HEAD` を実行する。**取り込み方向だけで push はしない**。
+古いコードをテストしても意味がないため、ビルド＆テストの前に必ず走る（「ローカルでビルド＆テスト」
+ボタン単独でも同様）。`--ff-only` に限定して履歴を書き換えず、リモートと分岐している場合は
+`GitError` で手動解決を促す。ブランチは `config.git.branch`、未設定なら現在のブランチ
+（detached HEAD はエラー）。fetch はリモート通信のため 120 秒、ローカル操作は 30 秒でタイムアウトする。
+
 **ローカルでビルド＆テスト**は、配置済みの `CISetup\scripts\ci-build.ps1` →
-`ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する**純粋なローカル処理**。
-**git 操作（fetch / pull / push）は一切なく、Jenkins も使わない**。単独ボタンから実行した場合は
-保存の強制も `_require_jenkins_secrets()` も発生しない。ビルドが失敗したらテストは実行しない（最初の失敗で停止）。
-出力はバックグラウンドスレッドから `after` 経由で「ローカル実行ログ」欄へ流し込み、UI を固めない。
+`ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する。`local_ci` 自体は git を
+呼ばず、Jenkins も使わない。単独ボタンから実行した場合は保存の強制も `_require_jenkins_secrets()` も
+発生しない。ビルドが失敗したらテストは実行しない（最初の失敗で停止）。
+出力はバックグラウンドスレッドから `after` 経由で「ローカル実行ログ」欄へ流し込み、UI を固めない
+（取り込み結果も同じ欄の先頭に出す）。
 配置済みスクリプトを実行する仕様のため、設定変更を反映するには先に「設定を保存」しておく。
 
 ```mermaid
@@ -864,8 +873,11 @@ sequenceDiagram
     Ops->>Ops: _require_jenkins_secrets()
     Ops->>Ops: repositoryUrl 必須
     Ops->>U: 実行プラン確認ダイアログ
-    loop 保存 → ローカル → Jenkins 反映 → テストビルド
-        alt save
+    loop 取り込み → 保存 → ローカル → Jenkins 反映 → テストビルド
+        alt pull
+            Ops->>Deps: git_service.pull_latest(root, branch)
+            Deps->>GS: fetch + merge --ff-only
+        else save
             Ops->>Repo: save_all(root, config, secrets)
         else local
             Ops->>Deps: run_local_ci(...)

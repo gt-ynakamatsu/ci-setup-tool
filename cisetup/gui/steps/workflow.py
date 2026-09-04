@@ -386,9 +386,10 @@ class WorkflowStepsMixin:
         section_title(frame, "⑥ セットアップを実行", COLOR_RUN_TITLE).pack(anchor="w", pady=(0, 6))
         tk.Label(
             frame,
-            text="「セットアップを実行」で次を順番に行います: 設定の保存 → この PC でのビルド＆テスト →\n"
-            "Jenkins に反映 → テストビルド。CI の手順は Jenkins ジョブに内蔵されるため、"
-            "顧客 Git へ CI 定義を載せる必要はありません。\n"
+            text="「セットアップを実行」で次を順番に行います: 最新のコードを取り込む（git pull）→ 設定の保存 →\n"
+            "この PC でのビルド＆テスト → Jenkins に反映 → テストビルド。\n"
+            "テストは最新のコードに対して行うため、先に取り込みます（push はしません。"
+            "CI の手順は Jenkins ジョブに内蔵されます）。\n"
             "個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」、"
             "または詳細設定の手動操作を使ってください。",
             font=font(12),
