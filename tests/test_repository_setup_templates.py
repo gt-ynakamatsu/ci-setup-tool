@@ -816,10 +816,8 @@ def test_save_all_keeps_personal_paths_out_of_git(sln_repo: Path):
     saved_sec = json.loads(paths.secrets_path(sln_repo).read_text(encoding="utf-8"))
     assert saved_sec["gitUsername"] == "taro"
 
-    # Jenkinsfile に個人パスが焼き込まれない
-    jf = paths.jenkinsfile_path(sln_repo).read_text(encoding="utf-8")
-    assert "taro" not in jf
-    assert "OneDrive" not in jf
+    # 顧客 Git に載せる config.json には個人パスを残さない
+    assert "OneDrive" not in json.dumps(saved)
 
 
 def test_load_config_overlays_local(sln_repo: Path):
