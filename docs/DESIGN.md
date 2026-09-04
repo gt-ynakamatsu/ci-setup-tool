@@ -44,11 +44,9 @@ Python（標準ライブラリの tkinter）製で、配布形態は **単一 ex
 
 CISetup が行うことは大きく次の 3 つに分けられる。
 
-1. **CI 定義ファイルの生成・配置** — 対象アプリのリポジトリへ `CISetup\` フォルダ（旧 `cisetup\` も後方互換で読込）を作り、
-   `Jenkinsfile`・各ステージの PowerShell スクリプト（`ci-*.ps1`）・設定 JSON を配置する。
-2. **Jenkins への反映** — Jenkins API を叩いて、資格情報（Git / Teams Webhook）の登録、
-   Pipeline ジョブの作成/更新、（任意で）ビルド起動、サーバー初回設定（プラグイン/エージェント登録）を行う。
-3. **Git push** — 生成した CI 定義ファイルだけを commit / push する（機微情報は除外）。
+1. **CI 定義の生成** — 作業用に `CISetup\` を置きつつ、**正本は Jenkins ジョブへ内蔵**する（顧客 Git への CI 定義 push は不要）。
+2. **Jenkins への反映** — 資格情報登録、内蔵パイプライン・ジョブの作成/更新、任意でビルド起動。
+3. **アプリソースの Git** — 顧客 Git からはアプリ本体だけ checkout する（CISetup の Jenkinsfile は使わない）。
 
 配置された CI 定義は Jenkins 上で動作し、ビルド・テスト・静的解析・成果物生成を行い、
 結果をファイルサーバーへ配置し、Teams へ通知する。
@@ -841,7 +839,8 @@ sequenceDiagram
 
 ### 9.2 「セットアップを実行」フロー（⑥）
 
-チェックボックスの既定は **保存=ON / ローカルでビルド＆テスト=ON / Jenkins 反映=ON / Git push=ON / テストビルド=ON**（成果物 zip 作成も既定 ON）。
+チェックボックスの既定は **保存=ON / ローカルでビルド＆テスト=ON / Jenkins 反映=ON / Git push=OFF / テストビルド=ON**。
+CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は不要（既定 OFF）。
 内部の実行順は常に **保存 → ローカル → Jenkins 反映 → Git push → テストビルド**（チェックされたものだけ）。
 
 重要: **Jenkins 反映または Git push が選ばれている場合、保存を強制的に ON にする**

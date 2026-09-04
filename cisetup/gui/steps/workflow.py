@@ -404,7 +404,7 @@ class WorkflowStepsMixin:
         self._step_save_var = tk.BooleanVar(value=True)
         self._step_local_var = tk.BooleanVar(value=True)
         self._step_jenkins_var = tk.BooleanVar(value=True)
-        self._step_push_var = tk.BooleanVar(value=True)
+        self._step_push_var = tk.BooleanVar(value=False)
         self._step_build_var = tk.BooleanVar(value=True)
         options = tk.Frame(frame, bg=COLOR_RUN_BG)
         options.pack(anchor="w", pady=(0, 12))

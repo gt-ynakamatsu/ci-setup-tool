@@ -232,8 +232,8 @@ def test_build_job_triggers_xml_poll_schedule():
     cfg.jenkins.poll_schedule = "H/5 * * * *"
     cfg.jenkins.cron_schedule = ""
     xml = jenkins_client.build_job_triggers_xml(cfg)
-    assert "SCMTrigger" in xml
-    assert "H/5 * * * *" in xml
+    assert xml == ""
+    assert "SCMTrigger" not in xml
     assert "TimerTrigger" not in xml
 
 
@@ -255,7 +255,7 @@ def test_build_job_triggers_xml_no_cron_when_retry_wrapper_enabled():
     cfg.jenkins.retry_wrapper_enabled = True
     xml = jenkins_client.build_job_triggers_xml(cfg)
     assert "TimerTrigger" not in xml
-    assert "SCMTrigger" in xml  # poll はデフォルト有効
+    assert "SCMTrigger" not in xml
 
 
 def test_build_job_triggers_xml_empty_when_both_disabled():
@@ -273,9 +273,15 @@ def test_upsert_pipeline_job_includes_scm_trigger(recorder):
     cfg.jenkins.cron_schedule = ""
     client.upsert_pipeline_job(cfg)
     body = recorder.bodies[-1].decode("utf-8")
-    assert "hudson.triggers.SCMTrigger" in body
+    assert "CpsFlowDefinition" in body
+    assert "CpsScmFlowDefinition" not in body
+    assert "scriptPath" not in body
+    assert "pollSCM" in body
     assert "H/10 * * * *" in body
-    assert "TimerTrigger" not in body
+    assert "hudson.triggers.TimerTrigger" not in body
+    assert "hudson.triggers.SCMTrigger" not in body
+    assert "GitSCM" in body
+    assert "cisetup-pack.zip" in body
 
 
 def test_upsert_pipeline_job_includes_timer_trigger(recorder):
@@ -387,7 +393,7 @@ def test_apply_settings_skips_env_by_default(recorder):
     cfg.git.repository_url = "http://git/x.git"
     cfg.jenkins.ci_file_servers = [r"\\srv\ci"]
     apply_settings(cfg, _secrets())
-    assert not any(b"CI_FILE_SERVER" in body for body in recorder.bodies)
+    assert not any("scriptText" in url for _, url in recorder.calls)
 
 
 def test_apply_settings_skips_env_when_no_target(recorder):
@@ -396,7 +402,7 @@ def test_apply_settings_skips_env_when_no_target(recorder):
     cfg.jenkins.push_ci_file_server_env = True
     cfg.jenkins.ci_file_servers = []
     apply_settings(cfg, _secrets())
-    assert not any(b"CI_FILE_SERVER" in body for body in recorder.bodies)
+    assert not any("scriptText" in url for _, url in recorder.calls)
 
 
 def test_apply_settings(recorder):

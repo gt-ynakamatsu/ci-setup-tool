@@ -51,6 +51,11 @@ def test_jenkinsfile_template_is_cross_platform():
     # ステージ内のスクリプト呼び出しは runPs 経由（powershell を直接呼ばない）。
     assert "powershell '''" not in text
     assert "powershell '." not in text
+    assert "checkout scm" not in text
+    assert "{{GIT_CHECKOUT}}" in text
+    assert "CpsScmFlowDefinition" not in (
+        template_store.bundled_template_dir() / "JenkinsJob.config.template.xml"
+    ).read_text(encoding="utf-8")
 
 
 def test_configure_help():

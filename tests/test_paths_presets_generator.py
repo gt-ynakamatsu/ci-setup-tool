@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from cisetup import paths
@@ -294,8 +295,9 @@ def test_generate_jenkinsfile(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "label 'windows'" in text
     assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" not in text
-    # poll / cron は Jenkins ジョブ XML 側に移したため Jenkinsfile には含めない
-    assert "pollSCM" not in text
+    # cron はジョブ XML。poll はジョブ内蔵パイプラインの pollSCM。
+    assert "pollSCM" in text
+    assert "H/5 * * * *" in text
     assert "cron(spec:" not in text
     assert r"\\\\server\\ci" in text  # backslash escaped for groovy
     assert "timeout=30 retention=30" in text
@@ -345,7 +347,28 @@ def test_generate_jenkinsfile_checkout_retry_count_minimum_one(tmp_path: Path):
     assert out.read_text(encoding="utf-8") == "retry(1)"
 
 
-def test_build_triggers_block_empty_when_no_lines():
+def test_cisetup_pack_includes_scripts_and_local(tmp_path: Path):
+    import base64
+    import zipfile
+    from io import BytesIO
+
+    from cisetup.jenkinsfile_generator import build_cisetup_pack_base64
+
+    cfg = CISetupConfig()
+    cfg.project.name = "MyApp"
+    cfg.storage.release_urls = ["https://share/releases"]
+    cfg.storage.base_paths = [r"C:\ci"]
+    raw = base64.b64decode(build_cisetup_pack_base64(cfg))
+    with zipfile.ZipFile(BytesIO(raw)) as zf:
+        names = set(zf.namelist())
+        assert "scripts/ci-build.ps1" in names
+        assert "cisetup.config.json" in names
+        assert "cisetup.local.json" in names
+        local = json.loads(zf.read("cisetup.local.json"))
+        assert local["releaseUrls"] == ["https://share/releases"]
+        committed = json.loads(zf.read("cisetup.config.json"))
+        assert committed["storage"]["releaseUrls"] == []
+        assert committed["storage"]["basePaths"] == []
     # poll / cron はジョブ XML 側に移設済みのため通常は空。
     # 空の `triggers {}` は Declarative Pipeline でコンパイルエラーになるため、
     # トリガー行が無いときはブロックごと出力しない。
@@ -371,11 +394,15 @@ def test_generated_jenkinsfile_has_no_empty_triggers_block(tmp_path: Path):
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile(template, out, cfg)
     text = out.read_text(encoding="utf-8")
-    # triggers ブロック自体が出力されない（poll/cron はジョブ XML 側）
-    assert "triggers {" not in text
+    assert "triggers {" in text
+    assert "pollSCM" in text
+    assert "checkout scm" not in text
+    assert "GitSCM" in text
+    assert "cisetup-pack.zip" in text
+    assert "Materialize CISetup" in text
     # 未置換プレースホルダが残っていない
     assert "{{TRIGGERS_BLOCK}}" not in text
     assert "{{POLL_TRIGGER}}" not in text
     assert "{{CRON_TRIGGER_LINE}}" not in text
-    # options ブロックの直後に parameters ブロックが続く（空行のみ）
-    assert "    }\n\n    parameters {" in text
+    assert "{{GIT_CHECKOUT}}" not in text
+    assert "{{CISETUP_PACK_B64}}" not in text

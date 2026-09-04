@@ -393,19 +393,21 @@ PUBLISH_RELEASE = (
 )
 
 STEP_SAVE = (
-    "【何を】入力内容を cisetup.config.json / cisetup.local.json / secrets に保存し、"
-    "CI スクリプトをリポジトリへ配置します\n"
-    "【なぜ】Jenkins 反映や push の前に、設定ファイルとスクリプトを最新状態にするため"
+    "【何を】入力内容をこの PC の cisetup.config.json / cisetup.local.json / secrets に保存し、"
+    "作業用の CI スクリプトを配置します\n"
+    "【なぜ】Jenkins 反映の前に、手元の設定を最新状態にするため"
 )
 
 STEP_JENKINS = (
-    "【何を】Jenkins ジョブ・Credentials・トリガー設定をサーバーへ反映します\n"
-    "【なぜ】GUI で編集した設定を実際の CI パイプラインとして動かすため"
+    "【何を】Jenkins ジョブにパイプライン一式（スクリプト・設定・checkout）を内蔵し、"
+    "Credentials・トリガーもサーバーへ反映します\n"
+    "【なぜ】顧客 Git に CI 定義を置かず、Jenkins 内部だけで CI を回すため"
 )
 
 STEP_PUSH = (
-    "【何を】ローカルの変更を社内 Git へ push します\n"
-    "【なぜ】Jenkins が取得するコードを最新にし、チームと設定・ソースを共有するため"
+    "【何を】（任意）アプリのソースなど、Git へ上げたい変更を push します\n"
+    "【通常は不要】CI の Jenkinsfile / スクリプト / 閲覧 URL は Jenkins ジョブ側で完結します。"
+    "顧客リポジトリへ CI 定義を載せる必要はありません"
 )
 
 STEP_BUILD = (
