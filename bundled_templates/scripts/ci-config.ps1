@@ -250,6 +250,11 @@ function Get-CiSettings {
             return [PSCustomObject]@{
                 BasePaths     = Get-ConfigList $data @('basePaths', 'basePath')
                 CiFileServers = Get-ConfigList $data @('ciFileServers', 'ciFileServer')
+                ReleaseUrls   = Get-ConfigList $data @('releaseUrls', 'releaseUrl')
+                AnalysisUrls  = Get-ConfigList $data @('analysisUrls', 'analysisUrl')
+                LogsUrls      = Get-ConfigList $data @('logsUrls', 'logsUrl')
+                TestsUrls     = Get-ConfigList $data @('testsUrls', 'testsUrl')
+                SourceUrls    = Get-ConfigList $data @('sourceUrls', 'sourceUrl')
             }
         }
         catch {
@@ -258,14 +263,33 @@ function Get-CiSettings {
         }
     }
 
+    function Test-LocalOverridesEmpty {
+        param($Overrides)
+        if (-not $Overrides) { return $true }
+        return (
+            $Overrides.BasePaths.Count -eq 0 -and
+            $Overrides.CiFileServers.Count -eq 0 -and
+            $Overrides.ReleaseUrls.Count -eq 0 -and
+            $Overrides.AnalysisUrls.Count -eq 0 -and
+            $Overrides.LogsUrls.Count -eq 0 -and
+            $Overrides.TestsUrls.Count -eq 0 -and
+            $Overrides.SourceUrls.Count -eq 0
+        )
+    }
+
     $localOverrides = Import-LocalOverrides -Path $localPath
-    if (-not $localOverrides -or ($localOverrides.BasePaths.Count -eq 0 -and $localOverrides.CiFileServers.Count -eq 0)) {
+    if (Test-LocalOverridesEmpty $localOverrides) {
         $externalOverrides = Import-LocalOverrides -Path $externalLocalPath
         if ($externalOverrides) { $localOverrides = $externalOverrides }
     }
     if ($localOverrides) {
         if ($localOverrides.BasePaths.Count -gt 0) { $basePaths = $localOverrides.BasePaths }
         if ($localOverrides.CiFileServers.Count -gt 0) { $ciFileServers = $localOverrides.CiFileServers }
+        if ($localOverrides.ReleaseUrls.Count -gt 0) { $releaseUrls = $localOverrides.ReleaseUrls }
+        if ($localOverrides.AnalysisUrls.Count -gt 0) { $analysisUrls = $localOverrides.AnalysisUrls }
+        if ($localOverrides.LogsUrls.Count -gt 0) { $logsUrls = $localOverrides.LogsUrls }
+        if ($localOverrides.TestsUrls.Count -gt 0) { $testsUrls = $localOverrides.TestsUrls }
+        if ($localOverrides.SourceUrls.Count -gt 0) { $sourceUrls = $localOverrides.SourceUrls }
     }
 
     return [PSCustomObject]@{

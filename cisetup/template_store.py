@@ -74,28 +74,29 @@ def extract_to_repository(repository_root: Path, overwrite: bool = True) -> list
     return written
 
 
+def _gitignore_entries() -> tuple[str, ...]:
+    """Git に載せない設定ファイル（新フォルダ配下 + ルート直下の旧名）。"""
+    names = (paths.SECRETS_FILE, paths.LOCAL_FILE)
+    prefixed = tuple(f"{paths.CI_FOLDER}/{name}" for name in names)
+    return prefixed + names
+
+
 def _ensure_secrets_gitignore(repository_root: Path) -> None:
-    legacy_entry = paths.SECRETS_FILE
-    entry = f"{paths.CI_FOLDER}/{paths.SECRETS_FILE}"
     gitignore = repository_root / ".gitignore"
+    entries = _gitignore_entries()
 
     if gitignore.is_file():
         content = gitignore.read_text(encoding="utf-8")
-        if entry in content and legacy_entry in content:
+        if all(entry in content for entry in entries):
             return
-
         suffix = "" if content.endswith("\n") else "\n"
-        if entry not in content:
-            with gitignore.open("a", encoding="utf-8", newline="\n") as fh:
-                if suffix:
-                    fh.write(suffix)
-                fh.write(f"{entry}\n")
-            suffix = "\n"
-        if legacy_entry not in content:
-            with gitignore.open("a", encoding="utf-8", newline="\n") as fh:
-                if suffix:
-                    fh.write(suffix)
-                fh.write(f"{legacy_entry}\n")
+        with gitignore.open("a", encoding="utf-8", newline="\n") as fh:
+            for entry in entries:
+                if entry not in content:
+                    if suffix:
+                        fh.write(suffix)
+                        suffix = ""
+                    fh.write(f"{entry}\n")
         return
 
-    gitignore.write_text(f"{entry}\n{legacy_entry}\n", encoding="utf-8", newline="\n")
+    gitignore.write_text("".join(f"{e}\n" for e in entries), encoding="utf-8", newline="\n")

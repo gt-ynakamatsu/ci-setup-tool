@@ -111,7 +111,7 @@ RELEASE_URL = (
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
     "【例】https://contoso.sharepoint.com/:f:/s/share/xxxxx\n"
-    "【保存先】cisetup.config.json → storage.releaseUrls"
+    "【保存先】cisetup.local.json（Git 非追跡）→ releaseUrls"
 )
 
 ANALYSIS_URL = (
@@ -121,7 +121,7 @@ ANALYSIS_URL = (
     "【どこで使う】Teams 通知の「解析レポート (HTML)」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
-    "【保存先】cisetup.config.json → storage.analysisUrls"
+    "【保存先】cisetup.local.json（Git 非追跡）→ analysisUrls"
 )
 
 LOGS_URL = (
@@ -131,7 +131,7 @@ LOGS_URL = (
     "【どこで使う】Teams 通知（失敗時）の「ログフォルダを開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ボタンは表示されません\n"
-    "【保存先】cisetup.config.json → storage.logsUrls"
+    "【保存先】cisetup.local.json（Git 非追跡）→ logsUrls"
 )
 
 TESTS_URL = (
@@ -141,7 +141,7 @@ TESTS_URL = (
     "【どこで使う】Teams 通知でユニットテスト失敗時の「ユニットテストログを開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ファイルサーバーへ配置したログへのリンク（同一 PC のみ有効）にフォールバック\n"
-    "【保存先】cisetup.config.json → storage.testsUrls"
+    "【保存先】cisetup.local.json（Git 非追跡）→ testsUrls"
 )
 
 SOURCE_URL = (
@@ -151,7 +151,7 @@ SOURCE_URL = (
     "【どこで使う】Teams 通知の「開発環境 zip を開く」ボタン\n"
     "【複数可】右端の「＋」で複数 URL を追加でき、通知では全リンクをボタン表示します\n"
     "【空欄】ローカルパス (file://) のリンクになります（同じ PC でのみ有効）\n"
-    "【保存先】cisetup.config.json → storage.sourceUrls"
+    "【保存先】cisetup.local.json（Git 非追跡）→ sourceUrls"
 )
 
 TESTS_DIR = (
