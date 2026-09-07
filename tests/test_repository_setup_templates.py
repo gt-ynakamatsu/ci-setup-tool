@@ -177,6 +177,39 @@ def test_publish_detection_is_name_independent_prefers_executable(tmp_path: Path
     assert out.project.publish_project == "Main/IpuTestAppCore.csproj"
 
 
+def test_apply_auto_detection_keeps_library_when_only_sample_is_executable(tmp_path: Path):
+    # 実行アプリがサンプル／モックアップしか無い場合は差し替えない（誤った成果物を公開しないため）。
+    (tmp_path / "IpuTestAppCore").mkdir()
+    (tmp_path / "IpuTestAppCore" / "IpuTestAppCore.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup></Project>',
+        encoding="utf-8",
+    )
+    mock = tmp_path / "gui_design_sample" / "ScreenMockup.Presentation"
+    mock.mkdir(parents=True)
+    (mock / "ScreenMockup.Presentation.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+        "<OutputType>WinExe</OutputType></PropertyGroup></Project>",
+        encoding="utf-8",
+    )
+    (tmp_path / "IpuTestApp.sln").write_text(
+        _sln_with_projects(
+            ("IpuTestAppCore", r"IpuTestAppCore\IpuTestAppCore.csproj"),
+            (
+                "ScreenMockup.Presentation",
+                r"gui_design_sample\ScreenMockup.Presentation\ScreenMockup.Presentation.csproj",
+            ),
+        ),
+        encoding="utf-8",
+    )
+    cfg = default_config()
+    cfg.project.name = "IpuTestApp"
+    cfg.project.solution_file = "IpuTestApp.sln"
+    cfg.project.artifact_prefix = "IpuTestApp"
+    cfg.project.publish_project = "IpuTestAppCore/IpuTestAppCore.csproj"
+    out = apply_auto_detection(tmp_path, cfg)
+    assert out.project.publish_project == "IpuTestAppCore/IpuTestAppCore.csproj"
+
+
 def test_apply_auto_detection_replaces_library_publish_with_executable(tmp_path: Path):
     # 実在するライブラリ（IpuTestAppCore）が指定されていても、WinExe があれば差し替える。
     (tmp_path / "IpuTestAppCore").mkdir()
@@ -326,6 +359,8 @@ def test_ci_publish_framework_dependent_single_exe():
     assert "$exePath" in text
     assert "Find-ExecutablePublishProject" in text
     assert "NETSDK1099" in text
+    # 実行アプリが無いリポジトリでも失敗させず、単一ファイル化だけ諦める。
+    assert "if ($singleFile) {" in text
 
     deploy = template_store.bundled_template_dir() / "scripts" / "ci-deploy-fileserver.ps1"
     dtext = deploy.read_text(encoding="utf-8-sig")
@@ -970,12 +1005,12 @@ def test_validate_custom_requires_build_command(sln_repo: Path):
         repo.validate(cfg, sln_repo)
 
 
-def test_validate_rejects_library_publish_project(sln_repo: Path):
+def test_validate_accepts_library_publish_project(sln_repo: Path):
+    # ライブラリ指定でも保存はできる（CI 側で単一ファイル公開を諦めて通常 publish に落とす）。
     repo = ConfigRepository()
     cfg = _valid_config(sln_repo)
     cfg.project.publish_project = "tests/MyApp.Tests/MyApp.Tests.csproj"
-    with pytest.raises(ValueError, match="Exe / WinExe"):
-        repo.validate(cfg, sln_repo)
+    repo.validate(cfg, sln_repo)
 
 
 def test_validate_missing_solution(tmp_path: Path):

@@ -148,6 +148,17 @@ function Test-LooksLikeTestProject {
     return ($lowered.EndsWith('tests') -or $lowered.EndsWith('.test'))
 }
 
+function Test-LooksLikeSamplePath {
+    param([string]$RelativePath)
+    # サンプル・モックアップ・外部取り込みは製品成果物ではないので publish 候補にしない。
+    $dir = ($RelativePath -replace '\\', '/')
+    $dir = $dir.Substring(0, [Math]::Max(0, $dir.LastIndexOf('/'))).ToLowerInvariant()
+    foreach ($marker in @('sample', 'mockup', 'example', 'demo', 'vendor', 'third_party', 'external')) {
+        if ($dir.Contains($marker)) { return $true }
+    }
+    return $false
+}
+
 function Find-ExecutablePublishProject {
     param([string]$Root, [string]$PreferName)
     $csprojs = @(Get-ChildItem -Path $Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
@@ -155,8 +166,9 @@ function Find-ExecutablePublishProject {
     $exes = New-Object System.Collections.Generic.List[object]
     foreach ($f in $csprojs) {
         if (Test-LooksLikeTestProject -Stem $f.BaseName) { continue }
-        if (-not (Test-CsprojIsExecutable -Path $f.FullName)) { continue }
         $rel = $f.FullName.Substring($Root.Length).TrimStart('\', '/')
+        if (Test-LooksLikeSamplePath -RelativePath $rel) { continue }
+        if (-not (Test-CsprojIsExecutable -Path $f.FullName)) { continue }
         [void]$exes.Add([pscustomobject]@{ Rel = $rel; Stem = $f.BaseName })
     }
     if ($exes.Count -eq 0) { return $null }
@@ -166,30 +178,23 @@ function Find-ExecutablePublishProject {
 }
 
 # PublishSingleFile は実行アプリ（Exe / WinExe）にしか使えない（NETSDK1099）。
-# 既存ジョブが IpuTestAppCore のようなライブラリを指している場合は実行アプリへ差し替える。
+# publishProject がライブラリなら、製品の実行アプリがあればそちらへ差し替え、
+# 無ければ単一ファイル化を諦めて通常の publish（DLL 一式 + zip）に落とす。
 $outputType = Get-CsprojOutputType -Path $publishProjectPath
+$singleFile = $true
 if (-not (Test-CsprojIsExecutable -Path $publishProjectPath)) {
     $altRel = Find-ExecutablePublishProject -Root $ci.Root -PreferName $ci.ProjectName
     if ([string]::IsNullOrWhiteSpace($altRel)) {
-        $candidates = Get-ChildItem -Path $ci.Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
-            ForEach-Object { $_.FullName.Substring($ci.Root.Length).TrimStart('\', '/') }
-        $list = if ($candidates) { ($candidates | ForEach-Object { "  - $_" }) -join [Environment]::NewLine } else { "  (.csproj が見つかりません)" }
-        throw @"
-単一ファイル公開は実行アプリ（OutputType が Exe / WinExe）に対してのみサポートされています（NETSDK1099）。
-指定された publishProject はライブラリです: $($ci.PublishProject) (OutputType=$outputType)
-
-リポジトリ内の .csproj 候補:
-$list
-
-GUI の『公開プロジェクト (publishProject)』を実行アプリの csproj に修正し、Jenkins ジョブを更新してください。
-"@
-    }
-    Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）です。実行アプリ '$altRel' を公開します。"
-    $ci.PublishProject = $altRel
-    $publishProjectPath = if ([System.IO.Path]::IsPathRooted($ci.PublishProject)) {
-        $ci.PublishProject
+        $singleFile = $false
+        Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）で、実行アプリの csproj が見つかりません。単一ファイル公開(.exe)は行わず、通常の publish（zip のみ）にします。"
     } else {
-        Join-Path $ci.Root $ci.PublishProject
+        Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）です。実行アプリ '$altRel' を公開します。"
+        $ci.PublishProject = $altRel
+        $publishProjectPath = if ([System.IO.Path]::IsPathRooted($ci.PublishProject)) {
+            $ci.PublishProject
+        } else {
+            Join-Path $ci.Root $ci.PublishProject
+        }
     }
 }
 
@@ -204,16 +209,21 @@ $publishArgs = @(
     "-c", $Configuration,
     "-r", $platformTag,
     "-o", $publishDir,
-    "--self-contained", "false",
-    "-p:PublishSingleFile=true",
-    "-p:IncludeNativeLibrariesForSelfExtract=true"
+    "--self-contained", "false"
 )
+if ($singleFile) {
+    $publishArgs += @(
+        "-p:PublishSingleFile=true",
+        "-p:IncludeNativeLibrariesForSelfExtract=true"
+    )
+}
 
 if ($Version) {
     $publishArgs += @("-p:Version=$Version", "-p:AssemblyVersion=$Version.0", "-p:FileVersion=$Version.0")
 }
 
-Write-Host "==> Publish (framework-dependent single-file, $platformTag)"
+$mode = if ($singleFile) { 'framework-dependent single-file' } else { 'framework-dependent (library)' }
+Write-Host "==> Publish ($mode, $platformTag)"
 dotnet @publishArgs
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed (exit code $LASTEXITCODE)."
@@ -223,32 +233,35 @@ $prefix = $ci.ArtifactPrefix
 $projBase = [System.IO.Path]::GetFileNameWithoutExtension($ci.PublishProject)
 
 # 単一ファイル化した実行ファイルを release 直下へコピー（成果物の主出力）。
-$exeCandidates = @(Get-ChildItem -Path $publishDir -File -Filter '*.exe' -ErrorAction SilentlyContinue)
-if ($exeCandidates.Count -eq 0) {
-    # Linux 等: 拡張子なしの apphost が主成果物になることがある
-    $maybe = Join-Path $publishDir $projBase
-    if (Test-Path -LiteralPath $maybe -PathType Leaf) {
-        $exeCandidates = @(Get-Item -LiteralPath $maybe)
+$exePath = ''
+if ($singleFile) {
+    $exeCandidates = @(Get-ChildItem -Path $publishDir -File -Filter '*.exe' -ErrorAction SilentlyContinue)
+    if ($exeCandidates.Count -eq 0) {
+        # Linux 等: 拡張子なしの apphost が主成果物になることがある
+        $maybe = Join-Path $publishDir $projBase
+        if (Test-Path -LiteralPath $maybe -PathType Leaf) {
+            $exeCandidates = @(Get-Item -LiteralPath $maybe)
+        }
     }
-}
-if ($exeCandidates.Count -eq 0) {
-    throw @"
+    if ($exeCandidates.Count -eq 0) {
+        throw @"
 Publish 後に実行ファイルが見つかりません（$publishDir）。
 publishProject（$($ci.PublishProject)）の OutputType が Exe / WinExe であることを確認してください。
 "@
-}
+    }
 
-$mainExe = @($exeCandidates | Where-Object { $_.BaseName -ieq $projBase } | Select-Object -First 1)
-if (-not $mainExe) {
-    $mainExe = @($exeCandidates | Sort-Object Length -Descending | Select-Object -First 1)
-}
-$mainExe = $mainExe[0]
+    $mainExe = @($exeCandidates | Where-Object { $_.BaseName -ieq $projBase } | Select-Object -First 1)
+    if (-not $mainExe) {
+        $mainExe = @($exeCandidates | Sort-Object Length -Descending | Select-Object -First 1)
+    }
+    $mainExe = $mainExe[0]
 
-$exeExt = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
-$exeName = if ($Version) { "$prefix-$Version-$platformTag$exeExt" } else { "$prefix-$platformTag$exeExt" }
-$exePath = Join-Path $releaseDir $exeName
-Copy-Item -LiteralPath $mainExe.FullName -Destination $exePath -Force
-Write-Host "Executable: $exePath"
+    $exeExt = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
+    $exeName = if ($Version) { "$prefix-$Version-$platformTag$exeExt" } else { "$prefix-$platformTag$exeExt" }
+    $exePath = Join-Path $releaseDir $exeName
+    Copy-Item -LiteralPath $mainExe.FullName -Destination $exePath -Force
+    Write-Host "Executable: $exePath"
+}
 
 # 後方互換のため zip も残す（単一 exe + 付随ファイル）。
 $zipName = if ($Version) { "$prefix-$Version-$platformTag.zip" } else { "$prefix-$platformTag.zip" }
@@ -257,4 +270,8 @@ $zipPath = Join-Path $releaseDir $zipName
 Write-Host "==> Archive $zipName"
 Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -Force
 
-Write-Host "Published to $exePath and $zipPath"
+if ($exePath) {
+    Write-Host "Published to $exePath and $zipPath"
+} else {
+    Write-Host "Published to $zipPath"
+}

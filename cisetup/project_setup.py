@@ -70,6 +70,17 @@ def _enumerate_projects(repository_root: Path) -> list[tuple[str, str, Path]]:
     return results
 
 
+def _looks_like_sample_path(relative_path: str) -> bool:
+    """サンプル・モックアップ・外部取り込みのパスか。
+
+    製品の成果物ではないため publish 候補としては後回しにする
+    （例: gui_design_sample/ScreenMockup.Presentation, vendor/...）。
+    """
+    segments = relative_path.replace("\\", "/").lower().split("/")[:-1]
+    markers = ("sample", "mockup", "example", "demo", "vendor", "third_party", "external")
+    return any(marker in segment for segment in segments for marker in markers)
+
+
 def _is_executable_project(csproj: Path) -> bool:
     """csproj が実行アプリ（OutputType が Exe / WinExe）かどうか。
 
@@ -131,20 +142,18 @@ def apply_auto_detection(repository_root: Path, config: CISetupConfig) -> CISetu
         config.project.artifact_prefix = config.project.name
 
     # 実在しない／プレースホルダの publish 対象は再検出して差し替える。
-    # 実在してもライブラリ（OutputType 未指定含む）なら、単一ファイル公開できないため
-    # 実行アプリが見つかったときだけ差し替える（IpuTestAppCore 等の誤指定対策）。
-    publish_value = config.project.publish_project
-    replace_publish = _needs_redetect(publish_value, repository_root)
-    if not replace_publish and publish_value.strip():
-        current_pub = repository_root / publish_value.strip()
-        if current_pub.is_file() and not _is_executable_project(current_pub):
-            found = _find_publish_project(repository_root, config.project.name)
-            if found and found != publish_value.strip().replace("\\", "/"):
-                replace_publish = True
-    if replace_publish:
+    if _needs_redetect(config.project.publish_project, repository_root):
         publish = _find_publish_project(repository_root, config.project.name)
         if publish:
             config.project.publish_project = publish
+    else:
+        # 実在してもライブラリ（OutputType 未指定含む）なら単一ファイル公開できない。
+        # 製品の実行アプリが別にある場合だけ差し替える（サンプルは選ばない）。
+        current = repository_root / config.project.publish_project.strip()
+        if current.is_file() and not _is_executable_project(current):
+            found = _find_executable_publish_project(repository_root, config.project.name)
+            if found and found != config.project.publish_project.strip().replace("\\", "/"):
+                config.project.publish_project = found
 
     # テスト対象は未設定（空＝スキップ）でも正当だが、実在しない値が残っている場合や
     # 未設定の場合はリポジトリ内のテスト csproj を探して補完する。
@@ -165,19 +174,37 @@ def _find_publish_project(repository_root: Path, project_name: str) -> str | Non
       3. 何でも先頭
     名前一致はあくまでタイブレークのヒントで、一致しなくても候補は選ばれる。
     """
+    pool = _publish_candidates(repository_root)
+    if not pool:
+        return None
+    exe = [t for t in pool if _is_executable_project(t[2])]
+    return _pick_by_name(exe or pool, project_name)
+
+
+def _publish_candidates(repository_root: Path) -> list[tuple[str, str, Path]]:
+    """publish 候補（テストを除外し、サンプル類は他が無いときだけ使う）。"""
     projects = _enumerate_projects(repository_root)
     if not projects:
-        return None
+        return []
+    non_test = [t for t in projects if not looks_like_test_project(t[1])] or projects
+    return [t for t in non_test if not _looks_like_sample_path(t[0])] or non_test
 
-    non_test = [t for t in projects if not looks_like_test_project(t[1])]
-    pool = non_test or projects
-    exe = [t for t in pool if _is_executable_project(t[2])]
-    search = exe or pool
 
-    for rel, stem, _ in search:
+def _pick_by_name(pool: list[tuple[str, str, Path]], project_name: str) -> str:
+    for rel, stem, _ in pool:
         if stem.lower() == project_name.lower():
             return rel
-    return search[0][0]
+    return pool[0][0]
+
+
+def find_executable_publish_project(repository_root: Path, project_name: str = "") -> str | None:
+    """製品の実行アプリ csproj を返す。無ければ None（サンプルは選ばない）。"""
+    return _find_executable_publish_project(repository_root, project_name)
+
+
+def _find_executable_publish_project(repository_root: Path, project_name: str) -> str | None:
+    exe = [t for t in _publish_candidates(repository_root) if _is_executable_project(t[2])]
+    return _pick_by_name(exe, project_name) if exe else None
 
 
 def count_projects(repository_root: Path) -> int:
