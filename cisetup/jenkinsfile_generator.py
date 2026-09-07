@@ -20,8 +20,9 @@ def build_agent_declaration(agent_label: str | None) -> str:
 def build_triggers_block(cron_trigger_line: str, poll_trigger: str) -> str:
     """Declarative Pipeline の triggers ブロック全体を生成する。
 
-    cron は Jenkins ジョブ XML（TimerTrigger）側。poll はパイプラインがジョブ内蔵のため
-    ここで pollSCM する（ジョブに SCM 定義が無いと XML 側 SCMTrigger は効かない）。
+    cron と poll はどちらもここに書く。Declarative Pipeline は初回実行後に
+    ジョブ XML のトリガーを `triggers {}` の内容で上書きするため、cron を XML だけに
+    置くと pollSCM のあるジョブでは定期実行が消える。
     空の `triggers {}` は "triggers can not be empty" になるため、行が無ければブロックごと出さない。
     """
     lines = [line for line in (cron_trigger_line, poll_trigger) if line.strip()]
@@ -79,6 +80,12 @@ def render_jenkinsfile(template: str, config) -> str:
     ci_server = config.jenkins.ci_file_server.replace("\\", "\\\\")
     timezone = config.jenkins.timezone.strip() or "Asia/Tokyo"
     cron_trigger_line = ""
+    if not config.jenkins.retry_wrapper_enabled:
+        cron = (config.jenkins.cron_schedule or "").strip()
+        if cron:
+            cron_trigger_line = (
+                f"        cron(spec: '{_escape_groovy(cron)}', timezone: '{_escape_groovy(timezone)}')"
+            )
     poll = (config.jenkins.poll_schedule or "").strip()
     poll_trigger = ""
     if poll:

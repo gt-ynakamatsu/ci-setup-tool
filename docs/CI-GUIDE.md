@@ -760,7 +760,7 @@ Git サーバーの瞬断（例: `Empty reply from server`）やネットワー�
    trigger ジョブを再実行 → 本体ジョブを再度起動、という流れで Jenkinsfile 取得失敗も含めて
    救えます。
 
-   - 有効化すると本体 Pipeline ジョブの cron（TimerTrigger）は登録されません（poll はジョブ XML の SCMTrigger のまま）
+   - 有効化すると本体 Pipeline ジョブの cron（TimerTrigger / Jenkinsfile の cron）は登録されません（poll は Jenkinsfile の pollSCM のまま）
    - 「②Jenkins に反映」を実行すると、Naginator / Parameterized Trigger が未導入なら自動インストールされます
    - 無効化すると既存の `<ジョブ名>-trigger` ジョブは自動で無効化されます（不要なら Jenkins で手動削除も可）
 
@@ -1987,7 +1987,7 @@ python configure.py --open C:\work\MyApp
 
 ```powershell
 .\tools\Package-Distribution.ps1
-# => dist\CISetup-1.5.0.zip  （バージョンは cisetup.version.VERSION）
+# => dist\CISetup-1.5.1.zip  （バージョンは cisetup.version.VERSION）
 ```
 
 受け取り側は Python 3.10+ で zip を展開し `start_configure.bat` を実行します。

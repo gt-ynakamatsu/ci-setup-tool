@@ -37,7 +37,8 @@ def build_job_triggers_xml(config: CISetupConfig) -> str:
     """Pipeline ジョブ XML 用のトリガー断片。
 
     パイプラインはジョブ内蔵（CpsFlowDefinition）のため poll は Jenkinsfile の pollSCM。
-    cron（TimerTrigger）だけジョブ XML に残す（retry ラッパー時はラッパー側のみ）。
+    cron は Jenkinsfile にも書く（実行後に XML トリガーが上書きされるため）。
+    ジョブ XML の TimerTrigger は初回実行前の保険（retry ラッパー時はラッパー側のみ）。
     """
     parts: list[str] = []
     if not config.jenkins.retry_wrapper_enabled:
