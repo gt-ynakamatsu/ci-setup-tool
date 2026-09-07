@@ -442,7 +442,7 @@ BUILD_PROFILE = (
 BUILD_COMMAND = (
     "【何を】CI のビルドステージで実行するコマンド\n"
     "【FPGA プリセット】空で OK。ci-fpga.ps1 が Vivado / Quartus を探して実行します。"
-    "複数プロジェクトがあるときだけ「-Project 名前」や「-Tcl build.tcl」を書きます\n"
+    "サブフォルダの .qpf / .xpr / build.tcl も対象。複数あるときだけ「-Project 相対パス」や「-Tcl 相対パス」を書きます\n"
     "【その他カスタム】必須。例: cmake --build build\n"
     "【なぜ】プロジェクト固有のビルド手順を CI に組み込むため"
 )

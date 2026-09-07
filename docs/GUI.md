@@ -28,7 +28,7 @@ python configure.py --help
 2. ①〜⑤ を入力（Git → **保存先** → Teams → Jenkins）
 3. **セットアップを実行** — 最新を取り込む（git pull）→ 保存 → ローカルビルド＆テスト → Jenkins 反映 → テストビルド を順番に実行
 
-**FPGA** は冒頭のプリセット（Vivado / Quartus）を適用してください。ビルドコマンドは空でよく、エージェント上の `ci-fpga.ps1` がツールとプロジェクト（`build.tcl` / `.xpr` / `.qpf`）を探します。詳細は [CI-GUIDE.md の 1-1](CI-GUIDE.md) です。
+**FPGA** は冒頭のプリセット（Vivado / Quartus）を適用してください。ビルドコマンドは空でよく、エージェント上の `ci-fpga.ps1` がツールとプロジェクト（`build.tcl` / `.xpr` / `.qpf`、サブフォルダ可）を探します。詳細は [CI-GUIDE.md の 1-1](CI-GUIDE.md) です。
 
 ウィンドウタイトルと画面右上に **バージョン（と git リビジョン）** が出ます。正本は `cisetup/version.py` の `VERSION` です。
 

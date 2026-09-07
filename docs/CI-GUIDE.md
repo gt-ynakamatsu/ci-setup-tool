@@ -320,15 +320,16 @@ GUI の「詳細設定 → ビルド種別」で選択します。
 
 .NET と同様、GUI でプリセットを選んで「適用」→ フォルダ / Git / Jenkins を埋めて「セットアップを実行」です。ビルドコマンドを手で書く必要はありません。
 
-| プリセット | エージェントで必要なもの | リポジトリ直下に置くもの | 成果物 |
-|------------|--------------------------|---------------------------|--------|
-| **FPGA — AMD/Xilinx Vivado** | Vivado（`vivado` が PATH、または `XILINX_VIVADO`） | `build.tcl`、または `.xpr`（標準ラン `impl_1`） | `.bit` / `.bin` / タイミング・使用率レポート |
-| **FPGA — Intel/Altera Quartus** | Quartus（`quartus_sh` が PATH、または `QUARTUS_ROOTDIR`） | `.qpf`（1 つ。複数なら詳細設定のビルドコマンドに `-Project 名前`） | `.sof` / `.pof` / `.rpt` |
+| プリセット | エージェントで必要なもの | リポジトリ内に置くもの（サブフォルダ可） | 成果物 |
+|------------|--------------------------|------------------------------------------|--------|
+| **FPGA — AMD/Xilinx Vivado** | Vivado（`vivado` が PATH、または `XILINX_VIVADO`） | `build.tcl`、または `.xpr`（標準ラン `impl_1`）。1 つだけなら自動検出 | `.bit` / `.bin` / タイミング・使用率レポート |
+| **FPGA — Intel/Altera Quartus** | Quartus（`quartus_sh` が PATH、または `QUARTUS_ROOTDIR`） | `.qpf`（1 つなら自動検出。複数なら詳細設定のビルドコマンドに `-Project 相対パス`） | `.sof` / `.pof` / `.rpt` |
 
 - 合成は時間がかかるため、プリセット適用時に **ビルドタイムアウトを 180 分** に上げます（既定 30 分のままなら上書き）。
 - Lint / ユニットテスト / Roslyn 解析は FPGA では空なのでスキップされます（任意コマンドを足せます）。
 - ライセンスサーバーや `settings64.bat` の複雑な読み込みは、ツールの `bin` を PATH に通す運用を前提にしています。エージェントを専用 FPGA 機にする場合は、Jenkins のエージェントラベルで振り分けてください。
 - ローカルの「ビルド＆テスト」も同じ `ci-fpga.ps1` を呼びます（その PC にツールが必要です）。
+- `.qpf` / `.xpr` / `build.tcl` はサブフォルダにあっても探します（`.git` / `bin` / `obj` / `artifacts` などは除外）。Quartus は `.qpf` のあるフォルダを作業ディレクトリにして実行します。複数ヒットした場合は `-Project` / `-Tcl` で指定してください。
 
 > Quartus の古いひな型 `quartus_sh --flow compile PROJECT` は使わなくなりました。`.qpf` のファイル名がプロジェクト名になります。
 

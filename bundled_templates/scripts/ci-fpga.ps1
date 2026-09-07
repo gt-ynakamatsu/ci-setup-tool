@@ -29,29 +29,81 @@ function Get-RepoRoot {
     return $parent
 }
 
+function Test-IgnoredSearchPath {
+    param([string]$Root, [string]$FullName)
+    $skip = @(
+        '.git', '.vs', '.idea', 'bin', 'obj', 'artifacts', 'dist',
+        'node_modules', '__pycache__', 'testresults', 'packages',
+        'db', 'incremental_db', 'output_files'
+    )
+    $rootFull = $Root.TrimEnd('\', '/')
+    $rest = $FullName
+    if ($FullName.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $rest = $FullName.Substring($rootFull.Length)
+    }
+    $rest = $rest.TrimStart('\', '/')
+    foreach ($part in ($rest -split '[\\/]')) {
+        if ([string]::IsNullOrWhiteSpace($part)) { continue }
+        if ($skip -contains $part.ToLowerInvariant()) { return $true }
+    }
+    return $false
+}
+
+function Get-RepoRelativePath {
+    param([string]$Root, [string]$FullName)
+    $rootFull = $Root.TrimEnd('\', '/')
+    if ($FullName.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $rel = $FullName.Substring($rootFull.Length).TrimStart('\', '/')
+        if (-not [string]::IsNullOrWhiteSpace($rel)) { return ($rel -replace '\\', '/') }
+    }
+    return ($FullName -replace '\\', '/')
+}
+
 function Find-Files {
     param([string]$Root, [string]$Filter)
-    return @(Get-ChildItem -Path $Root -Filter $Filter -File -ErrorAction SilentlyContinue)
+    $items = @(Get-ChildItem -Path $Root -Filter $Filter -File -Recurse -ErrorAction SilentlyContinue)
+    return @($items | Where-Object { -not (Test-IgnoredSearchPath -Root $Root -FullName $_.FullName) })
+}
+
+function Resolve-SpecifiedPath {
+    param([string]$Root, [string]$Specified, [string]$Extension)
+    if ([string]::IsNullOrWhiteSpace($Specified)) { return $null }
+    $name = $Specified
+    if ($name -notlike "*$Extension") { $name = "$name$Extension" }
+    if ([System.IO.Path]::IsPathRooted($Specified)) {
+        if (Test-Path $name) { return (Get-Item $name) }
+        if (Test-Path $Specified) { return (Get-Item $Specified) }
+        return $null
+    }
+    $direct = Join-Path $Root $name
+    if (Test-Path $direct) { return (Get-Item $direct) }
+    $asGiven = Join-Path $Root $Specified
+    if (Test-Path $asGiven) { return (Get-Item $asGiven) }
+    return $null
 }
 
 function Resolve-QuartusProject {
     param([string]$Root, [string]$Specified)
     if (-not [string]::IsNullOrWhiteSpace($Specified)) {
-        $name = $Specified
-        if ($name -notlike '*.qpf') { $name = "$name.qpf" }
-        $path = if ([System.IO.Path]::IsPathRooted($Specified)) { $Specified } else { Join-Path $Root $name }
-        if (-not (Test-Path $path)) {
-            throw "Quartus プロジェクトが見つかりません: $path"
+        $hit = Resolve-SpecifiedPath -Root $Root -Specified $Specified -Extension '.qpf'
+        if ($hit) { return $hit }
+        $leaf = [System.IO.Path]::GetFileName($Specified)
+        if ($leaf -notlike '*.qpf') { $leaf = "$leaf.qpf" }
+        $matches = @(Find-Files -Root $Root -Filter '*.qpf' | Where-Object { $_.Name -ieq $leaf })
+        if ($matches.Count -eq 1) { return $matches[0] }
+        if ($matches.Count -gt 1) {
+            $list = ($matches | ForEach-Object { Get-RepoRelativePath -Root $Root -FullName $_.FullName }) -join ', '
+            throw "指定に合う .qpf が複数あります（$list）。-Project に相対パスを書いてください。"
         }
-        return (Get-Item $path)
+        throw "Quartus プロジェクトが見つかりません: $Specified"
     }
     $files = Find-Files -Root $Root -Filter '*.qpf'
     if ($files.Count -eq 0) {
-        throw "リポジトリ直下に .qpf がありません。Quartus プロジェクト名を GUI のビルドコマンドに「-Project 名前」で指定するか、.qpf を直下に置いてください。"
+        throw "リポジトリ内に .qpf がありません。Quartus プロジェクト名を GUI のビルドコマンドに「-Project 名前または相対パス」で指定してください。"
     }
     if ($files.Count -gt 1) {
-        $list = ($files | ForEach-Object { $_.Name }) -join ', '
-        throw "リポジトリ直下に .qpf が複数あります（$list）。-Project で 1 つ指定してください。"
+        $list = ($files | ForEach-Object { Get-RepoRelativePath -Root $Root -FullName $_.FullName }) -join ', '
+        throw "リポジトリ内に .qpf が複数あります（$list）。-Project で 1 つ指定してください。"
     }
     return $files[0]
 }
@@ -66,26 +118,33 @@ function Resolve-VivadoInputs {
         if (-not (Test-Path $tcl)) { throw "Vivado Tcl が見つかりません: $tcl" }
         return [PSCustomObject]@{ Kind = 'tcl'; Path = $tcl }
     }
-    $defaultTcl = Join-Path $Root 'build.tcl'
-    if (Test-Path $defaultTcl) {
-        return [PSCustomObject]@{ Kind = 'tcl'; Path = $defaultTcl }
+    $tcls = Find-Files -Root $Root -Filter 'build.tcl'
+    if ($tcls.Count -eq 1) {
+        return [PSCustomObject]@{ Kind = 'tcl'; Path = $tcls[0].FullName }
+    }
+    if ($tcls.Count -gt 1) {
+        $list = ($tcls | ForEach-Object { Get-RepoRelativePath -Root $Root -FullName $_.FullName }) -join ', '
+        throw "build.tcl が複数あります（$list）。-Tcl で 1 つ指定してください。"
     }
     $xprName = $SpecifiedProject
     if (-not [string]::IsNullOrWhiteSpace($xprName)) {
-        if ($xprName -notlike '*.xpr') { $xprName = "$xprName.xpr" }
-        $xprPath = if ([System.IO.Path]::IsPathRooted($SpecifiedProject)) { $SpecifiedProject } else { Join-Path $Root $xprName }
-        if (-not (Test-Path $xprPath)) { throw "Vivado プロジェクトが見つかりません: $xprPath" }
-        return [PSCustomObject]@{ Kind = 'xpr'; Path = $xprPath }
+        $hit = Resolve-SpecifiedPath -Root $Root -Specified $xprName -Extension '.xpr'
+        if ($hit) { return [PSCustomObject]@{ Kind = 'xpr'; Path = $hit.FullName } }
+        $leaf = [System.IO.Path]::GetFileName($xprName)
+        if ($leaf -notlike '*.xpr') { $leaf = "$leaf.xpr" }
+        $matches = @(Find-Files -Root $Root -Filter '*.xpr' | Where-Object { $_.Name -ieq $leaf })
+        if ($matches.Count -eq 1) { return [PSCustomObject]@{ Kind = 'xpr'; Path = $matches[0].FullName } }
+        throw "Vivado プロジェクトが見つかりません: $xprName"
     }
     $xprs = Find-Files -Root $Root -Filter '*.xpr'
     if ($xprs.Count -eq 1) {
         return [PSCustomObject]@{ Kind = 'xpr'; Path = $xprs[0].FullName }
     }
     if ($xprs.Count -gt 1) {
-        $list = ($xprs | ForEach-Object { $_.Name }) -join ', '
+        $list = ($xprs | ForEach-Object { Get-RepoRelativePath -Root $Root -FullName $_.FullName }) -join ', '
         throw "build.tcl が無く、.xpr が複数あります（$list）。-Tcl または -Project で指定してください。"
     }
-    throw "Vivado 用の build.tcl も .xpr もリポジトリ直下にありません。合成スクリプト（build.tcl）を置くか、Vivado プロジェクト（.xpr）を直下に置いてください。"
+    throw "Vivado 用の build.tcl も .xpr もリポジトリ内にありません。合成スクリプト（build.tcl）を置くか、Vivado プロジェクト（.xpr）を置いてください。"
 }
 
 function Find-VivadoExe {
@@ -105,11 +164,17 @@ function Find-VivadoExe {
         }
     }
     # 区切り文字は Join-Path に任せる（'\' 決め打ちは pwsh on Linux で壊れるため）。
-    $roots = @(
-        (Join-PathMulti 'C:' @('Xilinx', 'Vivado')),
-        (Join-PathMulti 'D:' @('Xilinx', 'Vivado')),
-        (Join-PathMulti ${env:ProgramFiles} @('Xilinx', 'Vivado'))
-    )
+    # C: が無い Linux pwsh では Join-Path が例外になるので握りつぶす。
+    $roots = @()
+    foreach ($spec in @(
+        @('C:', 'Xilinx', 'Vivado'),
+        @('D:', 'Xilinx', 'Vivado')
+    )) {
+        try { $roots += , (Join-PathMulti $spec[0] $spec[1..($spec.Length - 1)]) } catch { }
+    }
+    if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles})) {
+        try { $roots += , (Join-PathMulti ${env:ProgramFiles} @('Xilinx', 'Vivado')) } catch { }
+    }
     foreach ($root in $roots) {
         if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path $root)) { continue }
         $versions = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
@@ -139,15 +204,18 @@ function Find-QuartusSh {
             if (Test-Path $rel) { return (Get-Item $rel).FullName }
         }
     }
-    $roots = @(
-        (Join-Path 'C:' 'intelFPGA_lite'),
-        (Join-Path 'C:' 'intelFPGA'),
-        (Join-Path 'C:' 'altera'),
-        (Join-Path 'D:' 'intelFPGA_lite'),
-        (Join-Path 'D:' 'intelFPGA')
-    )
+    $roots = @()
+    foreach ($spec in @(
+        @('C:', 'intelFPGA_lite'),
+        @('C:', 'intelFPGA'),
+        @('C:', 'altera'),
+        @('D:', 'intelFPGA_lite'),
+        @('D:', 'intelFPGA')
+    )) {
+        try { $roots += , (Join-Path $spec[0] $spec[1]) } catch { }
+    }
     foreach ($root in $roots) {
-        if (-not (Test-Path $root)) { continue }
+        if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path $root)) { continue }
         $versions = @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
         foreach ($ver in $versions) {
             foreach ($rel in @(
@@ -166,13 +234,13 @@ function Detect-Tool {
     if ($Requested -ne 'Auto') { return $Requested }
     $hasQpf = (Find-Files -Root $Root -Filter '*.qpf').Count -gt 0
     $hasXpr = (Find-Files -Root $Root -Filter '*.xpr').Count -gt 0
-    $hasTcl = Test-Path (Join-Path $Root 'build.tcl')
+    $hasTcl = (Find-Files -Root $Root -Filter 'build.tcl').Count -gt 0
     if ($hasQpf -and -not $hasXpr -and -not $hasTcl) { return 'Quartus' }
     if (($hasXpr -or $hasTcl) -and -not $hasQpf) { return 'Vivado' }
     if ($hasQpf -and ($hasXpr -or $hasTcl)) {
         throw "Vivado と Quartus の両方のプロジェクトが見つかりました。プリセットでツールを選ぶか、-Tool を指定してください。"
     }
-    throw "FPGA プロジェクトを自動判定できませんでした。build.tcl / .xpr（Vivado）または .qpf（Quartus）をリポジトリ直下に置いてください。"
+    throw "FPGA プロジェクトを自動判定できませんでした。build.tcl / .xpr（Vivado）または .qpf（Quartus）をリポジトリ内（サブフォルダ可）に置いてください。"
 }
 
 function Write-VivadoXprTcl {
@@ -205,18 +273,25 @@ Write-Host "==> 使用ツール: $resolvedTool"
 if ($resolvedTool -eq 'Quartus') {
     $qpf = Resolve-QuartusProject -Root $root -Specified $Project
     $projName = [System.IO.Path]::GetFileNameWithoutExtension($qpf.Name)
+    $qpfRel = Get-RepoRelativePath -Root $root -FullName $qpf.FullName
     $exe = Find-QuartusSh
-    Write-Host "==> Quartus プロジェクト: $($qpf.Name)"
+    Write-Host "==> Quartus プロジェクト: $qpfRel"
     if ($DryRun) {
-        Write-Host "DRYRUN tool=Quartus project=$projName exe=$(if ($exe) { $exe } else { 'NOT_FOUND' })"
+        Write-Host "DRYRUN tool=Quartus project=$projName qpf=$qpfRel exe=$(if ($exe) { $exe } else { 'NOT_FOUND' })"
         exit 0
     }
     if (-not $exe) {
         throw "quartus_sh が見つかりません。エージェントに Quartus を入れ、PATH / QUARTUS_ROOTDIR を設定してください。"
     }
-    Write-Host "==> $exe --flow compile $projName"
-    & $exe --flow compile $projName
-    if ($LASTEXITCODE -ne 0) { throw "Quartus コンパイルが失敗しました (exit code $LASTEXITCODE)." }
+    Write-Host "==> $exe --flow compile $projName  (cwd=$($qpf.DirectoryName))"
+    Push-Location $qpf.DirectoryName
+    try {
+        & $exe --flow compile $projName
+        if ($LASTEXITCODE -ne 0) { throw "Quartus コンパイルが失敗しました (exit code $LASTEXITCODE)." }
+    }
+    finally {
+        Pop-Location
+    }
     Write-Host "Quartus ビルド成功。"
     exit 0
 }
@@ -240,12 +315,19 @@ if ($vivadoIn.Kind -eq 'xpr') {
     $tclToRun = $tempTcl
 }
 
+$workDir = Split-Path -Parent $vivadoIn.Path
 try {
     $binDir = Split-Path -Parent $exe
     $env:PATH = $binDir + [IO.Path]::PathSeparator + $env:PATH
-    Write-Host "==> $exe -mode batch -notrace -source $tclToRun"
-    & $exe -mode batch -notrace -source $tclToRun
-    if ($LASTEXITCODE -ne 0) { throw "Vivado が失敗しました (exit code $LASTEXITCODE)." }
+    Write-Host "==> $exe -mode batch -notrace -source $tclToRun  (cwd=$workDir)"
+    Push-Location $workDir
+    try {
+        & $exe -mode batch -notrace -source $tclToRun
+        if ($LASTEXITCODE -ne 0) { throw "Vivado が失敗しました (exit code $LASTEXITCODE)." }
+    }
+    finally {
+        Pop-Location
+    }
     Write-Host "Vivado ビルド成功。"
 }
 finally {
