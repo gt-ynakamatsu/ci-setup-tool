@@ -41,7 +41,7 @@ PRESETS: list[CiPreset] = [
         name="FPGA — AMD/Xilinx Vivado",
         description=(
             "エージェント上の Vivado で合成〜ビットストリームまで実行します。"
-            "リポジトリ直下の build.tcl、または .xpr（標準ラン impl_1）が対象。"
+            "リポジトリ内（サブフォルダ可）の build.tcl、または .xpr（標準ラン impl_1）が対象。"
             "Vivado を PATH か XILINX_VIVADO で見えるようにしてください。"
         ),
         profile="custom",
@@ -52,7 +52,7 @@ PRESETS: list[CiPreset] = [
         name="FPGA — Intel/Altera Quartus",
         description=(
             "エージェント上の Quartus でコンパイルします。"
-            "リポジトリ直下の .qpf を自動検出（複数あるときはビルドコマンドに -Project 名前）。"
+            "リポジトリ内（サブフォルダ可）の .qpf を自動検出（複数あるときはビルドコマンドに -Project 相対パス）。"
             "quartus_sh を PATH か QUARTUS_ROOTDIR で見えるようにしてください。"
         ),
         profile="custom",
