@@ -25,8 +25,10 @@ SOLUTION_FILE = (
 )
 
 PUBLISH_PROJECT = (
-    "【何を】成果物 zip を作る csproj（dotnet publish 対象）\n"
-    "【なぜ】ビルド成功時に配布する実行ファイル一式をどのプロジェクトから作るか指定するため\n"
+    "【何を】成果物 exe を作る csproj（dotnet publish 対象）\n"
+    "【なぜ】ビルド成功時に配布する実行ファイルをどのプロジェクトから作るか指定するため\n"
+    "【注意】OutputType が Exe / WinExe の実行アプリだけ指定できます。"
+    "ライブラリ（例: IpuTestAppCore）だと単一ファイル公開できず NETSDK1099 で失敗します\n"
     "【例】src/MyApp/MyApp.csproj\n"
     "【保存先】cisetup.config.json → project.publishProject"
 )

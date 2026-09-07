@@ -131,7 +131,17 @@ def apply_auto_detection(repository_root: Path, config: CISetupConfig) -> CISetu
         config.project.artifact_prefix = config.project.name
 
     # 実在しない／プレースホルダの publish 対象は再検出して差し替える。
-    if _needs_redetect(config.project.publish_project, repository_root):
+    # 実在してもライブラリ（OutputType 未指定含む）なら、単一ファイル公開できないため
+    # 実行アプリが見つかったときだけ差し替える（IpuTestAppCore 等の誤指定対策）。
+    publish_value = config.project.publish_project
+    replace_publish = _needs_redetect(publish_value, repository_root)
+    if not replace_publish and publish_value.strip():
+        current_pub = repository_root / publish_value.strip()
+        if current_pub.is_file() and not _is_executable_project(current_pub):
+            found = _find_publish_project(repository_root, config.project.name)
+            if found and found != publish_value.strip().replace("\\", "/"):
+                replace_publish = True
+    if replace_publish:
         publish = _find_publish_project(repository_root, config.project.name)
         if publish:
             config.project.publish_project = publish

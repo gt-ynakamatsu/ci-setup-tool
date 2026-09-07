@@ -7,10 +7,17 @@ from pathlib import Path
 
 # これまでの main 履歴から逆算したセマンティックバージョン。
 # 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 # (version, date, notes) 新しい順。VERSION は先頭と一致させる。
 RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "1.4.1",
+        "2026-09-07",
+        (
+            "ライブラリ csproj への単一ファイル公開（NETSDK1099）を避け、実行アプリへ差し替える",
+        ),
+    ),
     (
         "1.4.0",
         "2026-09-07",
