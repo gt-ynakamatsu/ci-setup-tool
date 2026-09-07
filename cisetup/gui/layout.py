@@ -13,6 +13,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Callable
 
+from .. import wheel_routing as wheel
+
 FONT_FAMILY = "Yu Gothic UI"
 
 # C# MainWindow.xaml の色
@@ -84,6 +86,32 @@ def _bg_of(parent: tk.Misc, fallback: str = COLOR_CARD_BG) -> str:
         return fallback
 
 
+def _widget_under_pointer(root: tk.Misc, x_root: int, y_root: int) -> tk.Misc | None:
+    try:
+        return root.winfo_containing(x_root, y_root)
+    except tk.TclError:
+        return None
+
+
+def _enclosing_scrollable(widget: tk.Misc) -> "ScrollableFrame | None":
+    node = widget if isinstance(widget, ScrollableFrame) else widget.master
+    while node is not None:
+        if isinstance(node, ScrollableFrame):
+            return node
+        node = node.master
+    return None
+
+
+def route_wheel(widget: tk.Misc, x_root: int, y_root: int, units: int) -> str:
+    """ポインタ位置を見て、ログ欄かページのどちらを送るか決める。"""
+    page = _enclosing_scrollable(widget)
+    return wheel.route(
+        _widget_under_pointer(widget, x_root, y_root),
+        page.canvas if page is not None else None,
+        units,
+    )
+
+
 class ScrollableFrame(ttk.Frame):
     """縦スクロール可能なメイン領域。"""
 
@@ -103,27 +131,26 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.vbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
-        self._bind_mousewheel(self.canvas)
-        self._bind_mousewheel(self.inner)
+        self._bind_mousewheel()
 
     def _on_canvas_configure(self, event: tk.Event) -> None:
         self.canvas.itemconfigure(self._window, width=event.width)
 
-    def _bind_mousewheel(self, widget: tk.Misc) -> None:
-        widget.bind("<Enter>", lambda _e: widget.bind_all("<MouseWheel>", self._on_mousewheel), add="+")
-        widget.bind("<Leave>", lambda _e: widget.unbind_all("<MouseWheel>"), add="+")
+    def _bind_mousewheel(self) -> None:
+        """ホイールを常時受け取り、ポインタ位置で行き先を決める。
+
+        Windows の Tk は ``<MouseWheel>`` をポインタ下ではなく**フォーカスのある
+        ウィジェット**へ配送する。ウィジェット個別の bind ではログ欄にフォーカスが
+        無いと届かないため、bind_all で受けてから配送先を自分で決める。
+        Enter/Leave で bind_all を付け外しすると子ウィジェットへの出入りで
+        取り外されたままになるため、付けっぱなしにする。
+        """
+        self.bind_all("<MouseWheel>", self._on_mousewheel, add="+")
+        self.bind_all("<Button-4>", lambda e: route_wheel(self, e.x_root, e.y_root, -1), add="+")  # X11
+        self.bind_all("<Button-5>", lambda e: route_wheel(self, e.x_root, e.y_root, 1), add="+")
 
     def _on_mousewheel(self, event: tk.Event) -> None:
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
-
-
-def _enclosing_scrollable(widget: tk.Misc) -> "ScrollableFrame | None":
-    node = widget.master
-    while node is not None:
-        if isinstance(node, ScrollableFrame):
-            return node
-        node = node.master
-    return None
+        route_wheel(self, event.x_root, event.y_root, int(-event.delta / 120))
 
 
 def log_text(
@@ -135,8 +162,10 @@ def log_text(
 ) -> tk.Text:
     """縦スクロールできるログ表示欄。
 
-    ホイールは親の ScrollableFrame が bind_all で奪うため、ログ側で先に受け取る。
-    ログの端まで来たときだけページ側をスクロールして、行き止まり感を出さない。
+    ホイールの行き先は常にポインタ位置で決める。Windows の Tk はフォーカスのある
+    ウィジェットへ ``<MouseWheel>`` を配送し、Text クラス標準の binding が
+    そのまま自分をスクロールしてしまうため、ウィジェット側では必ず "break" を
+    返して標準 binding を止め、判定を route_wheel に一本化する。
     """
     holder = tk.Frame(parent, background=_bg_of(parent, COLOR_WINDOW_BG))
     text = tk.Text(
@@ -154,23 +183,15 @@ def log_text(
     text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     bar.pack(side=tk.RIGHT, fill=tk.Y)
     holder.pack(fill=tk.X, pady=pady)
+    setattr(text, wheel.LOG_WIDGET_FLAG, True)
 
-    def scroll(units: int) -> str:
-        first, last = text.yview()
-        at_edge = (units < 0 and first <= 0.0) or (units > 0 and last >= 1.0)
-        if at_edge:
-            page = _enclosing_scrollable(text)
-            if page is not None:
-                page.canvas.yview_scroll(units, "units")
-        else:
-            text.yview_scroll(units, "units")
+    def on_wheel(event: tk.Event, units: int) -> str:
+        route_wheel(text, event.x_root, event.y_root, units)
         return "break"
 
-    text.bind("<MouseWheel>", lambda e: scroll(int(-e.delta / 120)), add="+")
-    text.bind("<Button-4>", lambda _e: scroll(-1), add="+")  # X11
-    text.bind("<Button-5>", lambda _e: scroll(1), add="+")
-    # 矢印キー・PageUp/Down で追えるよう、カーソルが乗ったらフォーカスを渡す。
-    text.bind("<Enter>", lambda _e: text.focus_set(), add="+")
+    text.bind("<MouseWheel>", lambda e: on_wheel(e, int(-e.delta / 120)), add="+")
+    text.bind("<Button-4>", lambda e: on_wheel(e, -1), add="+")  # X11
+    text.bind("<Button-5>", lambda e: on_wheel(e, 1), add="+")
     return text
 
 
