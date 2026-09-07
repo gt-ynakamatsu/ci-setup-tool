@@ -1983,9 +1983,10 @@ python configure.py --open C:\work\MyApp
 
 ### 16.8 ソース変更時の注意
 
-GUI / テンプレートを直したら **Windows 上で `CISetup.exe` を作り直す**こと。
-Linux（Cloud Agent 含む）で `rebuild_exe.py` を実行しても `dist/CISetup`（Linux バイナリ）しか出ず、
-社内配布用の exe にはなりません。PyInstaller はクロスコンパイルできません。
+GUI / テンプレートを直したら **`CISetup.exe` を作り直す**こと。
+Windows では `python tools/rebuild_exe.py`、Linux では `python tools/setup_wine_python.py` の後
+`python tools/rebuild_exe.py --windows`。`--native`（`dist/CISetup`）は社内配布用ではありません。
+PyInstaller 自体はクロスコンパイルできません。
 
 | 変更したファイル | 再配布が必要？ | 理由 |
 |----------------|--------------|------|

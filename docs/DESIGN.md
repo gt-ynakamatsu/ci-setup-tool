@@ -1195,11 +1195,11 @@ CISetup-<Version>/
 
 ### 11.4 exe 鮮度チェック（`tests\test_exe_freshness.py`）
 
-実行ファイル（Windows では `dist\CISetup.exe`、Linux では `dist/CISetup`）が無い、
+実行ファイル（配布正本 `dist\CISetup.exe`。Linux の `--native` は `dist/CISetup`）が無い、
 または `exe_is_stale()` が真（ソースより古い）のとき `pytest.fail`。
 すなわち `cisetup/` / `configure.py` / `cisetup.spec` / `bundled_templates/` を変更したら
-再ビルドが必要。**利用者が動かす社内配布物は Windows の `CISetup.exe` なので、GUI 変更後は
-Windows 上で必ず exe を作り直す。** Linux 上のビルドだけでは足りない。
+再ビルドが必要。**利用者が動かす社内配布物は `CISetup.exe` なので、GUI 変更後は
+Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** `--native` だけでは足りない。
 **本書はドキュメントのみの追加であり exe には影響しない**（exe はドキュメントを同梱しない）。
 
 ---

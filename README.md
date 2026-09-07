@@ -165,7 +165,7 @@ python tools/smoke_test.py
 ### exe の再ビルド（重要）
 
 `cisetup/` ・ `configure.py` ・ `cisetup.spec` ・ `bundled_templates/` を変更したら、
-**作業完了前に必ず Windows 上で `CISetup.exe` を再ビルド**してください。
+**作業完了前に必ず `CISetup.exe` を再ビルド**してください（Windows 上、または Linux では Wine の `--windows`）。
 利用者が動かすのはこの exe です。ソースだけ直して exe を作らないと、配布 zip は古い GUI のままになります。
 古い / 無い exe は `tests/test_exe_freshness.py` が検出して失敗させます。
 
