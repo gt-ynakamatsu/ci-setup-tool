@@ -381,6 +381,32 @@ def test_ci_test_keeps_output_log_and_explains_zero_tests():
     assert "$ErrorActionPreference = $previousErrorAction" in text
 
 
+def test_ci_config_exposes_runtime_identifier_and_analysis_excludes():
+    script = template_store.bundled_template_dir() / "scripts" / "ci-config.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "RuntimeIdentifier = $runtimeIdentifier" in text
+    assert "AnalysisExcludePaths = $analysisExcludePaths" in text
+
+
+def test_ci_publish_uses_configured_runtime_identifier():
+    # RID を設定できないと arm64 などに publish できない。空欄なら OS から自動。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-publish.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "$ci.RuntimeIdentifier" in text
+    assert "'win-x64'" in text and "'linux-x64'" in text
+    # 拡張子は RID から決める（Windows エージェントで linux-x64 を出す場合など）。
+    assert "$platformTag -like 'win*'" in text
+
+
+def test_ci_analyze_filters_excluded_paths():
+    # サンプルや外部取り込みの指摘を製品コードの件数に混ぜない。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-analyze.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "$ci.AnalysisExcludePaths" in text
+    assert "Test-PathExcluded" in text
+    assert "$excludedCount" in text
+
+
 def test_ci_config_overlays_view_urls_from_local():
     # Teams 閲覧 URL は cisetup.local.json を優先する（git 非追跡）。
     script = template_store.bundled_template_dir() / "scripts" / "ci-config.ps1"

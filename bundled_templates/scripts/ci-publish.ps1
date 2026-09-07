@@ -157,7 +157,13 @@ if (-not (Test-CsprojIsExecutable -Path $publishProjectPath)) {
 # アプリ依存 DLL は単一 exe に取り込むが、ランタイムは同梱しない（self-contained だと肥大化するため）。
 # 実行 PC 側に対応する .NET ランタイムが入っている前提の運用。
 # PublishSingleFile には RuntimeIdentifier（-r）が必要。
-$platformTag = if ($env:OS -eq 'Windows_NT') { 'win-x64' } else { 'linux-x64' }
+$platformTag = if (-not [string]::IsNullOrWhiteSpace($ci.RuntimeIdentifier)) {
+    $ci.RuntimeIdentifier
+} elseif ($env:OS -eq 'Windows_NT') {
+    'win-x64'
+} else {
+    'linux-x64'
+}
 $publishArgs = @(
     "publish",
     $ci.PublishProject,
@@ -211,7 +217,7 @@ publishProject（$($ci.PublishProject)）の OutputType が Exe / WinExe であ�
     }
     $mainExe = $mainExe[0]
 
-    $exeExt = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
+    $exeExt = if ($platformTag -like 'win*') { '.exe' } else { '' }
     $exeName = if ($Version) { "$prefix-$Version-$platformTag$exeExt" } else { "$prefix-$platformTag$exeExt" }
     $exePath = Join-Path $releaseDir $exeName
     Copy-Item -LiteralPath $mainExe.FullName -Destination $exePath -Force

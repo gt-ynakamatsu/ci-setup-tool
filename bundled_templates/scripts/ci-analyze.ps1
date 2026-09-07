@@ -80,6 +80,42 @@ function Get-RelativePath {
     return $full
 }
 
+function Convert-ExcludeToRegex {
+    param([string]$Pattern)
+    # 前方一致を基本とし、* ? ** のグロブも書けるようにする。'**' はディレクトリを跨ぐ。
+    $g = ($Pattern -replace '\\', '/').Trim().Trim('/')
+    $p = [regex]::Escape($g)
+    $p = $p -replace '\\\*\\\*/', '(?:.*/)?'
+    $p = $p -replace '\\\*\\\*', '.*'
+    $p = $p -replace '\\\*', '[^/]*'
+    $p = $p -replace '\\\?', '.'
+    # 'vendor' のような指定は vendor 配下すべてに効かせる。
+    return "^$p(?:/.*)?$"
+}
+
+function Get-ExcludeRegexes {
+    param([string]$Raw)
+    $result = New-Object System.Collections.Generic.List[string]
+    if ([string]::IsNullOrWhiteSpace($Raw)) { return $result }
+    foreach ($piece in ($Raw -split '[;,]')) {
+        $trimmed = $piece.Trim()
+        if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+            [void]$result.Add((Convert-ExcludeToRegex $trimmed))
+        }
+    }
+    return $result
+}
+
+function Test-PathExcluded {
+    param([string]$RelativePath, [System.Collections.Generic.List[string]]$Regexes)
+    if ($Regexes.Count -eq 0) { return $false }
+    $normalized = ($RelativePath -replace '\\', '/').TrimStart('/')
+    foreach ($rx in $Regexes.ToArray()) {
+        if ($normalized -imatch $rx) { return $true }
+    }
+    return $false
+}
+
 Write-Host "==> Project: $($ci.ProjectName)"
 Write-Host "==> Restore"
 dotnet restore $ci.SolutionFile | Out-Host
@@ -102,6 +138,9 @@ $buildOutput | Out-String | Set-Content -Path $rawPath -Encoding UTF8
 $patternLoc = '^(?<file>(?:[A-Za-z]:)?[^()]+?)\((?<line>\d+)(?:,\d+)?\):\s+(?<sev>error|warning|info)\s+(?<rule>[A-Za-z]+\d+):\s+(?<msg>.+?)(?:\s+\[[^\]]*\])?\s*$'
 $patternNoLoc = '^(?<file>.+?)\s*:\s+(?<sev>error|warning|info)\s+(?<rule>[A-Za-z]+\d+):\s+(?<msg>.+?)(?:\s+\[[^\]]*\])?\s*$'
 
+$excludeRegexes = Get-ExcludeRegexes $ci.AnalysisExcludePaths
+$excludedCount = 0
+
 $findings = [ordered]@{}
 foreach ($entry in $buildOutput) {
     $text = ([string]$entry).TrimEnd()
@@ -121,6 +160,11 @@ foreach ($entry in $buildOutput) {
     $sev = $m.Groups['sev'].Value.ToLower()
     $file = Get-RelativePath -Path $m.Groups['file'].Value -Root $ci.Root
     $msg = $m.Groups['msg'].Value.Trim()
+    # サンプル・自動生成・外部取り込み等、build.analysisExcludePaths で指定された場所は数えない。
+    if (Test-PathExcluded -RelativePath $file -Regexes $excludeRegexes) {
+        $excludedCount++
+        continue
+    }
     $key = "$file|$line|$rule"
     if ($findings.Contains($key)) { continue }
 
@@ -183,6 +227,9 @@ $report.Add('')
 $report.Add("- 生成日時: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
 $report.Add("- 構成: $Configuration")
 $report.Add("- ソリューション: $($ci.SolutionFile)")
+if ($excludeRegexes.Count -gt 0) {
+    $report.Add("- 除外パス: $($ci.AnalysisExcludePaths)（$excludedCount 件を集計対象外）")
+}
 $report.Add('')
 $report.Add('## 危険度サマリー')
 $report.Add('')
@@ -352,6 +399,9 @@ Write-Host '====================== 静的解析結果 ======================'
 Write-Host ("  高 (High)  : {0}" -f $high.Count)
 Write-Host ("  中 (Medium): {0}" -f $med.Count)
 Write-Host ("  低 (Low)   : {0}" -f $low.Count)
+if ($excludeRegexes.Count -gt 0) {
+    Write-Host ("  除外       : {0} 件（{1}）" -f $excludedCount, $ci.AnalysisExcludePaths)
+}
 Write-Host '----------------------------------------------------------'
 if ($high.Count -gt 0) {
     Write-Host '  [高リスク] 上位:'

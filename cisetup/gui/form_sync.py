@@ -42,6 +42,8 @@ class FormSyncMixin:
             "build.publish_command": c.build.publish_command,
             "build.test_command": c.build.test_command,
             "build.artifact_glob": c.build.artifact_glob,
+            "build.runtime_identifier": c.build.runtime_identifier,
+            "build.analysis_exclude_paths": c.build.analysis_exclude_paths,
             "secrets.jenkins_url": self._secrets.jenkins_url,
             "secrets.jenkins_user": self._secrets.jenkins_user,
             "secrets.jenkins_api_token": self._secrets.jenkins_api_token,
@@ -149,6 +151,8 @@ class FormSyncMixin:
         c.build.publish_command = get("build.publish_command")
         c.build.test_command = get("build.test_command")
         c.build.artifact_glob = get("build.artifact_glob")
+        c.build.runtime_identifier = get("build.runtime_identifier")
+        c.build.analysis_exclude_paths = get("build.analysis_exclude_paths")
         preset = next((p for p in PRESETS if p.name == self._preset_var.get()), None)
         c.build.preset = preset.id if preset else ("custom-empty" if is_custom else "dotnet")
 
