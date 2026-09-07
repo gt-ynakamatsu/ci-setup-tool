@@ -126,6 +126,17 @@ class DetailsMixin:
             "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます。"
             "（①でフォルダを開いたあと、見つからないパスだけ右側に表示します）",
         ).pack(anchor="w")
+        for key, label, help_text in (
+            ("build.runtime_identifier", "実行環境 (RID)", help_texts.RUNTIME_IDENTIFIER),
+            ("build.analysis_exclude_paths", "静的解析の除外パス", help_texts.ANALYSIS_EXCLUDE_PATHS),
+        ):
+            self._add_field(frame, key, label, help_text, label_width=22)
+        hint_label(
+            frame,
+            "RID は空欄ならエージェントの OS から自動（Windows: win-x64 / Linux: linux-x64）。"
+            "arm64 などは win-arm64 のように指定します。"
+            "除外パスは「;」区切りで、gui_design_sample や vendor/** のように書きます。",
+        ).pack(anchor="w")
         btn_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         btn_row.pack(anchor="w", pady=(12, 8))
         self._redetect_btn = button(

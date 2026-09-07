@@ -525,6 +525,8 @@ Jenkins 管理者権限（Groovy 実行）が必要。Groovy へ埋め込む値�
 | `publish_command` | `publishCommand` | str | `""` | custom 時の成果物生成コマンド（任意） | config |
 | `test_command` | `testCommand` | str | `""` | custom 時のテストコマンド（任意） | config |
 | `artifact_glob` | `artifactGlob` | str | `""` | custom 時の成果物 glob（`;` / `,` 区切り） | config |
+| `runtime_identifier` | `runtimeIdentifier` | str | `""` | `dotnet publish` の RID。空ならエージェント OS から自動（`win-x64` / `linux-x64`） | config |
+| `analysis_exclude_paths` | `analysisExcludePaths` | str | `""` | 静的解析の集計から外すパス（`;` / `,` 区切り。前方一致・`*` `?` `**`） | config |
 
 ### 6.6 `CISetupConfig`（ルート）
 
