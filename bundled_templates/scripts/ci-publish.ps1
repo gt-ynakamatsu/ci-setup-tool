@@ -143,9 +143,9 @@ function Test-CsprojIsExecutable {
 }
 
 # PublishSingleFile は実行アプリ（Exe / WinExe）にしか使えない（NETSDK1099）。
-# publishProject がライブラリなら、指定を別プロジェクトへ差し替えず、
+# publishProject がライブラリなら、指定を別プロジェクトへ勝手に差し替えず、
 # 単一ファイル化だけ諦めて通常の publish（DLL 一式 + zip）に落とす。
-# GUI 実行アプリは別リポジトリ（例: ipu-check-equipment/gui_design_sample）にあるため。
+# 実行アプリが別リポジトリにある構成では、同じリポジトリ内の exe が正解とは限らないため。
 $outputType = Get-CsprojOutputType -Path $publishProjectPath
 $singleFile = $true
 if (-not (Test-CsprojIsExecutable -Path $publishProjectPath)) {
