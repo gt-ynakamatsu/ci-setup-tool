@@ -297,11 +297,10 @@ def test_generate_jenkinsfile(tmp_path: Path):
     generate_jenkinsfile(template, out, cfg)
     text = out.read_text(encoding="utf-8")
     assert "label 'windows'" in text
-    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" not in text
-    # cron はジョブ XML。poll はジョブ内蔵パイプラインの pollSCM。
+    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in text
+    # cron と poll を両方 Jenkinsfile に書く。実行後に XML の Timer だけだと消える。
     assert "pollSCM" in text
     assert "H/5 * * * *" in text
-    assert "cron(spec:" not in text
     assert r"\\\\server\\ci" in text  # backslash escaped for groovy
     assert "timeout=30 retention=30" in text
 
@@ -314,14 +313,14 @@ def test_generate_jenkinsfile_empty_poll(tmp_path: Path):
     assert out.read_text(encoding="utf-8") == "X"
 
 
-def test_generate_jenkinsfile_cron_trigger_line_always_empty(tmp_path: Path):
-    # cron は Jenkins ジョブ XML（TimerTrigger）またはラッパージョブ側で設定する。
+def test_generate_jenkinsfile_includes_cron_trigger_line(tmp_path: Path):
+    # Declarative の triggers がジョブ XML を上書きするので、cron も Jenkinsfile に残す。
     cfg = CISetupConfig()
     cfg.jenkins.cron_schedule = "0 0 * * *"
     cfg.jenkins.timezone = "Asia/Tokyo"
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile("{{CRON_TRIGGER_LINE}}", out, cfg)
-    assert out.read_text(encoding="utf-8") == ""
+    assert out.read_text(encoding="utf-8") == "        cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')"
 
 
 def test_generate_jenkinsfile_cron_trigger_line_empty_when_retry_wrapper_enabled(tmp_path: Path):
@@ -372,7 +371,7 @@ def test_cisetup_pack_includes_scripts_and_local(tmp_path: Path):
         committed = json.loads(zf.read("cisetup.config.json"))
         assert committed["storage"]["releaseUrls"] == []
         assert committed["storage"]["basePaths"] == []
-    # poll / cron はジョブ XML 側に移設済みのため通常は空。
+    # poll は内蔵パイプラインの pollSCM、cron は Jenkinsfile + ジョブ XML の TimerTrigger。
     # 空の `triggers {}` は Declarative Pipeline でコンパイルエラーになるため、
     # トリガー行が無いときはブロックごと出力しない。
     assert build_triggers_block("", "") == ""
@@ -399,6 +398,7 @@ def test_generated_jenkinsfile_has_no_empty_triggers_block(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "triggers {" in text
     assert "pollSCM" in text
+    assert "cron(spec: '0 0 * * *'" in text
     assert "checkout scm" not in text
     assert "GitSCM" in text
     assert "cisetup-pack.zip" in text

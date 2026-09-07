@@ -298,6 +298,23 @@ def test_upsert_pipeline_job_includes_timer_trigger(recorder):
     assert "0 0 * * *" in body
 
 
+def test_upsert_pipeline_job_keeps_cron_in_script_when_poll_enabled(recorder):
+    # pollSCM だけの triggers だと実行後に TimerTrigger が消える。
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.poll_schedule = "H/5 * * * *"
+    cfg.jenkins.cron_schedule = "0 0 * * *"
+    cfg.jenkins.timezone = "Asia/Tokyo"
+    client.upsert_pipeline_job(cfg)
+    body = recorder.bodies[-1].decode("utf-8")
+    assert "pollSCM" in body
+    assert "cron(spec:" in body
+    assert "0 0 * * *" in body
+    assert "Asia/Tokyo" in body
+    assert "hudson.triggers.TimerTrigger" in body
+
+
 def test_disable_job_if_exists(recorder):
     recorder.responses["job/MyApp-CI-trigger/api/json"] = FakeResponse("{}")
     client = JenkinsClient(_secrets())

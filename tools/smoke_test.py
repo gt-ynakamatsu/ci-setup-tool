@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory() as tmp:
     jf = (root / "CISetup" / "Jenkinsfile").read_text(encoding="utf-8")
     check("Jenkinsfile にラベル反映", "label 'windows'" in jf)
     check("Jenkinsfile が CISetup/scripts 参照", "./CISetup/scripts/" in jf)
-    check("Jenkinsfile に cron なし（ジョブ XML 側）", "cron(spec:" not in jf)
+    check("Jenkinsfile に cron あり（poll と同居。実行後の XML 上書き対策）", "cron(spec:" in jf)
     check("Jenkinsfile に Checkout retry", "retry(3)" in jf)
     check("Jenkinsfile に BOM なし", not jf.startswith("\ufeff"))
     logs, releases, tests = repo.build_preview_paths(cfg)

@@ -271,7 +271,7 @@ AGENT_LABEL = (
 CRON_SCHEDULE = (
     "【何を】定期ビルドのスケジュール（cron 形式）\n"
     "【例】0 0 * * * → 毎日 0:00（タイムゾーン欄の設定に従う）\n"
-    "【保存先】cisetup.config.json。「Jenkins に反映」時にジョブ XML の TimerTrigger として登録"
+    "【保存先】cisetup.config.json。「Jenkins に反映」時にパイプラインの cron とジョブ XML の TimerTrigger として登録"
     "（retry ラッパー ON 時はラッパージョブ側のみ）"
 )
 
@@ -280,8 +280,8 @@ POLL_SCHEDULE = (
     "【動き】対象ブランチに新しいコミットがあるとビルドを自動実行\n"
     "【例】H/5 * * * * → 約5分ごとに変更を確認\n"
     "【空欄】ポーリングを無効化（定期ビルドのみ）\n"
-    "【保存先】cisetup.config.json。「Jenkins に反映」時にジョブ XML の SCMTrigger として登録"
-    "（Jenkinsfile 上書きでトリガーが消える問題を避けるため）"
+    "【保存先】cisetup.config.json。「Jenkins に反映」時にパイプラインの pollSCM として登録"
+    "（ジョブに Git SCM 定義が無い内蔵パイプラインでは XML の SCMTrigger は効かない）"
 )
 
 AGENT_WORKSPACE_PATH = (

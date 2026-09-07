@@ -443,8 +443,8 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 |-------------|-----------|----|--------|------|--------|
 | `job_name` | `jobName` | str | `"CISetup-CI"` | Pipeline ジョブ名 | config |
 | `agent_label` | `agentLabel` | str | `""` | エージェントラベル。空なら `agent any` | config（+ Jenkinsfile 生成） |
-| `cron_schedule` | `cronSchedule` | str | `"0 0 * * *"` | 定期ビルドの cron。ジョブ XML の TimerTrigger として登録（retry ラッパー ON 時はラッパージョブ側のみ） | config + Jenkins ジョブ XML |
-| `poll_schedule` | `pollSchedule` | str | `"H/5 * * * *"` | `pollSCM`（マージ検知）の間隔。空なら無効。ジョブ XML の SCMTrigger として登録（Jenkinsfile ではなく upsert 時） | config + Jenkins ジョブ XML |
+| `cron_schedule` | `cronSchedule` | str | `"0 0 * * *"` | 定期ビルドの cron。Jenkinsfile の `cron(...)` とジョブ XML の TimerTrigger（retry ラッパー ON 時はラッパージョブ側のみ） | config + Jenkinsfile + ジョブ XML |
+| `poll_schedule` | `pollSchedule` | str | `"H/5 * * * *"` | `pollSCM`（マージ検知）の間隔。空なら無効。ジョブ内蔵パイプラインのため Jenkinsfile の `pollSCM` として登録（ジョブに SCM が無いと XML の SCMTrigger は効かない） | config + Jenkinsfile |
 | `ci_file_servers` | `ciFileServers` | list[str] | `["\\\\fileserver\\ci"]` | プロジェクト名を付与する書き込み先（複数可） | **local** |
 | `teams_credential_id` | `teamsCredentialId` | str | `"teams-webhook-url"` | Teams Webhook の Jenkins Credential ID | config |
 | `default_configuration` | `defaultConfiguration` | str | `"Release"` | 既定の Build Configuration | config |
@@ -465,11 +465,14 @@ Parameterized Trigger プラグインで本体 Pipeline ジョブを起動・待
 に従ってラッパージョブごと再試行する。Pipeline ジョブは Naginator 非対応、かつ Jenkinsfile 取得
 自体の失敗は Pipeline 開始前に起きる（Jenkinsfile 内の `retry()` でも救えない）ため、この構成にしている。
 
-poll / cron はいずれも Jenkins ジョブ XML 側（`SCMTrigger` / `TimerTrigger`）に持たせるため、
-生成される `Jenkinsfile` の `triggers` ブロックは通常「空」になる。ここで注意すべきは、
+poll はジョブに SCM 定義が無いため Jenkinsfile の `pollSCM` に置く。cron も同じ `triggers`
+ブロックに置く。Declarative Pipeline は初回実行後にジョブ XML のトリガーを
+`triggers {}` の内容で置き換えるため、cron を TimerTrigger だけにすると poll のあるジョブでは
+定期実行だけが消える。XML の TimerTrigger は「まだ一度も走っていないジョブ」向けの保険として残す。
+retry ラッパー ON のときは本体の cron は出さず、ラッパージョブ側のみ。
+
 Declarative Pipeline は空の `triggers {}` を許さず `WorkflowScript: triggers can not be empty`
-というコンパイルエラーになり、どのステージにも入らないままビルドが即失敗する点である
-（失敗するとラッパー/トリガージョブが再起動を繰り返し、"No Changes" ビルドが短間隔で連投される）。
+というコンパイルエラーになり、どのステージにも入らないままビルドが即失敗する。
 このため `jenkinsfile_generator.build_triggers_block` はトリガー行が 1 つも無いときは
 `triggers` ブロックごと出力しない（`{{TRIGGERS_BLOCK}}` を空文字へ置換）。トリガー行がある
 ときのみ `triggers { ... }` 全体を生成する。
