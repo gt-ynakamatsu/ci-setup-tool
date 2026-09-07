@@ -18,7 +18,7 @@ from ..layout import (
     card,
     font,
     hint_label,
-    mono_font,
+    log_text,
     section_title,
     step_desc,
     step_title,
@@ -142,11 +142,7 @@ class DetailsMixin:
             state=tk.DISABLED,
         )
         self._redeploy_btn.pack(side=tk.LEFT)
-        self._deploy_log_text = tk.Text(
-            frame, height=3, wrap=tk.WORD, font=mono_font(12), relief=tk.SOLID, borderwidth=1,
-            highlightthickness=0, background="#FFFFFF",
-        )
-        self._deploy_log_text.pack(fill=tk.X)
+        self._deploy_log_text = log_text(frame, height=4)
     def _build_details_ci_job(self, parent: tk.Frame) -> None:
         frame = card(parent)
         step_title(frame, "CI ジョブの詳細").pack(anchor="w", pady=(0, 8))
@@ -274,11 +270,7 @@ class DetailsMixin:
             padx=16,
         ).pack(side=tk.LEFT)
         tk.Label(frame, text="実行ログ", font=font(12, bold=True), bg=COLOR_SERVER_BG, anchor="w").pack(anchor="w")
-        self._server_log_text = tk.Text(
-            frame, height=4, wrap=tk.WORD, font=mono_font(12), relief=tk.SOLID, borderwidth=1,
-            highlightthickness=0, background="#FFFFFF",
-        )
-        self._server_log_text.pack(fill=tk.X, pady=(4, 8))
+        self._server_log_text = log_text(frame, height=6, pady=(4, 8))
         tk.Label(
             frame,
             text="エージェント PC で実行するコマンド",
@@ -286,11 +278,7 @@ class DetailsMixin:
             bg=COLOR_SERVER_BG,
             anchor="w",
         ).pack(anchor="w")
-        self._agent_command_text = tk.Text(
-            frame, height=4, wrap=tk.WORD, font=mono_font(12), relief=tk.SOLID, borderwidth=1,
-            highlightthickness=0, background="#FFFFFF",
-        )
-        self._agent_command_text.pack(fill=tk.X, pady=(4, 8))
+        self._agent_command_text = log_text(frame, height=4, pady=(4, 8))
         button(frame, "起動コマンドをコピー", self._copy_agent_command).pack(anchor="w")
     def _build_details_manual(self, parent: tk.Frame) -> None:
         frame = card(parent)

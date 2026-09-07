@@ -117,6 +117,63 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.yview_scroll(int(-event.delta / 120), "units")
 
 
+def _enclosing_scrollable(widget: tk.Misc) -> "ScrollableFrame | None":
+    node = widget.master
+    while node is not None:
+        if isinstance(node, ScrollableFrame):
+            return node
+        node = node.master
+    return None
+
+
+def log_text(
+    parent: tk.Misc,
+    *,
+    height: int = 8,
+    wrap: str = tk.WORD,
+    pady: tuple[int, int] = (0, 0),
+) -> tk.Text:
+    """縦スクロールできるログ表示欄。
+
+    ホイールは親の ScrollableFrame が bind_all で奪うため、ログ側で先に受け取る。
+    ログの端まで来たときだけページ側をスクロールして、行き止まり感を出さない。
+    """
+    holder = tk.Frame(parent, background=_bg_of(parent, COLOR_WINDOW_BG))
+    text = tk.Text(
+        holder,
+        height=height,
+        wrap=wrap,
+        font=mono_font(12),
+        relief=tk.SOLID,
+        borderwidth=1,
+        highlightthickness=0,
+        background="#FFFFFF",
+    )
+    bar = ttk.Scrollbar(holder, orient=tk.VERTICAL, command=text.yview)
+    text.configure(yscrollcommand=bar.set)
+    text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    bar.pack(side=tk.RIGHT, fill=tk.Y)
+    holder.pack(fill=tk.X, pady=pady)
+
+    def scroll(units: int) -> str:
+        first, last = text.yview()
+        at_edge = (units < 0 and first <= 0.0) or (units > 0 and last >= 1.0)
+        if at_edge:
+            page = _enclosing_scrollable(text)
+            if page is not None:
+                page.canvas.yview_scroll(units, "units")
+        else:
+            text.yview_scroll(units, "units")
+        return "break"
+
+    text.bind("<MouseWheel>", lambda e: scroll(int(-e.delta / 120)), add="+")
+    text.bind("<Button-4>", lambda _e: scroll(-1), add="+")  # X11
+    text.bind("<Button-5>", lambda _e: scroll(1), add="+")
+    # 矢印キー・PageUp/Down で追えるよう、カーソルが乗ったらフォーカスを渡す。
+    text.bind("<Enter>", lambda _e: text.focus_set(), add="+")
+    return text
+
+
 def _round_rect_points(x1: float, y1: float, x2: float, y2: float, r: float) -> list[float]:
     r = min(r, (x2 - x1) / 2, (y2 - y1) / 2)
     return [
