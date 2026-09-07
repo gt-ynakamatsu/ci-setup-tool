@@ -369,6 +369,18 @@ def test_ci_publish_framework_dependent_single_exe():
     assert "No release artifact (.exe / .zip)" in dtext
 
 
+def test_ci_test_keeps_output_log_and_explains_zero_tests():
+    # dotnet test が落ちてもテストが0件なら原因はテスト自体ではなくビルド/探索側。
+    # 出力ログを残し、エラー行を抜き出して示す。
+    script = template_store.bundled_template_dir() / "scripts" / "ci-test.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "Tee-Object -FilePath $outputLogPath" in text
+    assert "$parsed.Counters.Total -eq 0" in text
+    # 5.1 で native の 2>&1 が NativeCommandError にならないよう一時的に緩める。
+    assert "$ErrorActionPreference = 'Continue'" in text
+    assert "$ErrorActionPreference = $previousErrorAction" in text
+
+
 def test_ci_config_overlays_view_urls_from_local():
     # Teams 閲覧 URL は cisetup.local.json を優先する（git 非追跡）。
     script = template_store.bundled_template_dir() / "scripts" / "ci-config.ps1"

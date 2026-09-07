@@ -37,6 +37,7 @@ New-Item -ItemType Directory -Force -Path $testDir | Out-Null
 $trxPath = Join-Path $testDir 'test-results.trx'
 $summaryPath = Join-Path $testDir 'test-summary.json'
 $failureLogPath = Join-Path $testDir 'test-failures.log'
+$outputLogPath = Join-Path $testDir 'test-output.log'
 
 function Import-TrxDetails {
     param([string]$Path)
@@ -160,11 +161,23 @@ Write-Host "==> dotnet test ($($ci.TestProject))"
 # --no-build は付けない。テストプロジェクトがソリューション（ci-build.ps1 がビルドする .sln）
 # に含まれていないと bin\<TFM>\*.dll が存在せず VSTest が「テスト ソース ファイルが見つかりません」で
 # 失敗するため、dotnet test 自身にテストプロジェクトの restore/build を任せる。
-dotnet test $ci.TestProject -c $Configuration `
-    --results-directory $testDir `
-    --logger "trx;LogFileName=test-results.trx" `
-    --logger "console;verbosity=normal"
-$exitCode = $LASTEXITCODE
+# 出力はコンソールに流しつつログにも残す。テストが1件も実行されなかったとき
+# （テストプロジェクトのビルドエラー等）に原因を示せるようにするため。
+# Windows PowerShell 5.1 は ErrorActionPreference=Stop のまま native コマンドを 2>&1 すると
+# stderr の1行目で NativeCommandError を投げて終了コードを拾えなくなるため、一時的に緩める。
+$previousErrorAction = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    dotnet test $ci.TestProject -c $Configuration `
+        --results-directory $testDir `
+        --logger "trx;LogFileName=test-results.trx" `
+        --logger "console;verbosity=normal" 2>&1 |
+        Tee-Object -FilePath $outputLogPath
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    $ErrorActionPreference = $previousErrorAction
+}
 
 $parsed = Import-TrxDetails $trxPath
 Write-TestSummary -Counters $parsed.Counters -Tests $parsed.Tests -TrxFile $trxPath
@@ -190,6 +203,27 @@ foreach ($t in $parsed.Tests) {
 Write-Host '=========================================================='
 
 if ($exitCode -ne 0) {
+    # テストが1件も走っていない場合、失敗の理由は TRX ではなく dotnet の出力側にある
+    # （多くはテストプロジェクトのビルドエラー、TFM 不一致、テストの探索失敗）。
+    if ($parsed.Counters.Total -eq 0) {
+        Write-Host ''
+        Write-Host 'テストが 1 件も実行されていません。テスト自体の失敗ではなく、'
+        Write-Host 'テストプロジェクトのビルドまたは探索で失敗している可能性があります。'
+        Write-Host "  テスト対象 (testProject): $($ci.TestProject)"
+        Write-Host "  出力ログ: $outputLogPath"
+
+        $errorLines = @()
+        if (Test-Path $outputLogPath) {
+            $errorLines = @(Get-Content -LiteralPath $outputLogPath |
+                Where-Object { $_ -match '\b(error|エラー)\s' } |
+                Select-Object -Last 15)
+        }
+        if ($errorLines.Count -gt 0) {
+            Write-Host '  検出したエラー行:'
+            foreach ($line in $errorLines) { Write-Host "    $line" }
+        }
+        Write-Host ''
+    }
     throw "dotnet test failed (exit code $exitCode)."
 }
 
