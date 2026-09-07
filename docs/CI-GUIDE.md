@@ -1548,7 +1548,7 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 > `git status` を確認して commit / stash か `git pull --rebase` で解決してから再実行してください。
 
 > **手元だけ検証したいとき:** 「ローカルでビルド＆テスト」ボタンを押すと、最新を取り込んだうえで
-> 配置済みの `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**できます。
+> 配置済みの `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**できます。「成果物（exe / zip）も作成する」を ON にすると `ci-publish.ps1` まで実行し、publish 固有の失敗も手元で分かります。
 > 先に「設定だけ保存」しておくと最新スクリプトで検証できます。
 >
 > | 項目 | テストビルド | ローカルでビルド＆テスト |

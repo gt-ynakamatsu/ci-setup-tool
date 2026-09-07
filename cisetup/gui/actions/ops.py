@@ -228,7 +228,7 @@ class ActionsMixin:
         self._set_status("ローカルビルド＆テストが完了しました")
         self._info("ローカルでビルド＆テスト", "最新を取り込み、この PC でのビルド＆テストが完了しました。")
     def _run_local_build_test(self, root: Path, clear_log: bool = True) -> None:
-        """配置済み ci-build.ps1 → ci-test.ps1 をこの PC で実行する。
+        """配置済み ci-build.ps1 → ci-test.ps1（→ ci-publish.ps1）をこの PC で実行する。
 
         出力はバックグラウンドスレッドから ``after`` 経由で実行ログ欄へ流し込み、
         UI を固めないようにする（他のアクションと同じスレッド方式）。
@@ -240,7 +240,12 @@ class ActionsMixin:
         def emit(line: str) -> None:
             self.after(0, lambda value=line: self._append_text(self._run_log_text, value))
 
-        deps.run_local_ci(root, configuration=configuration, on_output=emit)
+        deps.run_local_ci(
+            root,
+            configuration=configuration,
+            on_output=emit,
+            publish=bool(self._publish_var.get()),
+        )
     def _build_now(self) -> None:
         self._form_to_config()
         self._require_jenkins_secrets()

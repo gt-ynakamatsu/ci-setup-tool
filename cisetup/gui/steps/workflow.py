@@ -429,7 +429,7 @@ class WorkflowStepsMixin:
         pub_row.pack(anchor="w", pady=(12, 0))
         tk.Checkbutton(
             pub_row,
-            text="テストビルドで成果物 zip も作成・保存する",
+            text="成果物（exe / zip）も作成する（ローカル実行・テストビルド共通）",
             variable=self._publish_var,
             font=font(12),
             bg=COLOR_RUN_BG,
