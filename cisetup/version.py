@@ -15,7 +15,8 @@ RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "1.4.1",
         "2026-09-07",
         (
-            "ライブラリ csproj への単一ファイル公開（NETSDK1099）を避け、実行アプリへ差し替える",
+            "ライブラリ csproj への単一ファイル公開（NETSDK1099）を避け、zip のみに落とす",
+            "gui_design_sample のようなフォルダ名でも WinExe なら公開対象にする",
         ),
     ),
     (

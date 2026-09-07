@@ -142,60 +142,15 @@ function Test-CsprojIsExecutable {
     return ($t -eq 'exe' -or $t -eq 'winexe')
 }
 
-function Test-LooksLikeTestProject {
-    param([string]$Stem)
-    $lowered = $Stem.ToLowerInvariant()
-    return ($lowered.EndsWith('tests') -or $lowered.EndsWith('.test'))
-}
-
-function Test-LooksLikeSamplePath {
-    param([string]$RelativePath)
-    # サンプル・モックアップ・外部取り込みは製品成果物ではないので publish 候補にしない。
-    $dir = ($RelativePath -replace '\\', '/')
-    $dir = $dir.Substring(0, [Math]::Max(0, $dir.LastIndexOf('/'))).ToLowerInvariant()
-    foreach ($marker in @('sample', 'mockup', 'example', 'demo', 'vendor', 'third_party', 'external')) {
-        if ($dir.Contains($marker)) { return $true }
-    }
-    return $false
-}
-
-function Find-ExecutablePublishProject {
-    param([string]$Root, [string]$PreferName)
-    $csprojs = @(Get-ChildItem -Path $Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
-    $exes = New-Object System.Collections.Generic.List[object]
-    foreach ($f in $csprojs) {
-        if (Test-LooksLikeTestProject -Stem $f.BaseName) { continue }
-        $rel = $f.FullName.Substring($Root.Length).TrimStart('\', '/')
-        if (Test-LooksLikeSamplePath -RelativePath $rel) { continue }
-        if (-not (Test-CsprojIsExecutable -Path $f.FullName)) { continue }
-        [void]$exes.Add([pscustomobject]@{ Rel = $rel; Stem = $f.BaseName })
-    }
-    if ($exes.Count -eq 0) { return $null }
-    $named = @($exes.ToArray() | Where-Object { $_.Stem -ieq $PreferName } | Select-Object -First 1)
-    if ($named.Count -gt 0) { return $named[0].Rel }
-    return $exes[0].Rel
-}
-
 # PublishSingleFile は実行アプリ（Exe / WinExe）にしか使えない（NETSDK1099）。
-# publishProject がライブラリなら、製品の実行アプリがあればそちらへ差し替え、
-# 無ければ単一ファイル化を諦めて通常の publish（DLL 一式 + zip）に落とす。
+# publishProject がライブラリなら、指定を別プロジェクトへ差し替えず、
+# 単一ファイル化だけ諦めて通常の publish（DLL 一式 + zip）に落とす。
+# GUI 実行アプリは別リポジトリ（例: ipu-check-equipment/gui_design_sample）にあるため。
 $outputType = Get-CsprojOutputType -Path $publishProjectPath
 $singleFile = $true
 if (-not (Test-CsprojIsExecutable -Path $publishProjectPath)) {
-    $altRel = Find-ExecutablePublishProject -Root $ci.Root -PreferName $ci.ProjectName
-    if ([string]::IsNullOrWhiteSpace($altRel)) {
-        $singleFile = $false
-        Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）で、実行アプリの csproj が見つかりません。単一ファイル公開(.exe)は行わず、通常の publish（zip のみ）にします。"
-    } else {
-        Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）です。実行アプリ '$altRel' を公開します。"
-        $ci.PublishProject = $altRel
-        $publishProjectPath = if ([System.IO.Path]::IsPathRooted($ci.PublishProject)) {
-            $ci.PublishProject
-        } else {
-            Join-Path $ci.Root $ci.PublishProject
-        }
-    }
+    $singleFile = $false
+    Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）です。単一ファイル公開(.exe)は行わず、通常の publish（zip のみ）にします。"
 }
 
 # framework-dependent + PublishSingleFile（.NET ランタイムは同梱しない）。
