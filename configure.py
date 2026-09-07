@@ -10,6 +10,7 @@ from pathlib import Path
 from cisetup import paths
 from cisetup.gui import run_app
 from cisetup.project_setup import deploy_ci_files, has_solution_file
+from cisetup.version import display_version
 
 
 def _program_name() -> str:
@@ -30,7 +31,7 @@ def _attach_console_for_cli(argv: list[str]) -> None:
         return
     if not getattr(sys, "frozen", False):
         return
-    if not any(arg in argv for arg in ("--bootstrap", "--help", "-h")):
+    if not any(arg in argv for arg in ("--bootstrap", "--help", "-h", "--version")):
         return
 
     import ctypes
@@ -58,6 +59,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"CISetup {display_version()}",
+    )
     parser.add_argument(
         "--open",
         metavar="folder",

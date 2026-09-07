@@ -6,6 +6,7 @@ from pathlib import Path
 from ..config_repository import ConfigRepository
 from ..models import CISetupConfig, CISetupSecrets
 from ..recent_project import RecentProjectStore
+from ..version import VERSION, display_version
 from .actions.ops import ActionsMixin
 from .details.panels import DetailsMixin
 from .dialogs import DialogMixin
@@ -52,7 +53,7 @@ class ConfigureApp(
         self._scale = scale if scale > 0 else 1.0
         set_scale(self._scale)
 
-        self.title("CISetup")
+        self.title(f"CISetup {VERSION}")
         self._apply_window_icon()
         self.geometry(f"{self._px(960)}x{self._px(900)}")
         self.minsize(self._px(880), self._px(720))
@@ -104,14 +105,24 @@ class ConfigureApp(
 
         header = tk.Frame(outer, bg=COLOR_WINDOW_BG)
         header.pack(fill=tk.X, pady=(0, 14))
+        title_row = tk.Frame(header, bg=COLOR_WINDOW_BG)
+        title_row.pack(fill=tk.X)
         tk.Label(
-            header,
+            title_row,
             text="CISetup",
             font=font(24, bold=True),
             fg=COLOR_TEXT,
             bg=COLOR_WINDOW_BG,
             anchor="w",
-        ).pack(anchor="w")
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            title_row,
+            text=display_version(),
+            font=font(12),
+            fg=COLOR_DESC,
+            bg=COLOR_WINDOW_BG,
+            anchor="w",
+        ).pack(side=tk.LEFT, padx=(12, 0), pady=(10, 0))
         tk.Label(
             header,
             text="上から順に入力して、最後の「セットアップを実行」を押すだけです。",

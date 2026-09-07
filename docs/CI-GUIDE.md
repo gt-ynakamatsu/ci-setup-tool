@@ -238,7 +238,7 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 **D-6 で自動されること**
 
 - `cisetup.config.json` / `cisetup.secrets.local.json` / `cisetup.local.json` 保存
-- Jenkins にジョブ・Credentials 登録（パイプラインはジョブ内蔵。顧客 Git への CI 定義 push はしない）
+- Jenkins にジョブ・Credentials 登録（パイプラインはジョブ内蔵。アプリの Git への CI 定義 push はしない）
 
 ---
 
@@ -1554,7 +1554,7 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 > | 項目 | テストビルド | ローカルでビルド＆テスト |
 > |------|--------------|--------------------------|
 > | 実行場所 | Jenkins エージェント | 手元の PC |
-> | 対象コード | **顧客 Git** のアプリソース | 取り込み後の**手元の作業コピー** |
+> | 対象コード | アプリの Git のソース | 取り込み後の**手元の作業コピー** |
 > | git 操作 | あり（チェックアウト） | あり（取り込みのみ・push なし） |
 > | 用途 | 本番経路の確認・Teams 通知 | 手元での素早い動作確認 |
 
@@ -1966,7 +1966,7 @@ python configure.py --open C:\work\MyApp
 
 ```powershell
 .\tools\Package-Distribution.ps1
-# => dist\CISetup-1.0.0.zip
+# => dist\CISetup-1.4.0.zip  （バージョンは cisetup.version.VERSION）
 ```
 
 受け取り側は Python 3.10+ で zip を展開し `start_configure.bat` を実行します。

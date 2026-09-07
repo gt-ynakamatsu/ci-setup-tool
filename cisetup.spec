@@ -1,9 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec — CISetup.exe（単一ファイル・GUI + CLI）
 
+import sys
 from pathlib import Path
 
 root = Path(SPECPATH)
+sys.path.insert(0, str(root))
+from cisetup.version import write_pyinstaller_version_file
+
+_version_file = write_pyinstaller_version_file(root / "build" / "file_version_info.txt")
 
 a = Analysis(
     [str(root / "configure.py")],
@@ -44,6 +49,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=None,
+    version=str(_version_file),
     icon=str(root / "assets" / "icon.ico"),
 )

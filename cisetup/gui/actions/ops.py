@@ -207,11 +207,7 @@ class ActionsMixin:
 
         self._set_status("セットアップが完了しました。")
         done = "\n".join(f"・{label}" for _, label in steps)
-        self._info(
-            "セットアップ",
-            f"次の処理が完了しました:\n\n{done}\n\n"
-            "CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を載せる必要はありません。",
-        )
+        self._info("セットアップ", f"次の処理が完了しました:\n\n{done}")
     def _pull_latest(self, root: Path) -> None:
         """ビルド＆テストの前にリモートの最新を取り込む（取り込み方向のみ）。
 

@@ -14,6 +14,7 @@ from xml.sax.saxutils import escape as _sax_escape
 from .jenkinsfile_generator import render_jenkinsfile
 from .models import CISetupConfig, CISetupSecrets
 from .template_store import read_template
+from .version import VERSION
 
 REQUIRED_PLUGINS = [
     "workflow-aggregator",
@@ -161,7 +162,7 @@ class JenkinsClient:
         ).decode("ascii")
         self._headers = {
             "Authorization": f"Basic {token}",
-            "User-Agent": "CISetup-Python/1.0",
+            "User-Agent": f"CISetup/{VERSION}",
         }
         self._crumb: str | None = None
 

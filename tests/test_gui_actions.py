@@ -194,6 +194,23 @@ def test_run_setup_ordering(app, fake_jenkins, monkeypatch):
     assert seq == ["pull", "save", "local", "jenkins", "build"]
 
 
+def test_run_setup_completion_popup_omits_customer_wording(app, fake_jenkins, monkeypatch):
+    popups: list[tuple[str, str]] = []
+    monkeypatch.setattr(app, "_info", lambda title, msg: popups.append((title, msg)))
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", lambda *a, **k: "ok")
+    monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: None)
+    monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_build_now", lambda: None)
+    _set_jenkins_secrets(app)
+    app._fields["git.repository_url"].set("http://git/x.git")
+    app._run_setup()
+    assert popups
+    title, body = popups[-1]
+    assert title == "セットアップ"
+    assert "完了" in body
+    assert "顧客" not in body
+
+
 def test_run_setup_pulls_configured_branch(app, fake_jenkins, monkeypatch):
     captured = {}
     monkeypatch.setattr(

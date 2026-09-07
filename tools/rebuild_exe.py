@@ -58,7 +58,7 @@ def exe_source_paths() -> list[Path]:
     paths: list[Path] = []
     for pattern in EXE_SOURCE_GLOBS:
         paths.extend(ROOT.glob(pattern))
-    return [p for p in paths if p.is_file()]
+    return [p for p in paths if p.is_file() and p.name != "_build_revision.py"]
 
 
 def newest_source_mtime() -> float:
@@ -106,7 +106,16 @@ def _require_wine_python() -> None:
         )
 
 
+def _prepare_build_metadata() -> None:
+    sys.path.insert(0, str(ROOT))
+    from cisetup.version import write_build_revision, write_pyinstaller_version_file
+
+    write_build_revision()
+    write_pyinstaller_version_file(ROOT / "build" / "file_version_info.txt")
+
+
 def rebuild_native(*, clean: bool = True) -> Path:
+    _prepare_build_metadata()
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "pyinstaller", "--quiet"],
         cwd=ROOT,
@@ -126,6 +135,7 @@ def rebuild_native(*, clean: bool = True) -> Path:
 def rebuild_windows(*, clean: bool = True) -> Path:
     """Wine 上の Windows Python で `dist/CISetup.exe` を生成する。"""
     _require_wine_python()
+    _prepare_build_metadata()
     env = wine_env()
     subprocess.run(
         ["wine", WINE_PYTHON_WIN, "-m", "pip", "install", "pyinstaller", "--quiet"],

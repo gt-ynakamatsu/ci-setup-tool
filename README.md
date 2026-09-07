@@ -91,6 +91,7 @@ cisetup/
 │   ├── environment_scan.py  … 開発環境スキャン（git/java 等）
 │   ├── recent_project.py    … 直近プロジェクトの記憶
 │   ├── help_texts.py        … GUI ヘルプ文言
+│   ├── version.py           … アプリの VERSION / リビジョン（正本）
 │   ├── app_paths.py         … 設定保存先などのアプリパス
 │   └── process_util.py      … サブプロセス実行ユーティリティ
 │
@@ -195,8 +196,8 @@ Linux で `--windows` を付けずに実行すると `dist/CISetup`（Linux 向�
 ## 4. 配布 zip の作成
 
 ```powershell
-.\tools\Package-Distribution.ps1            # 既定バージョン 1.0.0
-.\tools\Package-Distribution.ps1 -Version 1.1.0
+.\tools\Package-Distribution.ps1            # 既定は cisetup.version.VERSION（いま 1.4.0）
+.\tools\Package-Distribution.ps1 -Version 1.4.1
 # => dist\CISetup-<Version>.zip
 ```
 
@@ -220,6 +221,7 @@ CISetup-<Version>/
 configure.py                      # GUI
 configure.py --open <folder>      # フォルダを開いて GUI
 configure.py --bootstrap <folder> # CI ファイルのみ配置（GUI なし）
+configure.py --version            # バージョンと git リビジョン
 configure.py --help
 ```
 
