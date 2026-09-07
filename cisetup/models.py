@@ -15,6 +15,10 @@ class BuildConfig:
     publish_command: str = ""
     test_command: str = ""
     artifact_glob: str = ""
+    # dotnet publish の RuntimeIdentifier。空ならエージェント OS から自動（win-x64 / linux-x64）。
+    runtime_identifier: str = ""
+    # 静的解析の対象から外すパス（";" 区切り。前方一致 or * ? ** のグロブ）。
+    analysis_exclude_paths: str = ""
 
 
 @dataclass

@@ -189,6 +189,9 @@ function Get-CiSettings {
     $publishCommand = if ($build) { [string]$build.publishCommand } else { '' }
     $testCommand = if ($build) { [string]$build.testCommand } else { '' }
     $artifactGlob = if ($build) { [string]$build.artifactGlob } else { '' }
+    # 未設定なら publish 側でエージェント OS から補う。
+    $runtimeIdentifier = if ($build) { ([string]$build.runtimeIdentifier).Trim() } else { '' }
+    $analysisExcludePaths = if ($build) { ([string]$build.analysisExcludePaths).Trim() } else { '' }
     $testProject = if ($config.project.testProject) { (ConvertTo-PlatformPath $config.project.testProject).Trim() } else { '' }
 
     if ([string]::IsNullOrWhiteSpace($config.project.name)) {
@@ -305,6 +308,8 @@ function Get-CiSettings {
         PublishCommand = $publishCommand
         TestCommand = $testCommand
         ArtifactGlob = $artifactGlob
+        RuntimeIdentifier = $runtimeIdentifier
+        AnalysisExcludePaths = $analysisExcludePaths
         StorageBasePaths = $basePaths
         StorageBasePath = if ($basePaths.Count -gt 0) { $basePaths[0] } else { '' }
         LogsDir = (ConvertTo-PlatformPath $logsDir)

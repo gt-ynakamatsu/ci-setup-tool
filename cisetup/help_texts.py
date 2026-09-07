@@ -34,6 +34,23 @@ PUBLISH_PROJECT = (
     "【保存先】cisetup.config.json → project.publishProject"
 )
 
+RUNTIME_IDENTIFIER = (
+    "【何を】dotnet publish の実行環境識別子（RID）\n"
+    "【なぜ】単一ファイル公開には RID が必要で、配布先の OS / CPU に合わせるため\n"
+    "【空欄】エージェントの OS から自動判定（Windows: win-x64 / Linux: linux-x64）\n"
+    "【例】win-x64、win-arm64、linux-x64、linux-arm64、osx-arm64\n"
+    "【保存先】cisetup.config.json → build.runtimeIdentifier"
+)
+
+ANALYSIS_EXCLUDE_PATHS = (
+    "【何を】静的解析の結果から除外するパス（「;」区切り）\n"
+    "【なぜ】サンプル・自動生成・外部取り込みの指摘が製品コードの件数に混ざるのを防ぐため\n"
+    "【書き方】リポジトリルートからの相対パス。前方一致のほか * ? ** のグロブが使えます\n"
+    "【例】gui_design_sample;vendor/**;**/obj/**\n"
+    "【注意】ビルド自体は行われます。レポートと件数から外れるだけです\n"
+    "【保存先】cisetup.config.json → build.analysisExcludePaths"
+)
+
 TEST_PROJECT = (
     "【何を】ユニットテスト用 csproj（dotnet test / xUnit 等）\n"
     "【なぜ】自動テストを CI に含めるかどうかを決めるため。空欄ならテストはスキップ\n"

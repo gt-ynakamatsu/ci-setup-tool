@@ -28,6 +28,23 @@ def test_split_repository_url():
     assert split_repository_url("http://u@h/a@b") == ("http://h/a@b", "u")
 
 
+def test_build_runtime_identifier_and_analysis_excludes_roundtrip():
+    cfg = default_config()
+    cfg.build.runtime_identifier = "win-arm64"
+    cfg.build.analysis_exclude_paths = "gui_design_sample;vendor/**"
+    data = config_to_dict(cfg)
+    assert data["build"]["runtimeIdentifier"] == "win-arm64"
+    assert data["build"]["analysisExcludePaths"] == "gui_design_sample;vendor/**"
+    assert config_from_dict(data).build == cfg.build
+
+
+def test_build_new_keys_default_to_empty_when_absent():
+    # 旧 cisetup.config.json（キーが無い）でも読める。
+    cfg = config_from_dict({"build": {"profile": "dotnet"}})
+    assert cfg.build.runtime_identifier == ""
+    assert cfg.build.analysis_exclude_paths == ""
+
+
 def test_local_roundtrip():
     local = CISetupLocal(base_paths=[r"C:\OneDrive\CI"], ci_file_servers=[r"\\srv\ci"])
     data = local_to_dict(local)
