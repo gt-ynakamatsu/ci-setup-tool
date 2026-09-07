@@ -8,13 +8,17 @@ import cisetup.local_ci as local_ci
 from cisetup import paths
 
 
-def _make_scripts(root: Path, *, build: bool = True, test: bool = True) -> None:
+def _make_scripts(
+    root: Path, *, build: bool = True, test: bool = True, publish: bool = True
+) -> None:
     scripts = root / paths.CI_FOLDER / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     if build:
         (scripts / "ci-build.ps1").write_text("# build", encoding="utf-8")
     if test:
         (scripts / "ci-test.ps1").write_text("# test", encoding="utf-8")
+    if publish:
+        (scripts / "ci-publish.ps1").write_text("# publish", encoding="utf-8")
 
 
 def _make_legacy_scripts(root: Path) -> None:
@@ -39,6 +43,8 @@ def _fake_popen(returncodes: dict[str, int], calls: list[list[str]]):
                 self.returncode = returncodes.get("build", 0)
             elif "ci-test.ps1" in joined:
                 self.returncode = returncodes.get("test", 0)
+            elif "ci-publish.ps1" in joined:
+                self.returncode = returncodes.get("publish", 0)
 
     return FakePopen
 
@@ -63,6 +69,43 @@ def test_run_local_ci_runs_build_then_test(tmp_path, monkeypatch):
     assert joined[0].index("ci-build.ps1") >= 0 and joined[1].index("ci-test.ps1") >= 0
     # ストリームされた出力が届く
     assert any("line1" in line for line in output)
+
+
+def test_run_local_ci_skips_publish_by_default(tmp_path, monkeypatch):
+    _make_scripts(tmp_path)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(local_ci.subprocess, "Popen", _fake_popen({}, calls))
+
+    local_ci.run_local_ci(tmp_path)
+
+    assert not any("ci-publish.ps1" in " ".join(c) for c in calls)
+
+
+def test_run_local_ci_runs_publish_last_when_requested(tmp_path, monkeypatch):
+    # publish は Jenkins ではテストの後にしか動かないため、ローカルでも同じ順序で確認する。
+    _make_scripts(tmp_path)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(local_ci.subprocess, "Popen", _fake_popen({}, calls))
+
+    local_ci.run_local_ci(tmp_path, publish=True)
+
+    joined = [" ".join(c) for c in calls]
+    assert len(calls) == 3
+    assert "ci-build.ps1" in joined[0]
+    assert "ci-test.ps1" in joined[1]
+    assert "ci-publish.ps1" in joined[2]
+
+
+def test_run_local_ci_publish_failure_raises(tmp_path, monkeypatch):
+    # NETSDK1099 のような publish 固有の失敗を Jenkins に投げる前に捕まえる。
+    _make_scripts(tmp_path)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(local_ci.subprocess, "Popen", _fake_popen({"publish": 1}, calls))
+
+    with pytest.raises(local_ci.LocalCIError) as exc:
+        local_ci.run_local_ci(tmp_path, publish=True)
+
+    assert "成果物の作成" in str(exc.value)
 
 
 def test_run_local_ci_stops_on_build_failure(tmp_path, monkeypatch):

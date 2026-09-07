@@ -390,9 +390,11 @@ LOCAL_BUILD_TEST = (
 )
 
 PUBLISH_RELEASE = (
-    "【何を】テストビルド時に成果物 zip（dotnet publish 等）も作成して releases に保存するか\n"
-    "【なぜ】本番と同じ成果物がファイルサーバーに届くか、CI 全体を通しで確認するため\n"
-    "【OFF】ビルド・テストのみ実行し、zip 作成と releases への配置はスキップします"
+    "【何を】成果物（exe / zip）の作成も行うか。ローカルのビルド＆テストと"
+    "テストビルドの両方に効きます\n"
+    "【なぜ】publish は Jenkins ではビルド・テストの後にしか動かないため、"
+    "ここを ON にしないと publish 固有の失敗が Jenkins に投げるまで分かりません\n"
+    "【OFF】ビルド・テストのみ実行し、成果物の作成と releases への配置はスキップします"
 )
 
 STEP_SAVE = (

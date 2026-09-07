@@ -46,10 +46,10 @@ GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin �
 |----|------|
 | 1. 最新のコードを取り込む | `git fetch` → `git merge --ff-only` で ② のブランチの最新を取り込む。**push はしない** |
 | 2. 設定を保存 | `cisetup.config.json` / 作業用 `Jenkinsfile` / `scripts` を再生成して保存 |
-| 3. ローカルでビルド＆テスト | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1` を**この PC でそのまま実行**（ログは「ローカルビルド＆テストの実行ログ」欄。スクロールバー・ホイール・矢印キーで遡れる） |
+| 3. ローカルでビルド＆テスト | 配置済み `CISetup\scripts\ci-build.ps1` → `ci-test.ps1`（成果物 ON なら `ci-publish.ps1` も）を**この PC でそのまま実行**（ログは「ローカルビルド＆テストの実行ログ」欄。スクロールバー・ホイール・矢印キーで遡れる） |
 | 4. Jenkins に反映 | `apply_settings` でジョブ定義（パイプライン一式）を Jenkins に登録 |
 | 5. テストビルドを実行 | Jenkins がアプリの Git からソースを checkout してビルド |
-| （任意）テストビルドで成果物 zip も作成・保存する | テストビルド時に `dotnet publish` で **framework-dependent 単一 `.exe`**（+ zip）も作成・保存（既定 ON。ランタイムは同梱しない） |
+| （任意）成果物（exe / zip）も作成する | `dotnet publish` で **framework-dependent 単一 `.exe`**（+ zip）も作成（既定 ON。ランタイムは同梱しない）。**ローカルのビルド＆テストとテストビルドの両方**に効くため、publish 固有の失敗を Jenkins に投げる前に検出できる |
 
 個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」（こちらも取り込んでから実行）、または詳細設定の手動操作を使います。
 
