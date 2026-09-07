@@ -7,6 +7,7 @@ from ... import help_texts
 from ..layout import (
     COLOR_CARD_BG,
     COLOR_DESC,
+    COLOR_HINT,
     COLOR_SERVER_BG,
     COLOR_SERVER_BORDER,
     COLOR_SERVER_TITLE,
@@ -307,6 +308,8 @@ class DetailsMixin:
             btn = button(wrap, text, lambda f=func: self._run_async(f), padx=16)
             btn.pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))
     def _build_statusbar(self, parent: tk.Frame) -> None:
+        from ...version import display_version
+
         bar = tk.Frame(parent, bg=COLOR_WINDOW_BG)
         bar.pack(fill=tk.X, pady=(12, 0))
         tk.Label(bar, text="状態:", font=font(12, bold=True), bg=COLOR_WINDOW_BG, fg=COLOR_TEXT).pack(side=tk.LEFT)
@@ -314,3 +317,11 @@ class DetailsMixin:
             bar, text="準備完了", font=font(12), fg="#444444", bg=COLOR_WINDOW_BG, anchor="w"
         )
         self._status.pack(side=tk.LEFT, padx=(6, 0), fill=tk.X, expand=True)
+        tk.Label(
+            bar,
+            text=f"v{display_version()}",
+            font=font(11),
+            fg=COLOR_HINT,
+            bg=COLOR_WINDOW_BG,
+            anchor="e",
+        ).pack(side=tk.RIGHT)

@@ -379,7 +379,7 @@ LOCAL_BUILD_TEST = (
     "この PC でそのまま実行し、ビルド＆テストします\n"
     "【なぜ】Jenkins を待たずに、最新のコードが通るかを手元で確認するため\n"
     "【git 操作】取り込み（fetch → fast-forward）のみ。push はしません\n"
-    "【テストビルドとの違い】「テストビルド」は Jenkins が顧客 Git のアプリソースを checkout してビルド。"
+    "【テストビルドとの違い】「テストビルド」は Jenkins がアプリの Git からソースを checkout してビルド。"
     "こちらは同じコードをこの PC で検証します\n"
     "【おすすめ】先に「設定だけ保存」を実行すると最新のスクリプトで検証できます\n"
     "【実行内容】cisetup\\scripts\\ci-build.ps1 → ci-test.ps1"
@@ -401,7 +401,7 @@ STEP_SAVE = (
 STEP_JENKINS = (
     "【何を】Jenkins ジョブにパイプライン一式（スクリプト・設定・checkout）を内蔵し、"
     "Credentials・トリガーもサーバーへ反映します\n"
-    "【なぜ】顧客 Git に CI 定義を置かず、Jenkins 内部だけで CI を回すため"
+    "【なぜ】Git に CI 定義を置かず、Jenkins 内部だけで CI を回すため"
 )
 
 STEP_BUILD = (

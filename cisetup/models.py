@@ -344,7 +344,7 @@ def local_from_config(config: CISetupConfig) -> CISetupLocal:
 
 
 def committed_config(config: CISetupConfig) -> CISetupConfig:
-    """Git / 顧客リポジトリへ出してよい形（書き込み先・閲覧 URL・機械固有パスを空にする）。"""
+    """Git へ出してよい形（書き込み先・閲覧 URL・機械固有パスを空にする）。"""
     committed = copy.deepcopy(config)
     committed.storage.base_paths = []
     committed.jenkins.ci_file_servers = []

@@ -568,11 +568,11 @@ Jenkins LTS インストール **後** に 1 回だけ実行
 ② Jenkins に設定を反映
 ```
 
-CI の手順は Jenkins ジョブに内蔵されます。顧客 Git へ CI 定義を push する必要はありません。
+CI の手順は Jenkins ジョブに内蔵されます。
 
 | 保存先 | Git 追跡 |
 |--------|-----------|
-| `cisetup.config.json` | 作業コピーに残る（顧客 Git へ載せる必要なし） |
+| `cisetup.config.json` | 作業コピーに残る（アプリの Git へ載せる必要なし） |
 | `Jenkinsfile`, `scripts/` | 同上（Jenkins ジョブへ埋め込まれる） |
 | `cisetup.secrets.local.json` / `cisetup.local.json` | ❌ **しない** |
 

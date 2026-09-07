@@ -16,5 +16,8 @@ assets/_*.ico
 cisetup.local.json
 cisetup.secrets.local.json
 
+# ビルド時に焼く git リビジョン（ソース実行時は git を直接見る）
+cisetup/_build_revision.py
+
 # 同一リモートの入れ子クローン（プロジェクト本体ではない）
 ci-setup/

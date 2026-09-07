@@ -1,6 +1,6 @@
 """リモートの最新コードを取り込む（pull）ための最小限の git 操作。
 
-CISetup から顧客 Git へ CI 定義を push することはない（CI は Jenkins ジョブに内蔵する）。
+CISetup からアプリの Git へ CI 定義を push することはない（CI は Jenkins ジョブに内蔵する）。
 一方で、ビルド＆テストは「リモートの最新状態」に対して行わないと意味がないため、
 取り込み方向（fetch → fast-forward マージ）だけをここで扱う。
 

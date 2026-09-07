@@ -36,7 +36,7 @@ def _escape_groovy(value: str) -> str:
 
 
 def build_git_checkout_groovy(config) -> str:
-    """顧客 Git からアプリソースだけを取る checkout（ジョブ SCM に依存しない）。"""
+    """アプリの Git からソースだけを取る checkout（ジョブ SCM に依存しない）。"""
     url = _escape_groovy(config.git.repository_url)
     cred = _escape_groovy(config.git.credential_id)
     branch = _escape_groovy(config.git.branch or "main")

@@ -44,9 +44,9 @@ Python（標準ライブラリの tkinter）製で、配布形態は **単一 ex
 
 CISetup が行うことは大きく次の 3 つに分けられる。
 
-1. **CI 定義の生成** — 作業用に `CISetup\` を置きつつ、**正本は Jenkins ジョブへ内蔵**する（顧客 Git への CI 定義 push は不要）。
+1. **CI 定義の生成** — 作業用に `CISetup\` を置きつつ、**正本は Jenkins ジョブへ内蔵**する（アプリの Git への CI 定義 push は不要）。
 2. **Jenkins への反映** — 資格情報登録、内蔵パイプライン・ジョブの作成/更新、任意でビルド起動。
-3. **アプリソースの Git** — 顧客 Git からはアプリ本体だけ checkout する（CISetup の Jenkinsfile は使わない）。
+3. **アプリソースの Git** — アプリの Git からはアプリ本体だけ checkout する（CISetup の Jenkinsfile は使わない）。
 
 配置された CI 定義は Jenkins 上で動作し、ビルド・テスト・静的解析・成果物生成を行い、
 結果をファイルサーバーへ配置し、Teams へ通知する。
@@ -246,6 +246,7 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins サービスの有無チェック | `scan`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
 | `help_texts.py` | 各設定項目の GUI ツールチップ文言（保存先 JSON キーまで明記） | 文字列定数群 |
+| `version.py` | アプリのセマンティックバージョンと git リビジョン表示 | `VERSION` / `display_version` / `RELEASES` |
 
 ### 5.2 GUI サブパッケージ（`cisetup\gui\`）
 
@@ -576,7 +577,7 @@ secrets（`git_username`、未設定時のみ）へ退避する。
 
 > 補足: `.gitignore` には `CISetup/cisetup.secrets.local.json` と `CISetup/cisetup.local.json`
 > （およびルート直下の旧名）が自動追記される（`template_store._ensure_secrets_gitignore`）。
-> GUI から顧客 Git へ CI 定義を push する機能はない。Jenkins はジョブ内蔵のパイプラインで動く。
+> GUI からアプリの Git へ CI 定義を push する機能はない。Jenkins はジョブ内蔵のパイプラインで動く。
 
 ---
 
@@ -836,7 +837,7 @@ sequenceDiagram
 
 「セットアップを実行」は **最新の取り込み → 保存 → ローカルでビルド＆テスト → Jenkins 反映 →
 テストビルド** をいつも同じ順で実行する（処理を選ぶチェックボックスはない）。
-CI 定義は Jenkins ジョブに内蔵するため、顧客 Git への CI ファイル push は行わない。
+CI 定義は Jenkins ジョブに内蔵するため、アプリの Git への CI ファイル push は行わない。
 `repositoryUrl` は取り込みと Jenkins 側の checkout に使うため必須。
 
 個別実行は「設定だけ保存」「ローカルでビルド＆テスト」、または詳細設定の手動操作。
@@ -984,9 +985,9 @@ sequenceDiagram
 空値（Webhook 未設定・Git ユーザー名未設定）はスキップする。HTTP エラーは
 `format_jenkins_error` で 401/403 を分かりやすい日本語メッセージに整形する。
 
-### 9.5 Git（顧客リポジトリの checkout のみ）
+### 9.5 Git（アプリのリポジトリの checkout のみ）
 
-GUI から顧客 Git へ CI 定義を commit / push する機能はない（`git_service` は廃止）。
+GUI からアプリの Git へ CI 定義を commit / push する機能はない（`git_service` は廃止）。
 ② で入力する Git URL / ブランチ / 認証は、Jenkins ジョブがアプリソースを checkout するためだけに使う。
 `cisetup.local.json` と secrets は `.gitignore` により Git 非追跡のまま残る。
 
@@ -1181,6 +1182,7 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
 ### 11.3 配布 zip（`tools\Package-Distribution.ps1`）
 
 `rebuild_exe.py` を呼んでから `dist\CISetup-<Version>\` を作り、次を同梱して `CISetup-<Version>.zip` 化する。
+`<Version>` の既定は `cisetup.version.VERSION`（`-Version` で上書き可）。exe のファイルバージョン資源も同じ値。
 
 ```
 CISetup-<Version>/
@@ -1240,7 +1242,7 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 - **`Jenkinsfile` の `CI_FILE_SERVER` 既定値は単一**: 複数書き込み先のうち先頭が既定値になる。ただし
   個人 ID 入りの値はコミット前に空へ退避されるため、通常は空（= `cisetup.local.json` / Jenkins 側から取得）。
 - **`cisetup.local.json` / secrets は `.gitignore` 登録**: 保存時に ignore へ追記する。
-  閲覧 URL の変更だけでは顧客 Git への再コミットは不要（CI 定義は Jenkins ジョブ内蔵）。
+  閲覧 URL の変更だけではアプリの Git への再コミットは不要（CI 定義は Jenkins ジョブ内蔵）。
 - **アプリ本体・CI パイプラインとも Windows/Linux 両対応**: CISetup 自体（GUI・Jenkins/Git/Teams
   設定）は `tkinter` + 標準ライブラリのみで Linux でも動作し、生成・配置する `ci-*.ps1` も
   Windows PowerShell 5.1 / PowerShell 7 (`pwsh`) の両方で動く。`Jenkinsfile` が `isUnix()` で
@@ -1290,7 +1292,7 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 |----------|----------------|
 | GUI 画面順・ステップ番号 | [8.1](#81-画面構成)、[8.8 画面フロー図](#87-ソース構成mixin-分割)、[15.1](#151-設定値--json-早見表)、[docs/GUI.md](GUI.md) / [CI-GUIDE.md](CI-GUIDE.md) 9 章 |
 | Mixin / モジュール追加・分割 | [5.2](#52-gui-サブパッケージcisetupgui)、[5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[3.1](#31-コンポーネント図)、[8.7](#87-ソース構成mixin-分割) |
-| 外部 API 呼び出し経路 | [5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[9.2](#92-セットアップを実行フロー⑥)〜[9.5](#95-git顧客リポジトリの-checkout-のみ)、[13](#13-テスト戦略)（`deps` patch） |
+| 外部 API 呼び出し経路 | [5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[9.2](#92-セットアップを実行フロー⑥)〜[9.5](#95-gitアプリのリポジトリの-checkout-のみ)、[13](#13-テスト戦略)（`deps` patch） |
 | 保存先ルール・local.json | [7.4](#74-save_all-の処理順)、[7.5](#75-書き込み先の実効ルートと後勝ち) |
 | CI パイプライン段階 | [9.6](#96-jenkins-上の-ci-パイプライン実行)、[10 章](#10-ci-パイプライン詳細) |
 | exe 同梱範囲 | [11 章](#11-ビルド配布) |

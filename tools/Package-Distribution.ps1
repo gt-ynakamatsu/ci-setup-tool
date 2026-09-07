@@ -1,13 +1,22 @@
 ﻿param(
-    [string]$Version = "1.0.0"
+    [string]$Version = ""
 )
 
 # CISetup.exe をビルドし、社内配布 zip を dist\ に作成する。
 # このスクリプトは tools\ に置かれている前提（リポジトリルート = 親フォルダ）。
+# -Version 未指定時は cisetup.version.VERSION を使う。
 $ErrorActionPreference = "Stop"
 $toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent $toolsDir
 Set-Location $root
+
+if (-not $Version) {
+    $Version = python -c "from cisetup.version import VERSION; print(VERSION)"
+    if ($LASTEXITCODE -ne 0 -or -not $Version) {
+        throw "cisetup.version.VERSION を読めませんでした。"
+    }
+    $Version = $Version.Trim()
+}
 
 $distRoot = Join-Path $root "dist"
 $exeName = "CISetup.exe"
