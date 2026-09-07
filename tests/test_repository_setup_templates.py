@@ -177,8 +177,8 @@ def test_publish_detection_is_name_independent_prefers_executable(tmp_path: Path
     assert out.project.publish_project == "Main/IpuTestAppCore.csproj"
 
 
-def test_apply_auto_detection_keeps_library_when_only_sample_is_executable(tmp_path: Path):
-    # 実行アプリがサンプル／モックアップしか無い場合は差し替えない（誤った成果物を公開しないため）。
+def test_apply_auto_detection_keeps_existing_library_publish(tmp_path: Path):
+    # 実在するライブラリ指定は維持する（GUI 実行アプリは別リポジトリにある想定）。
     (tmp_path / "IpuTestAppCore").mkdir()
     (tmp_path / "IpuTestAppCore" / "IpuTestAppCore.csproj").write_text(
         '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup></Project>',
@@ -210,33 +210,34 @@ def test_apply_auto_detection_keeps_library_when_only_sample_is_executable(tmp_p
     assert out.project.publish_project == "IpuTestAppCore/IpuTestAppCore.csproj"
 
 
-def test_apply_auto_detection_replaces_library_publish_with_executable(tmp_path: Path):
-    # 実在するライブラリ（IpuTestAppCore）が指定されていても、WinExe があれば差し替える。
-    (tmp_path / "IpuTestAppCore").mkdir()
-    (tmp_path / "IpuTestAppCore" / "IpuTestAppCore.csproj").write_text(
-        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup></Project>',
-        encoding="utf-8",
-    )
-    (tmp_path / "IpuTestApp").mkdir()
-    (tmp_path / "IpuTestApp" / "IpuTestApp.csproj").write_text(
+def test_apply_auto_detection_picks_winexe_under_gui_design_sample(tmp_path: Path):
+    # フォルダ名に sample / mockup があっても、未設定ならその WinExe を選ぶ
+    # （本番 GUI が ipu-check-equipment/gui_design_sample 配下にあるため）。
+    mock = tmp_path / "gui_design_sample" / "ScreenMockup.Presentation"
+    mock.mkdir(parents=True)
+    (mock / "ScreenMockup.Presentation.csproj").write_text(
         '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
         "<OutputType>WinExe</OutputType></PropertyGroup></Project>",
         encoding="utf-8",
     )
-    (tmp_path / "IpuTestApp.sln").write_text(
+    (tmp_path / "ipu-check-equipment.sln").write_text(
         _sln_with_projects(
-            ("IpuTestAppCore", r"IpuTestAppCore\IpuTestAppCore.csproj"),
-            ("IpuTestApp", r"IpuTestApp\IpuTestApp.csproj"),
+            (
+                "ScreenMockup.Presentation",
+                r"gui_design_sample\ScreenMockup.Presentation\ScreenMockup.Presentation.csproj",
+            ),
         ),
         encoding="utf-8",
     )
     cfg = default_config()
-    cfg.project.name = "IpuTestApp"
-    cfg.project.solution_file = "IpuTestApp.sln"
-    cfg.project.artifact_prefix = "IpuTestApp"
-    cfg.project.publish_project = "IpuTestAppCore/IpuTestAppCore.csproj"
+    cfg.project.name = "ipu-check-equipment"
+    cfg.project.solution_file = "ipu-check-equipment.sln"
+    cfg.project.artifact_prefix = "ipu-check-equipment"
+    cfg.project.publish_project = ""
     out = apply_auto_detection(tmp_path, cfg)
-    assert out.project.publish_project == "IpuTestApp/IpuTestApp.csproj"
+    assert out.project.publish_project == (
+        "gui_design_sample/ScreenMockup.Presentation/ScreenMockup.Presentation.csproj"
+    )
 
 
 def test_count_projects(sln_repo: Path):
@@ -357,10 +358,10 @@ def test_ci_publish_framework_dependent_single_exe():
     assert '"-r", $platformTag' in text
     assert "PublishSingleFile=false" not in text
     assert "$exePath" in text
-    assert "Find-ExecutablePublishProject" in text
     assert "NETSDK1099" in text
-    # 実行アプリが無いリポジトリでも失敗させず、単一ファイル化だけ諦める。
+    # ライブラリ指定は別 csproj へ差し替えず、単一ファイル化だけ諦める。
     assert "if ($singleFile) {" in text
+    assert "Find-ExecutablePublishProject" not in text
 
     deploy = template_store.bundled_template_dir() / "scripts" / "ci-deploy-fileserver.ps1"
     dtext = deploy.read_text(encoding="utf-8-sig")
