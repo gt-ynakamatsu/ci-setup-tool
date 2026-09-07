@@ -97,15 +97,20 @@ def run_local_ci(
     root: Path,
     configuration: str = "Release",
     on_output: Callable[[str], None] | None = None,
+    publish: bool = False,
 ) -> None:
-    """ローカルでビルド→テストを順に実行する。
+    """ローカルでビルド→テスト（→成果物作成）を順に実行する。
 
     `CISetup/scripts/ci-build.ps1` を実行し、成功した場合のみ `ci-test.ps1` を実行する。
+    ``publish`` が真なら続けて `ci-publish.ps1` も実行する。Jenkins の Publish ステージは
+    ビルド・テストの後に初めて動くため、ここで回さないと publish 固有の失敗
+    （publishProject の指定誤り等）が Jenkins に投げるまで分からない。
     いずれかが見つからない / 失敗した場合は :class:`LocalCIError` を送出する。
 
     :param root: リポジトリルート（`CISetup/` がある階層）。
     :param configuration: ビルド構成（既定 ``Release``）。各スクリプトの ``-Configuration``。
     :param on_output: 標準出力/標準エラーを 1 行ずつ受け取るコールバック（任意）。
+    :param publish: 成果物（exe / zip）の作成まで確認するか。
     """
     scripts = paths.read_scripts_dir(root)
     configuration = (configuration or "Release").strip() or "Release"
@@ -118,6 +123,12 @@ def run_local_ci(
         on_output("")
         on_output("==> ローカルテストを開始します")
     _run_script(root, scripts / "ci-test.ps1", configuration, on_output, "テスト")
+
+    if publish:
+        if on_output is not None:
+            on_output("")
+            on_output("==> 成果物の作成を開始します")
+        _run_script(root, scripts / "ci-publish.ps1", configuration, on_output, "成果物の作成")
 
     if on_output is not None:
         on_output("")
