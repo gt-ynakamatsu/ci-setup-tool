@@ -16,7 +16,11 @@ def sln_repo(tmp_path: Path) -> Path:
     (tmp_path / "MyApp.sln").write_text("dummy", encoding="utf-8")
     pub = tmp_path / "src" / "MyApp"
     pub.mkdir(parents=True)
-    (pub / "MyApp.csproj").write_text("<Project/>", encoding="utf-8")
+    (pub / "MyApp.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+        "<OutputType>WinExe</OutputType></PropertyGroup></Project>",
+        encoding="utf-8",
+    )
     test = tmp_path / "tests" / "MyApp.Tests"
     test.mkdir(parents=True)
     (test / "MyApp.Tests.csproj").write_text("<Project/>", encoding="utf-8")

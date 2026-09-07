@@ -113,6 +113,86 @@ GUI の『公開プロジェクト (publishProject)』を、リポジトリル�
 "@
 }
 
+function Get-CsprojOutputType {
+    param([string]$Path)
+    try {
+        [xml]$doc = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    } catch {
+        return 'Library'
+    }
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($pg in @($doc.Project.PropertyGroup)) {
+        if ($null -eq $pg) { continue }
+        $ot = $pg.OutputType
+        if ($null -eq $ot) { continue }
+        foreach ($item in @($ot)) {
+            $text = ([string]$item).Trim()
+            if (-not [string]::IsNullOrWhiteSpace($text)) {
+                [void]$values.Add($text)
+            }
+        }
+    }
+    if ($values.Count -eq 0) { return 'Library' }
+    return $values[0]
+}
+
+function Test-CsprojIsExecutable {
+    param([string]$Path)
+    $t = (Get-CsprojOutputType -Path $Path).ToLowerInvariant()
+    return ($t -eq 'exe' -or $t -eq 'winexe')
+}
+
+function Test-LooksLikeTestProject {
+    param([string]$Stem)
+    $lowered = $Stem.ToLowerInvariant()
+    return ($lowered.EndsWith('tests') -or $lowered.EndsWith('.test'))
+}
+
+function Find-ExecutablePublishProject {
+    param([string]$Root, [string]$PreferName)
+    $csprojs = @(Get-ChildItem -Path $Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
+    $exes = New-Object System.Collections.Generic.List[object]
+    foreach ($f in $csprojs) {
+        if (Test-LooksLikeTestProject -Stem $f.BaseName) { continue }
+        if (-not (Test-CsprojIsExecutable -Path $f.FullName)) { continue }
+        $rel = $f.FullName.Substring($Root.Length).TrimStart('\', '/')
+        [void]$exes.Add([pscustomobject]@{ Rel = $rel; Stem = $f.BaseName })
+    }
+    if ($exes.Count -eq 0) { return $null }
+    $named = @($exes.ToArray() | Where-Object { $_.Stem -ieq $PreferName } | Select-Object -First 1)
+    if ($named.Count -gt 0) { return $named[0].Rel }
+    return $exes[0].Rel
+}
+
+# PublishSingleFile は実行アプリ（Exe / WinExe）にしか使えない（NETSDK1099）。
+# 既存ジョブが IpuTestAppCore のようなライブラリを指している場合は実行アプリへ差し替える。
+$outputType = Get-CsprojOutputType -Path $publishProjectPath
+if (-not (Test-CsprojIsExecutable -Path $publishProjectPath)) {
+    $altRel = Find-ExecutablePublishProject -Root $ci.Root -PreferName $ci.ProjectName
+    if ([string]::IsNullOrWhiteSpace($altRel)) {
+        $candidates = Get-ChildItem -Path $ci.Root -Recurse -File -Filter *.csproj -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.FullName.Substring($ci.Root.Length).TrimStart('\', '/') }
+        $list = if ($candidates) { ($candidates | ForEach-Object { "  - $_" }) -join [Environment]::NewLine } else { "  (.csproj が見つかりません)" }
+        throw @"
+単一ファイル公開は実行アプリ（OutputType が Exe / WinExe）に対してのみサポートされています（NETSDK1099）。
+指定された publishProject はライブラリです: $($ci.PublishProject) (OutputType=$outputType)
+
+リポジトリ内の .csproj 候補:
+$list
+
+GUI の『公開プロジェクト (publishProject)』を実行アプリの csproj に修正し、Jenkins ジョブを更新してください。
+"@
+    }
+    Write-Warning "publishProject '$($ci.PublishProject)' は OutputType=$outputType（ライブラリ）です。実行アプリ '$altRel' を公開します。"
+    $ci.PublishProject = $altRel
+    $publishProjectPath = if ([System.IO.Path]::IsPathRooted($ci.PublishProject)) {
+        $ci.PublishProject
+    } else {
+        Join-Path $ci.Root $ci.PublishProject
+    }
+}
+
 # framework-dependent + PublishSingleFile（.NET ランタイムは同梱しない）。
 # アプリ依存 DLL は単一 exe に取り込むが、ランタイムは同梱しない（self-contained だと肥大化するため）。
 # 実行 PC 側に対応する .NET ランタイムが入っている前提の運用。

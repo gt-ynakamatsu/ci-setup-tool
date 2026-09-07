@@ -177,6 +177,35 @@ def test_publish_detection_is_name_independent_prefers_executable(tmp_path: Path
     assert out.project.publish_project == "Main/IpuTestAppCore.csproj"
 
 
+def test_apply_auto_detection_replaces_library_publish_with_executable(tmp_path: Path):
+    # 実在するライブラリ（IpuTestAppCore）が指定されていても、WinExe があれば差し替える。
+    (tmp_path / "IpuTestAppCore").mkdir()
+    (tmp_path / "IpuTestAppCore" / "IpuTestAppCore.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup></PropertyGroup></Project>',
+        encoding="utf-8",
+    )
+    (tmp_path / "IpuTestApp").mkdir()
+    (tmp_path / "IpuTestApp" / "IpuTestApp.csproj").write_text(
+        '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+        "<OutputType>WinExe</OutputType></PropertyGroup></Project>",
+        encoding="utf-8",
+    )
+    (tmp_path / "IpuTestApp.sln").write_text(
+        _sln_with_projects(
+            ("IpuTestAppCore", r"IpuTestAppCore\IpuTestAppCore.csproj"),
+            ("IpuTestApp", r"IpuTestApp\IpuTestApp.csproj"),
+        ),
+        encoding="utf-8",
+    )
+    cfg = default_config()
+    cfg.project.name = "IpuTestApp"
+    cfg.project.solution_file = "IpuTestApp.sln"
+    cfg.project.artifact_prefix = "IpuTestApp"
+    cfg.project.publish_project = "IpuTestAppCore/IpuTestAppCore.csproj"
+    out = apply_auto_detection(tmp_path, cfg)
+    assert out.project.publish_project == "IpuTestApp/IpuTestApp.csproj"
+
+
 def test_count_projects(sln_repo: Path):
     # dummy sln（Project 行なし）なので rglob フォールバックで 2 件
     assert count_projects(sln_repo) == 2
@@ -295,6 +324,8 @@ def test_ci_publish_framework_dependent_single_exe():
     assert '"-r", $platformTag' in text
     assert "PublishSingleFile=false" not in text
     assert "$exePath" in text
+    assert "Find-ExecutablePublishProject" in text
+    assert "NETSDK1099" in text
 
     deploy = template_store.bundled_template_dir() / "scripts" / "ci-deploy-fileserver.ps1"
     dtext = deploy.read_text(encoding="utf-8-sig")
@@ -936,6 +967,14 @@ def test_validate_custom_requires_build_command(sln_repo: Path):
     cfg.build.profile = "custom"
     cfg.build.build_command = ""
     with pytest.raises(ValueError, match="ビルド コマンド"):
+        repo.validate(cfg, sln_repo)
+
+
+def test_validate_rejects_library_publish_project(sln_repo: Path):
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.project.publish_project = "tests/MyApp.Tests/MyApp.Tests.csproj"
+    with pytest.raises(ValueError, match="Exe / WinExe"):
         repo.validate(cfg, sln_repo)
 
 

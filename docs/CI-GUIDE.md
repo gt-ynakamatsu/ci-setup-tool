@@ -304,7 +304,7 @@ GUI の「詳細設定 → ビルド種別」で選択します。
 | **.NET**（既定） | .NET ソリューション | `dotnet restore/build/format/publish` を自動実行。Roslyn 静的解析つき |
 | **カスタムコマンド** | FPGA（Vivado 等）・組み込み C/C++・Python など | 各ステップで入力した任意コマンドを PowerShell として実行 |
 
-> **.NET の Release 成果物について**: publish は **framework-dependent 単一ファイル**（`*-win-x64.exe`、`.NET` ランタイム非同梱・アプリ依存は exe に取り込み）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（self-contained にするとランタイム込みで肥大化するため採用していません）。後方互換で同内容の `*-win-x64.zip` も出力します。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。
+> **.NET の Release 成果物について**: publish は **framework-dependent 単一ファイル**（`*-win-x64.exe`、`.NET` ランタイム非同梱・アプリ依存は exe に取り込み）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（self-contained にするとランタイム込みで肥大化するため採用していません）。後方互換で同内容の `*-win-x64.zip` も出力します。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。ライブラリ（`IpuTestAppCore` 等）が指定されている場合、CI は実行アプリ csproj を探して差し替えます。見つからなければ NETSDK1099 の前に失敗します。
 
 カスタムコマンドで設定する項目（`cisetup.config.json` の `build` セクション）:
 
