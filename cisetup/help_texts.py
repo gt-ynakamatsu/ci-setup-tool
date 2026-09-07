@@ -435,13 +435,16 @@ BUILD_PROFILE = (
     "【何を】CI のビルド方式（.NET 自動 / カスタムコマンド）\n"
     "【なぜ】.NET 以外（FPGA・C/C++・Python 等）でも同じ CI 基盤を使えるようにするため\n"
     "【.NET】dotnet build / test / publish を自動実行\n"
+    "【FPGA】上のプリセットを適用（カスタム扱い）。エージェントに Vivado/Quartus が必要\n"
     "【カスタム】各ステージのコマンドを自分で指定"
 )
 
 BUILD_COMMAND = (
-    "【何を】CI のビルドステージで実行するコマンド（カスタム時・必須）\n"
-    "【なぜ】プロジェクト固有のビルド手順（vivado、make 等）を CI に組み込むため\n"
-    "【例】vivado -mode batch -source build.tcl"
+    "【何を】CI のビルドステージで実行するコマンド\n"
+    "【FPGA プリセット】空で OK。ci-fpga.ps1 が Vivado / Quartus を探して実行します。"
+    "複数プロジェクトがあるときだけ「-Project 名前」や「-Tcl build.tcl」を書きます\n"
+    "【その他カスタム】必須。例: cmake --build build\n"
+    "【なぜ】プロジェクト固有のビルド手順を CI に組み込むため"
 )
 
 LINT_COMMAND = (

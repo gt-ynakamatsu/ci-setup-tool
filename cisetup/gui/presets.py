@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from tkinter import messagebox
 
-from ..ci_preset_catalog import PRESETS
+from ..ci_preset_catalog import PRESETS, is_fpga_preset
+from .util import safe_int
+
+# FPGA 合成は既定の 30 分では足りないため、プリセット適用時に引き上げる。
+_FPGA_BUILD_TIMEOUT_MINUTES = 180
 
 
 class PresetMixin:
@@ -44,4 +48,11 @@ class PresetMixin:
         self._fields["build.publish_command"].set(preset.publish_command)
         self._fields["build.test_command"].set(preset.test_command)
         self._fields["build.artifact_glob"].set(preset.artifact_glob)
-        self._set_status(f"プリセット「{preset.name}」を適用しました。")
+        extra = ""
+        if is_fpga_preset(preset.id):
+            timeout_field = self._fields.get("jenkins.build_timeout_minutes")
+            # 利用者が広げている場合は尊重し、既定のままのときだけ引き上げる。
+            if timeout_field is not None and safe_int(timeout_field.get(), 30) <= 30:
+                timeout_field.set(str(_FPGA_BUILD_TIMEOUT_MINUTES))
+                extra = f" ビルドタイムアウトを {_FPGA_BUILD_TIMEOUT_MINUTES} 分にしました（FPGA 合成向け）。"
+        self._set_status(f"プリセット「{preset.name}」を適用しました。{extra}".strip())

@@ -182,6 +182,8 @@ function Get-CiSettings {
     $build = $config.build
     $buildProfile = if ($build -and $build.profile) { ([string]$build.profile).Trim().ToLower() } else { 'dotnet' }
     if ($buildProfile -ne 'custom') { $buildProfile = 'dotnet' }
+    $presetId = if ($build -and $build.preset) { ([string]$build.preset).Trim().ToLower() } else { '' }
+    $isFpga = $presetId.StartsWith('fpga-')
 
     $buildCommand = if ($build) { [string]$build.buildCommand } else { '' }
     $lintCommand = if ($build) { [string]$build.lintCommand } else { '' }
@@ -205,7 +207,7 @@ function Get-CiSettings {
             }
         }
     }
-    elseif ([string]::IsNullOrWhiteSpace($buildCommand)) {
+    elseif (-not $isFpga -and [string]::IsNullOrWhiteSpace($buildCommand)) {
         throw "cisetup.config.json: build.buildCommand is required for the custom profile."
     }
 
@@ -302,6 +304,7 @@ function Get-CiSettings {
         TestProject = $testProject
         ArtifactPrefix = if ([string]::IsNullOrWhiteSpace($config.project.artifactPrefix)) { $config.project.name } else { $config.project.artifactPrefix }
         Profile = $buildProfile
+        Preset = $presetId
         BuildCommand = $buildCommand
         LintCommand = $lintCommand
         AnalyzeCommand = $analyzeCommand

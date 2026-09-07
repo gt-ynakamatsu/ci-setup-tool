@@ -20,6 +20,7 @@ BUNDLED_FILES: tuple[str, ...] = (
     "scripts/ci-build.ps1",
     "scripts/ci-config.ps1",
     "scripts/ci-deploy-fileserver.ps1",
+    "scripts/ci-fpga.ps1",
     "scripts/ci-lint.ps1",
     "scripts/ci-notify-teams.ps1",
     "scripts/ci-publish.ps1",

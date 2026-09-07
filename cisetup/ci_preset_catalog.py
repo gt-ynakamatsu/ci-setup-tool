@@ -39,18 +39,24 @@ PRESETS: list[CiPreset] = [
     CiPreset(
         id="fpga-vivado",
         name="FPGA — AMD/Xilinx Vivado",
-        description="build.tcl で合成〜ビットストリーム生成。.bit / レポートを成果物として保存します。",
+        description=(
+            "エージェント上の Vivado で合成〜ビットストリームまで実行します。"
+            "リポジトリ直下の build.tcl、または .xpr（標準ラン impl_1）が対象。"
+            "Vivado を PATH か XILINX_VIVADO で見えるようにしてください。"
+        ),
         profile="custom",
-        build_command="vivado -mode batch -source build.tcl",
-        artifact_glob="**/*.bit;**/*.bin;**/*.ltx;**/*timing*.rpt;**/*utilization*.rpt",
+        artifact_glob="**/*.bit;**/*.bin;**/*.ltx;**/*timing*.rpt;**/*utilization*.rpt;**/*.dcp",
     ),
     CiPreset(
         id="fpga-quartus",
         name="FPGA — Intel/Altera Quartus",
-        description="quartus_sh のフローでコンパイル。.sof / .pof / レポートを保存します（PROJECT は実プロジェクト名に変更）。",
+        description=(
+            "エージェント上の Quartus でコンパイルします。"
+            "リポジトリ直下の .qpf を自動検出（複数あるときはビルドコマンドに -Project 名前）。"
+            "quartus_sh を PATH か QUARTUS_ROOTDIR で見えるようにしてください。"
+        ),
         profile="custom",
-        build_command="quartus_sh --flow compile PROJECT",
-        artifact_glob="output_files/*.sof;output_files/*.pof;output_files/*.rpt",
+        artifact_glob="output_files/*.sof;output_files/*.pof;output_files/*.rpt;**/*.sof;**/*.pof",
     ),
     CiPreset(
         id="cmake-cpp",
@@ -77,6 +83,10 @@ PRESETS: list[CiPreset] = [
         profile="custom",
     ),
 ]
+
+
+def is_fpga_preset(preset_id: str | None) -> bool:
+    return (preset_id or "").strip().lower().startswith("fpga-")
 
 
 def find_preset(preset_id: str | None) -> CiPreset | None:

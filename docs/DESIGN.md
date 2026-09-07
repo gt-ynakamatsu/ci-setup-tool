@@ -1080,7 +1080,7 @@ sequenceDiagram
 | Prepare | （Jenkinsfile 内 inline） | `artifacts` 削除→再作成、`Start-Transcript artifacts\logs\build.log` | 同左 | `artifacts\logs\build.log` |
 | Archive Source | `ci-archive-source.ps1` | `archiveSource=true` のときソースツリーを zip 化 | 同左 | `artifacts\source\<prefix>-<番号|日時>-src.zip` |
 | Lint | `ci-lint.ps1` | `dotnet restore` → `dotnet format --verify-no-changes`（差分は警告のみ）→ アナライザ付きビルド | `lintCommand`（空ならスキップ） | コンソール |
-| Build | `ci-build.ps1` | `dotnet restore` → `dotnet build -c <cfg> --no-restore` | `buildCommand`（必須） | ビルド成果 |
+| Build | `ci-build.ps1` | `dotnet restore` → `dotnet build` | FPGA プリセットは `ci-fpga.ps1`。その他は `buildCommand` | ビルド成果 |
 | Test | `ci-test.ps1` | `dotnet test`（TRX 出力）→ TRX 解析 | `testCommand`（空ならスキップ） | `artifacts\test\test-results.trx` / `test-summary.json` / `test-failures.log` |
 | Static Analysis | `ci-analyze.ps1` | Roslyn 全ルール有効でビルド→指摘を High/Medium/Low に分類 | `analyzeCommand`（空ならスキップ） | `artifacts\analysis\analysis-report.html` / `.md` / `.csv` / `analysis-summary.json` / `analysis-build.log` |
 | Publish Artifact | `ci-publish.ps1` | `dotnet publish`（framework-dependent + `PublishSingleFile`）→ **`.exe`**（+ 後方互換 zip） | `publishCommand` 実行 → `artifactGlob` で収集 → zip | `artifacts\release\*.exe` / `*.zip` |

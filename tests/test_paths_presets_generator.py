@@ -243,13 +243,16 @@ def test_preset_count_and_ids():
 
 
 def test_preset_descriptions_match_csharp():
-    # C# CiPresetCatalog の Description と完全一致させる
+    # .NET / CMake / Python は従来どおり。FPGA は実行ヘルパー導入に合わせて更新。
     by_id = {p.id: p.description for p in PRESETS}
     assert by_id["dotnet"] == (
         "dotnet build / format / publish を自動実行。テスト csproj 選択時のみ dotnet test。"
         "Roslyn 静的解析つき（既定）。"
     )
-    assert by_id["fpga-vivado"] == "build.tcl で合成〜ビットストリーム生成。.bit / レポートを成果物として保存します。"
+    assert "Vivado" in by_id["fpga-vivado"]
+    assert "build.tcl" in by_id["fpga-vivado"]
+    assert "Quartus" in by_id["fpga-quartus"]
+    assert ".qpf" in by_id["fpga-quartus"]
     assert by_id["cmake-cpp"] == "CMake で構成・ビルド。バイナリを成果物として保存します。"
     assert by_id["python"] == "依存インストール → Lint(ruff) → ビルド(wheel)。dist の成果物を保存します。"
 

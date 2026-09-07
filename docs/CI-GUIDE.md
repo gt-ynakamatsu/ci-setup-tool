@@ -316,6 +316,22 @@ GUI の「詳細設定 → ビルド種別」で選択します。
 
 > 各コマンドはエージェントの作業ディレクトリ（リポジトリ直下）で実行され、終了コードが 0 以外だとそのステージは失敗（Teams に失敗通知）になります。Vivado / Quartus などの CLI がエージェント PC の PATH に通っている必要があります。
 
+#### FPGA（Vivado / Quartus）を使う
+
+.NET と同様、GUI でプリセットを選んで「適用」→ フォルダ / Git / Jenkins を埋めて「セットアップを実行」です。ビルドコマンドを手で書く必要はありません。
+
+| プリセット | エージェントで必要なもの | リポジトリ直下に置くもの | 成果物 |
+|------------|--------------------------|---------------------------|--------|
+| **FPGA — AMD/Xilinx Vivado** | Vivado（`vivado` が PATH、または `XILINX_VIVADO`） | `build.tcl`、または `.xpr`（標準ラン `impl_1`） | `.bit` / `.bin` / タイミング・使用率レポート |
+| **FPGA — Intel/Altera Quartus** | Quartus（`quartus_sh` が PATH、または `QUARTUS_ROOTDIR`） | `.qpf`（1 つ。複数なら詳細設定のビルドコマンドに `-Project 名前`） | `.sof` / `.pof` / `.rpt` |
+
+- 合成は時間がかかるため、プリセット適用時に **ビルドタイムアウトを 180 分** に上げます（既定 30 分のままなら上書き）。
+- Lint / ユニットテスト / Roslyn 解析は FPGA では空なのでスキップされます（任意コマンドを足せます）。
+- ライセンスサーバーや `settings64.bat` の複雑な読み込みは、ツールの `bin` を PATH に通す運用を前提にしています。エージェントを専用 FPGA 機にする場合は、Jenkins のエージェントラベルで振り分けてください。
+- ローカルの「ビルド＆テスト」も同じ `ci-fpga.ps1` を呼びます（その PC にツールが必要です）。
+
+> Quartus の古いひな型 `quartus_sh --flow compile PROJECT` は使わなくなりました。`.qpf` のファイル名がプロジェクト名になります。
+
 ### システム構成
 
 ```mermaid
@@ -1970,7 +1986,7 @@ python configure.py --open C:\work\MyApp
 
 ```powershell
 .\tools\Package-Distribution.ps1
-# => dist\CISetup-1.4.0.zip  （バージョンは cisetup.version.VERSION）
+# => dist\CISetup-1.5.0.zip  （バージョンは cisetup.version.VERSION）
 ```
 
 受け取り側は Python 3.10+ で zip を展開し `start_configure.bat` を実行します。

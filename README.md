@@ -196,8 +196,8 @@ Linux で `--windows` を付けずに実行すると `dist/CISetup`（Linux 向�
 ## 4. 配布 zip の作成
 
 ```powershell
-.\tools\Package-Distribution.ps1            # 既定は cisetup.version.VERSION（いま 1.4.0）
-.\tools\Package-Distribution.ps1 -Version 1.4.1
+.\tools\Package-Distribution.ps1            # 既定は cisetup.version.VERSION（いま 1.5.0）
+.\tools\Package-Distribution.ps1 -Version 1.5.1
 # => dist\CISetup-<Version>.zip
 ```
 
