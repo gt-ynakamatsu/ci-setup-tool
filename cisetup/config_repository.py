@@ -23,7 +23,6 @@ from .models import (
     secrets_to_dict,
     split_repository_url,
 )
-from .project_setup import _find_publish_project, _is_executable_project
 from .template_store import extract_to_repository, read_template
 
 
@@ -439,13 +438,6 @@ class ConfigRepository:
         pub = repository_root / config.project.publish_project
         if not pub.is_file():
             raise ValueError(f"Publish 対象 csproj が見つかりません: {config.project.publish_project}")
-        if not _is_executable_project(pub):
-            hint = _find_publish_project(repository_root, config.project.name)
-            extra = f" 候補: {hint}" if hint else ""
-            raise ValueError(
-                "Publish 対象は実行アプリ（OutputType が Exe / WinExe）である必要があります。"
-                f" 現在の指定はライブラリです: {config.project.publish_project}.{extra}"
-            )
 
         if config.project.test_project.strip():
             test = repository_root / config.project.test_project
