@@ -145,7 +145,7 @@ class IntroStepsMixin:
         section_title(frame, "まずはプリセットを選ぶ", COLOR_STEP).pack(anchor="w", pady=(0, 6))
         tk.Label(
             frame,
-            text="作りたい CI の種類を選んで「適用」を押すと、ビルド種別やコマンドなどの環境設定が一括で入ります。あとはフォルダや Git などを埋めるだけです。",
+            text="作りたい CI の種類を選んで「適用」を押すと、ビルド種別やコマンドなどの環境設定が一括で入ります。.NET で問題なければそのままで、FPGA は Vivado / Quartus を選んでください。",
             font=font(12),
             fg="#555555",
             bg=COLOR_PRESET_BG,

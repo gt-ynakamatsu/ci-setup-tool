@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import paths
+from .ci_preset_catalog import is_fpga_preset
 from .jenkinsfile_generator import generate_jenkinsfile
 from .models import (
     CISetupConfig,
@@ -385,7 +386,7 @@ class ConfigRepository:
 
         is_custom = config.build.profile.lower() == "custom"
         if is_custom:
-            if not config.build.build_command.strip():
+            if not is_fpga_preset(config.build.preset) and not config.build.build_command.strip():
                 raise ValueError(
                     "カスタムビルドの「ビルド コマンド」を入力してください（詳細設定 → ビルド種別）。"
                 )

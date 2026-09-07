@@ -42,7 +42,8 @@ class DetailsMixin:
         step_title(frame, "ビルド種別（.NET 以外でも使えます）").pack(anchor="w", pady=(0, 4))
         step_desc(
             frame,
-            "ふだんは「.NET」のままで OK。FPGA（Vivado 等）や他言語で使う場合は「カスタムコマンド」を選び、各ステップで実行するコマンドを入力します。",
+            "ふだんは「.NET」のままで OK。FPGA は上のプリセット（Vivado / Quartus）を適用すると、"
+            "エージェント上のツールを探して合成します。それ以外の言語は「カスタムコマンド」で各コマンドを入力します。",
         ).pack(anchor="w", pady=(0, 8))
         self._profile_var = tk.StringVar(value="dotnet")
         profile_row = tk.Frame(frame, bg=COLOR_CARD_BG)
@@ -64,10 +65,12 @@ class DetailsMixin:
         self._custom_build_panel = tk.Frame(frame, bg=COLOR_CARD_BG)
         hint_label(
             self._custom_build_panel,
-            "各コマンドはエージェントの作業ディレクトリ（リポジトリ直下）で PowerShell として実行されます。空欄のステップはスキップされます（ビルドは必須）。",
+            "各コマンドはエージェントの作業ディレクトリ（リポジトリ直下）で PowerShell として実行されます。"
+            "空欄のステップはスキップされます（.NET 以外の手動カスタムではビルドコマンドが必須）。"
+            "FPGA プリセット適用時はビルドコマンド空で構いません（ci-fpga.ps1 が実行されます）。",
         ).pack(anchor="w", pady=(12, 0))
         for key, title, tip, field_help in (
-            ("build.build_command", "ビルド コマンド（必須）", "例: vivado -mode batch -source build.tcl", help_texts.BUILD_COMMAND),
+            ("build.build_command", "ビルド コマンド（必須・FPGA プリセット時は空で可）", "FPGA: 空、または -Project 名前 / -Tcl ファイル。その他: make など", help_texts.BUILD_COMMAND),
             ("build.lint_command", "Lint / チェック コマンド（任意）", "例: verilator --lint-only -Wall src/top.v", help_texts.LINT_COMMAND),
             ("build.test_command", "テスト コマンド（任意）", "例: pytest -q または dotnet test tests/MyApp.Tests", help_texts.TEST_COMMAND),
             ("build.analyze_command", "解析 コマンド（任意）", "例: タイミング/使用率レポートの生成・集計スクリプト", help_texts.ANALYZE_COMMAND),

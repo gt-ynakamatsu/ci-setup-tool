@@ -6,11 +6,19 @@ import subprocess
 from pathlib import Path
 
 # これまでの main 履歴から逆算したセマンティックバージョン。
-# 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI
-VERSION = "1.4.1"
+# 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI → 1.5 FPGA
+VERSION = "1.5.0"
 
 # (version, date, notes) 新しい順。VERSION は先頭と一致させる。
 RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "1.5.0",
+        "2026-09-07",
+        (
+            "FPGA（Vivado / Quartus）CI をエージェント上のツール検出つきで実行可能に",
+            ".qpf / build.tcl / .xpr の自動検出と合成タイムアウト既定 180 分",
+        ),
+    ),
     (
         "1.4.1",
         "2026-09-07",
