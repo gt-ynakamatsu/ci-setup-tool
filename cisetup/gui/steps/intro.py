@@ -17,7 +17,7 @@ from ..layout import (
     button,
     card,
     font,
-    mono_font,
+    log_text,
     section_title,
 )
 
@@ -66,17 +66,7 @@ class IntroStepsMixin:
             padx=20,
             pady=7,
         ).pack(anchor="w", pady=(0, 10))
-        self._env_text = tk.Text(
-            frame,
-            height=8,
-            wrap=tk.WORD,
-            font=mono_font(12),
-            relief=tk.SOLID,
-            borderwidth=1,
-            highlightthickness=0,
-            background="#FFFFFF",
-        )
-        self._env_text.pack(fill=tk.X, pady=(0, 10))
+        self._env_text = log_text(frame, height=8, pady=(0, 10))
         self._env_text.insert("1.0", "「環境をスキャン」を押すと結果がここに表示されます。")
         tk.Label(
             frame,

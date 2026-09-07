@@ -15,6 +15,7 @@ from ..layout import (
     card,
     font,
     hint_label,
+    log_text,
     mono_font,
     primary_button,
     section_title,
@@ -443,8 +444,4 @@ class WorkflowStepsMixin:
             bg=COLOR_RUN_BG,
             anchor="w",
         ).pack(anchor="w", pady=(12, 2))
-        self._run_log_text = tk.Text(
-            frame, height=8, wrap=tk.WORD, font=mono_font(12), relief=tk.SOLID, borderwidth=1,
-            highlightthickness=0, background="#FFFFFF",
-        )
-        self._run_log_text.pack(fill=tk.X)
+        self._run_log_text = log_text(frame, height=14)

@@ -290,7 +290,7 @@ cisetup/gui/
 | `dialogs.py` | 非同期ダイアログ・確認・ステータスバー | `DialogMixin` |
 | `deps.py` | Jenkins / Teams / 環境スキャン等の外部呼び出し集約 | モジュール属性（`JenkinsClient`、`apply_settings` 等） |
 | `multi_value_field.py` | 書き込み先ベースパス・Teams URL 等の複数行入力 | `MultiValueField` |
-| `layout.py` | 配色定数・カード/ボタン/スクロール/Expander・フォント | `card`、`button`、`ScrollableFrame`、`Expander`、`font` |
+| `layout.py` | 配色定数・カード/ボタン/スクロール/Expander・フォント・ログ欄 | `card`、`button`、`ScrollableFrame`、`Expander`、`font`、`log_text` |
 | `tooltip.py` | ツールチップ | `attach_tooltip`、`ToolTip` |
 | `__init__.py` | `run_app` / `ConfigureApp` の再公開 | — |
 
