@@ -133,19 +133,55 @@ if ($categoryEnabled.ContainsKey($Type) -and (-not $categoryEnabled[$Type])) {
 }
 
 if ($Type -eq 'Logs') {
-    $logFile = Join-PathMulti $ci.Root @('artifacts', 'logs', 'build.log')
-    if (-not (Test-Path $logFile)) {
-        Write-Warning "Log file not found: $logFile"
+    # artifacts/logs に集めたログを全部まとめて 1 ビルド 1 フォルダで配置する。
+    #   build.log              … 各ステージのコンソール出力（Transcript）
+    #   *-output.log           … dotnet / vivado / quartus_sh などの生出力（全文）
+    #   jenkins-console.log    … Jenkins Console Output の本文
+    #   jenkins-build-info.log … Jenkins 側の結果とビルド情報
+    # テスト・解析の生ログも同じフォルダへ入れ、「まず logs を見れば原因が分かる」状態にする。
+    $logsLocal = Join-PathMulti $ci.Root @('artifacts', 'logs')
+    $logFiles = New-Object System.Collections.Generic.List[object]
+    if (Test-Path $logsLocal) {
+        foreach ($f in @(Get-ChildItem -Path $logsLocal -File -Recurse | Sort-Object FullName)) {
+            $logFiles.Add($f) | Out-Null
+        }
+    }
+    foreach ($extra in @(
+            (Join-PathMulti $ci.Root @('artifacts', 'test', 'test-output.log')),
+            (Join-PathMulti $ci.Root @('artifacts', 'test', 'test-failures.log')),
+            (Join-PathMulti $ci.Root @('artifacts', 'analysis', 'analysis-build.log'))
+        )) {
+        if (Test-Path $extra) { $logFiles.Add((Get-Item -LiteralPath $extra)) | Out-Null }
+    }
+
+    if ($logFiles.Count -eq 0) {
+        Write-Warning "No log file found under $logsLocal"
         exit 0
     }
 
+    $firstDest = $null
     foreach ($t in $targets) {
         if (Test-TargetUrl $t) { continue }
-        $destDir = Get-CategoryDest -Target $t -CategoryDir $ci.LogsDir
-        $destFile = Join-Path $destDir "$displayName-$BuildNumber-$timeStamp.log"
+        $destDir = Join-Path (Get-CategoryDest -Target $t -CategoryDir $ci.LogsDir) "$displayName-$BuildNumber-$timeStamp"
         New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-        Copy-Item -Path $logFile -Destination $destFile -Force
-        Write-Host "Log saved to $destFile"
+        foreach ($file in $logFiles) {
+            $destFile = Join-Path $destDir $file.Name
+            if ($file.FullName.StartsWith($logsLocal, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $rel = $file.FullName.Substring($logsLocal.Length).TrimStart('\', '/')
+                if (-not [string]::IsNullOrWhiteSpace($rel)) {
+                    $destFile = Join-Path $destDir $rel
+                }
+            }
+            $destParent = Split-Path -Parent $destFile
+            if ($destParent) { New-Item -ItemType Directory -Force -Path $destParent | Out-Null }
+            Copy-Item -LiteralPath $file.FullName -Destination $destFile -Force
+        }
+        Write-Host "Logs saved to $destDir ($($logFiles.Count) file(s))"
+        if (-not $firstDest) { $firstDest = $destDir }
+    }
+
+    if ($firstDest) {
+        Update-DeployManifest -Entries @{ logDir = $firstDest }
     }
     return
 }

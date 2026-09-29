@@ -6,10 +6,22 @@ from pathlib import Path
 
 import pytest
 
-from cisetup.ci_preset_catalog import PRESETS, find_preset, is_fpga_preset
+from cisetup import environment_scan
+from cisetup.ci_preset_catalog import (
+    PRESETS,
+    find_preset,
+    fpga_tool,
+    is_fpga_preset,
+    preset_mode,
+)
 from cisetup.config_repository import ConfigRepository
+from cisetup.fpga_build import compose_fpga_build_command, parse_fpga_build_command
 from cisetup.models import default_config
-from cisetup.project_setup import deploy_ci_files
+from cisetup.project_setup import (
+    apply_fpga_auto_detection,
+    deploy_ci_files,
+    find_fpga_projects,
+)
 from cisetup.template_store import BUNDLED_FILES, bundled_template_dir
 
 
@@ -221,6 +233,79 @@ def test_ci_fpga_dryrun_multiple_qpf_requires_project(tmp_path: Path):
 
 def test_preset_count_still_six():
     assert len(PRESETS) == 6
+
+
+def test_preset_mode_and_tool():
+    assert preset_mode("dotnet") == "dotnet"
+    assert preset_mode("fpga-vivado") == "fpga"
+    assert preset_mode("python") == "custom"
+    assert preset_mode("") == "dotnet"
+    assert fpga_tool("fpga-vivado") == "Vivado"
+    assert fpga_tool("fpga-quartus") == "Quartus"
+    assert fpga_tool("python") == ""
+
+
+def test_parse_and_compose_fpga_build_command():
+    parsed = parse_fpga_build_command("-Project hw/quartus/blink.qpf")
+    assert (parsed.project, parsed.tcl, parsed.raw) == ("hw/quartus/blink.qpf", "", "")
+    parsed = parse_fpga_build_command('-Tcl "fpga/my build.tcl" -Project top.xpr')
+    assert parsed.tcl == "fpga/my build.tcl"
+    assert parsed.project == "top.xpr"
+    # '-' で始まらないものはヘルパーを使わない独自コマンドとして丸ごと保持する
+    assert parse_fpga_build_command("make bitstream").raw == "make bitstream"
+    assert parse_fpga_build_command("") == parse_fpga_build_command(None)
+
+    assert compose_fpga_build_command() == ""
+    assert compose_fpga_build_command("hw\\blink.qpf") == "-Project hw/blink.qpf"
+    assert compose_fpga_build_command("a b.qpf") == '-Project "a b.qpf"'
+    assert compose_fpga_build_command("top.xpr", "build.tcl") == "-Project top.xpr -Tcl build.tcl"
+    assert compose_fpga_build_command("top.xpr", raw="make all") == "make all"
+
+
+def test_find_fpga_projects_skips_build_output(tmp_path: Path):
+    (tmp_path / "hw").mkdir()
+    (tmp_path / "hw" / "blink.qpf").write_text("x", encoding="utf-8")
+    (tmp_path / "fpga").mkdir()
+    (tmp_path / "fpga" / "build.tcl").write_text("x", encoding="utf-8")
+    (tmp_path / "fpga" / "top.xpr").write_text("x", encoding="utf-8")
+    junk = tmp_path / "artifacts" / "old"
+    junk.mkdir(parents=True)
+    (junk / "stale.qpf").write_text("x", encoding="utf-8")
+
+    assert find_fpga_projects(tmp_path, "Quartus") == ["hw/blink.qpf"]
+    assert find_fpga_projects(tmp_path, "Vivado") == ["fpga/build.tcl", "fpga/top.xpr"]
+    assert find_fpga_projects(tmp_path) == ["fpga/build.tcl", "fpga/top.xpr", "hw/blink.qpf"]
+
+
+def test_apply_fpga_auto_detection_names_from_project(tmp_path: Path):
+    (tmp_path / "hw").mkdir()
+    (tmp_path / "hw" / "blink.qpf").write_text("x", encoding="utf-8")
+    cfg = default_config()  # .NET のプレースホルダ入り
+    apply_fpga_auto_detection(tmp_path, cfg, "Quartus")
+    assert cfg.project.name == "blink"
+    assert cfg.project.artifact_prefix == "blink"
+    assert cfg.jenkins.job_name == "blink-CI"
+    # 実在しない .NET のパスは残さない（FPGA では使わない）
+    assert cfg.project.solution_file == ""
+    assert cfg.project.publish_project == ""
+
+
+def test_apply_fpga_auto_detection_falls_back_to_folder_name(tmp_path: Path):
+    repo = tmp_path / "MyFpgaRepo"
+    repo.mkdir()
+    cfg = default_config()
+    apply_fpga_auto_detection(repo, cfg, "Vivado")
+    assert cfg.project.name == "MyFpgaRepo"
+
+
+def test_scan_swaps_dotnet_for_fpga_tool():
+    names = {r.name for r in environment_scan.scan("fpga-vivado")}
+    assert "AMD/Xilinx Vivado" in names
+    assert ".NET SDK 8" not in names
+    names = {r.name for r in environment_scan.scan("fpga-quartus")}
+    assert "Intel/Altera Quartus" in names
+    assert ".NET SDK 8" not in names
+    assert ".NET SDK 8" in {r.name for r in environment_scan.scan("dotnet")}
 
 
 def test_ci_build_treats_dash_prefix_as_helper_options():

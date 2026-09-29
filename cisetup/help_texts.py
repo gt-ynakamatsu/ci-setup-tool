@@ -90,8 +90,11 @@ CI_FILE_SERVERS = (
 )
 
 LOGS_DIR = (
-    "【③ 保存フォルダ】失敗時ログ（logs）\n"
-    "【何を】ビルド失敗時のログを置くフォルダ名\n"
+    "【③ 保存フォルダ】実行ログ（logs）\n"
+    "【何を】CI のコンソール出力（Jenkins の Console Output 相当）を置くフォルダ名\n"
+    "【何が入る】<ジョブ>-<ビルド番号>-<時刻> フォルダに build.log（各ステージ）と"
+    " build-output.log / fpga-output.log など（dotnet・合成ツールの全出力）。FPGA では fpga-reports に"
+    " vivado.log や *.rpt も入ります。成功・失敗どちらでも保存\n"
     "【なぜ】失敗時にどこを見ればよいか Teams 通知と保存先を一致させるため\n"
     "【④ 対応】同じカテゴリの Teams ボタン URL 欄（logs）\n"
     "【デフォルト】logs\n"
@@ -145,7 +148,7 @@ ANALYSIS_URL = (
 )
 
 LOGS_URL = (
-    "【④ Teams ボタン】失敗時ログ（logs）\n"
+    "【④ Teams ボタン】実行ログ（logs）\n"
     "【何を】ログフォルダを開くための共有 URL（SharePoint / Web 等）\n"
     "【③ 対応】同じカテゴリの保存フォルダ名（logs）\n"
     "【どこで使う】Teams 通知（失敗時）の「ログフォルダを開く」ボタン\n"
@@ -475,6 +478,29 @@ ARTIFACT_GLOB = (
     "【例】**/*.bit;**/*.bin;reports/*.rpt"
 )
 
+FPGA_TOOL = (
+    "【何を】合成に使う FPGA ツール（Vivado / Quartus）\n"
+    "【なぜ】ci-fpga.ps1 がエージェント上のどちらのツールを探すか決めるため\n"
+    "【変え方】画面上部のプリセット（FPGA — Vivado / Quartus）で切り替わります\n"
+    "【保存先】cisetup.config.json → build.preset"
+)
+
+FPGA_PROJECT = (
+    "【何を】合成するプロジェクトファイル（Vivado: .xpr / Quartus: .qpf）\n"
+    "【なぜ】リポジトリに複数ある場合、どれを CI で合成するか決めるため\n"
+    "【空欄】リポジトリ内（サブフォルダ可）を自動検出。1 つだけならそれを使います\n"
+    "【例】hw/quartus/blink.qpf、fpga/top.xpr\n"
+    "【保存先】cisetup.config.json → build.buildCommand（-Project として書き出し）"
+)
+
+FPGA_TCL = (
+    "【何を】Vivado の合成スクリプト（build.tcl）\n"
+    "【なぜ】プロジェクト（.xpr）ではなく Tcl で合成手順を管理している場合に指定するため\n"
+    "【空欄】リポジトリ内の build.tcl を自動検出。無ければ .xpr の impl_1 を実行します\n"
+    "【例】fpga/build.tcl\n"
+    "【保存先】cisetup.config.json → build.buildCommand（-Tcl として書き出し）"
+)
+
 BUILD_TIMEOUT = (
     "【何を】1 回の Jenkins ビルドがタイムアウトするまでの時間（分）\n"
     "【なぜ】ハングしたビルドがエージェントを占有し続けるのを防ぐため"
@@ -482,7 +508,8 @@ BUILD_TIMEOUT = (
 
 LOG_RETENTION = (
     "【何を】Jenkins が保持するビルドログの件数\n"
-    "【なぜ】ディスクを圧迫しないよう、古いビルド履歴を自動削除するため"
+    "【既定】10000 件（長期運用の履歴を残すため）\n"
+    "【注意】件数を増やすほど Jenkins サーバーのディスクを使用します"
 )
 
 DEPLOY_LOCAL_TO_AGENT = (

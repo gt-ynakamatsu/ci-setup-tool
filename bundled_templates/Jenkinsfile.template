@@ -7,12 +7,50 @@
 //   Windows : powershell ステップ（Windows PowerShell 5.1）… 既存環境そのまま
 //   Linux   : pwsh ステップ（PowerShell 7 / pwsh。エージェントに要インストール）
 // スクリプト本体（CISetup/scripts/ci-*.ps1）はどちらのエディションでも動くように書かれている。
-def runPs(String script) {
+def runPsRaw(String script) {
     if (isUnix()) {
         pwsh script
     } else {
         powershell script
     }
+}
+
+// ステージのスクリプトは必ずこれ経由で呼ぶ。Console Output に出る内容を
+// artifacts/logs/build.log へ 1 本にまとめて残すため、ステップごとに Transcript を開き直す。
+// （Jenkins は powershell / pwsh ステップごとに別プロセスを起こすので、1 回 Start-Transcript
+//   しても次のステージには引き継がれない。以前はここで取りこぼしていた。）
+// native コマンド（dotnet / vivado / quartus_sh）の出力は Transcript では欠けることがあるため、
+// ci-*.ps1 側で artifacts/logs/*-output.log にも 1 行ずつ書き出している。
+def runPs(String label, String script) {
+    runPsRaw("""\$ErrorActionPreference = 'Stop'
+New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
+try { Start-Transcript -Path artifacts/logs/build.log -Append | Out-Null }
+catch { Write-Host "Transcript を開始できませんでした: \$_" }
+Write-Host ''
+Write-Host "===== ${label} : start \$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) ====="
+try {
+${script}
+}
+catch {
+    # 失敗の本文はここで書き出す。Transcript を閉じた後に PowerShell が表示する
+    # エラーは build.log へ入らないため、以前は「ログを見ても原因が分からない」状態だった。
+    Write-Host "!!!!! ${label} : FAILED !!!!!"
+    Write-Host "理由     : \$(\$_.Exception.Message)"
+    Write-Host "種類     : \$(\$_.Exception.GetType().FullName)"
+    Write-Host "発生位置 : \$(\$_.InvocationInfo.PositionMessage)"
+    Write-Host "呼び出し : \$(\$_.ScriptStackTrace)"
+    \$inner = \$_.Exception.InnerException
+    while (\$inner) {
+        Write-Host "内部例外 : \$(\$inner.Message)"
+        \$inner = \$inner.InnerException
+    }
+    throw
+}
+finally {
+    Write-Host "===== ${label} : end \$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) ====="
+    try { Stop-Transcript | Out-Null } catch { }
+}
+""")
 }
 
 pipeline {
@@ -78,12 +116,28 @@ pipeline {
             }
         }
 
+        stage('Prepare') {
+            steps {
+                script {
+                    // artifacts を作り直す（= build.log も消える）ステージなので、
+                    // ここだけは Transcript を張らない runPsRaw で実行する。
+                    // 以降のステージの出力は runPs 経由で artifacts/logs/build.log に溜まっていく。
+                    runPsRaw '''
+                        # 再利用ワークスペースで前回ビルドの成果物（test/source/release/analysis）が
+                        # 残ったまま再配置されるのを防ぐため、毎ビルド開始時に artifacts を作り直す。
+                        if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force }
+                        New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
+                    '''
+                }
+            }
+        }
+
         stage('Materialize CISetup') {
             steps {
                 script {
                     // Jenkins ジョブに内蔵した CI 定義をワークスペースへ展開する。
                     writeFile file: 'cisetup-pack.zip', encoding: 'Base64', text: '''{{CISETUP_PACK_B64}}'''
-                    runPs '''
+                    runPs 'Materialize CISetup', '''
                         $dest = Join-Path (Get-Location) 'CISetup'
                         New-Item -ItemType Directory -Force -Path $dest | Out-Null
                         Expand-Archive -Path 'cisetup-pack.zip' -DestinationPath $dest -Force
@@ -93,24 +147,10 @@ pipeline {
             }
         }
 
-        stage('Prepare') {
-            steps {
-                script {
-                    runPs '''
-                        # 再利用ワークスペースで前回ビルドの成果物（test/source/release/analysis）が
-                        # 残ったまま再配置されるのを防ぐため、毎ビルド開始時に artifacts を作り直す。
-                        if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force }
-                        New-Item -ItemType Directory -Force -Path artifacts/logs | Out-Null
-                        Start-Transcript -Path artifacts/logs/build.log -Force
-                    '''
-                }
-            }
-        }
-
         stage('Archive Source') {
             steps {
                 script {
-                    runPs '''
+                    runPs 'Archive Source', '''
                         ./CISetup/scripts/ci-archive-source.ps1
                     '''
                 }
@@ -123,7 +163,7 @@ pipeline {
             }
             steps {
                 script {
-                    runPs '''
+                    runPs 'Lint', '''
                         ./CISetup/scripts/ci-lint.ps1 -Configuration $env:CONFIGURATION
                     '''
                 }
@@ -133,7 +173,7 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    runPs '''
+                    runPs 'Build', '''
                         ./CISetup/scripts/ci-build.ps1 -Configuration $env:CONFIGURATION
                     '''
                 }
@@ -146,7 +186,7 @@ pipeline {
             }
             steps {
                 script {
-                    runPs '''
+                    runPs 'Test', '''
                         ./CISetup/scripts/ci-test.ps1 -Configuration $env:CONFIGURATION
                     '''
                 }
@@ -164,7 +204,7 @@ pipeline {
             }
             steps {
                 script {
-                    runPs '''
+                    runPs 'Static Analysis', '''
                         ./CISetup/scripts/ci-analyze.ps1 -Configuration $env:CONFIGURATION -FailOn $env:ANALYSIS_FAIL_ON
                     '''
                 }
@@ -191,7 +231,7 @@ pipeline {
                 script {
                     def version = env.TAG_NAME ?: env.BUILD_NUMBER
                     withEnv(["PUBLISH_VERSION=${version}"]) {
-                        runPs '''
+                        runPs 'Publish Artifact', '''
                             ./CISetup/scripts/ci-publish.ps1 -Configuration $env:CONFIGURATION -Version $env:PUBLISH_VERSION
                         '''
                     }
@@ -205,39 +245,60 @@ pipeline {
             script {
                 catchError(buildResult: null, stageResult: null) {
                     withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        runPs './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Analysis'
+                        runPs 'Deploy Analysis', './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Analysis'
                     }
                 }
                 catchError(buildResult: null, stageResult: null) {
                     withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        runPs './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Test'
+                        runPs 'Deploy Test', './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Test'
                     }
                 }
                 catchError(buildResult: null, stageResult: null) {
                     withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        runPs './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Source'
+                        runPs 'Deploy Source', './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Source'
+                    }
+                }
+                // Jenkins 本体が保持している Console Output を本文ごと回収する。
+                // 同一ビルドの post 内で取得するため、この回収処理より後のログだけは含まれない。
+                catchError(buildResult: null, stageResult: null) {
+                    def consoleLines = currentBuild.rawBuild.getLog(Integer.MAX_VALUE)
+                    writeFile file: 'artifacts/logs/jenkins-console.log',
+                              text: consoleLines.join('\n') + '\n',
+                              encoding: 'UTF-8'
+                }
+                // Jenkins 側の情報もログと一緒に格納する。
+                catchError(buildResult: null, stageResult: null) {
+                    writeFile file: 'artifacts/logs/jenkins-build-info.log', text: """ジョブ        : ${env.JOB_NAME}
+ビルド番号    : ${env.BUILD_NUMBER}
+結果          : ${currentBuild.currentResult}
+所要時間      : ${currentBuild.durationString}
+ブランチ      : ${env.BRANCH_NAME ?: env.GIT_BRANCH ?: ''}
+コミット      : ${env.GIT_COMMIT ?: ''}
+エージェント  : ${env.NODE_NAME ?: ''}
+設定          : ${params.CONFIGURATION}
+ビルド URL    : ${env.BUILD_URL ?: ''}
+Console ログ  : jenkins-console.log
+"""
+                }
+                // ログの配置は成功・失敗どちらでも行う（原因調査は失敗ビルドだけでは足りないため）。
+                // build.log を開いたまま自分自身をコピーしないよう、ここは Transcript なしで実行する。
+                catchError(buildResult: null, stageResult: null) {
+                    withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
+                        runPsRaw './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Logs'
                     }
                 }
             }
         }
         success {
             script {
-                runPs '''
-                    try {
-                        Stop-Transcript -ErrorAction Stop
-                    } catch {
-                        Write-Host "Transcript was not active."
-                    }
-                    exit 0
-                '''
                 catchError(buildResult: null, stageResult: null) {
                     withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        runPs './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Artifact'
+                        runPs 'Deploy Artifact', './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Artifact'
                     }
                 }
                 catchError(buildResult: null, stageResult: null) {
                     withCredentials([string(credentialsId: '{{TEAMS_CREDENTIAL_ID}}', variable: 'TEAMS_WEBHOOK_URL')]) {
-                        runPs '''
+                        runPs 'Notify Teams', '''
                             ./CISetup/scripts/ci-notify-teams.ps1 `
                                 -Status complete `
                                 -BuildNumber $env:BUILD_NUMBER `
@@ -253,22 +314,9 @@ pipeline {
         }
         failure {
             script {
-                runPs '''
-                    try {
-                        Stop-Transcript -ErrorAction Stop
-                    } catch {
-                        Write-Host "Transcript was not active."
-                    }
-                    exit 0
-                '''
-                catchError(buildResult: null, stageResult: null) {
-                    withEnv(["CI_FILE_SERVER=${params.CI_FILE_SERVER ?: env.CI_FILE_SERVER ?: ''}"]) {
-                        runPs './CISetup/scripts/ci-deploy-fileserver.ps1 -Type Logs'
-                    }
-                }
                 catchError(buildResult: null, stageResult: null) {
                     withCredentials([string(credentialsId: '{{TEAMS_CREDENTIAL_ID}}', variable: 'TEAMS_WEBHOOK_URL')]) {
-                        runPs '''
+                        runPs 'Notify Teams', '''
                             ./CISetup/scripts/ci-notify-teams.ps1 `
                                 -Status error `
                                 -BuildNumber $env:BUILD_NUMBER `

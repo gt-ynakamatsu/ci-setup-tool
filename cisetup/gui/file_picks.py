@@ -6,9 +6,24 @@ from tkinter import filedialog, messagebox
 from .. import paths
 
 
+# 「参照...」ボタンのファイル種別。_add_field の browse に渡す値がキー。
+FILE_BROWSE_KINDS: dict[str, list[tuple[str, str]]] = {
+    "file": [("Project", "*.sln *.csproj"), ("All", "*.*")],
+    "fpga-project": [("FPGA プロジェクト", "*.xpr *.qpf"), ("All", "*.*")],
+    "fpga-tcl": [("Tcl スクリプト", "*.tcl"), ("All", "*.*")],
+}
+
+
 class FilePickMixin:
     def _pick_folder(self) -> None:
-        path = filedialog.askdirectory(title="プロジェクトフォルダを選択（.sln があるリポジトリルート）")
+        hints = {
+            "dotnet": ".sln があるリポジトリルート",
+            "fpga": "FPGA プロジェクトのリポジトリルート",
+            "custom": "リポジトリルート",
+        }
+        path = filedialog.askdirectory(
+            title=f"プロジェクトフォルダを選択（{hints[self._current_mode()]}）"
+        )
         if path:
             self._open_project(Path(path))
 
@@ -41,13 +56,13 @@ class FilePickMixin:
         else:
             self._initial_load(None)
 
-    def _browse_file(self, key: str) -> None:
+    def _browse_file(self, key: str, kind: str = "file") -> None:
         if not self._ensure_repo_silent():
             return
         path = filedialog.askopenfilename(
             title="ファイルを選択",
             initialdir=str(self._repository_root),
-            filetypes=[("Project", "*.sln *.csproj"), ("All", "*.*")],
+            filetypes=FILE_BROWSE_KINDS.get(kind, FILE_BROWSE_KINDS["file"]),
         )
         if path and self._repository_root:
             try:

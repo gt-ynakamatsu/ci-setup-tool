@@ -4,6 +4,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import ttk
 
+from .file_picks import FILE_BROWSE_KINDS
 from .layout import COLOR_CARD_BG, COLOR_DESC, button, font
 from .multi_value_field import MultiValueField
 from .tooltip import help_icon
@@ -96,10 +97,14 @@ class FieldMixin:
         )
         entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=2)
         self._field_widgets[key] = entry
-        if browse == "file":
-            button(row, "参照...", lambda k=key: self._browse_file(k), padx=10).pack(
-                side=tk.LEFT, padx=(8, 0)
-            )
+        self._field_rows[key] = row
+        if browse in FILE_BROWSE_KINDS:
+            button(
+                row,
+                "参照...",
+                lambda k=key, b=browse: self._browse_file(k, b),
+                padx=10,
+            ).pack(side=tk.LEFT, padx=(8, 0))
         elif browse == "folder":
             button(row, "参照...", lambda k=key: self._browse_folder(k), padx=10).pack(
                 side=tk.LEFT, padx=(8, 0)

@@ -13,7 +13,11 @@ Set-Location $ci.Root
 
 $env:CI = "true"
 
+# コンソールに出る内容（dotnet / 独自コマンドの出力）はここに全文残す。失敗時の原因はほぼこの中にある。
+$buildLog = Get-CiLogPath -Root $ci.Root -Name 'build-output.log'
+
 Write-Host "==> Project: $($ci.ProjectName)"
+Write-Host "==> ビルドログ: $buildLog"
 
 if ($ci.Preset -like 'fpga-*') {
     $fpga = Join-Path $PSScriptRoot 'ci-fpga.ps1'
@@ -29,15 +33,22 @@ if ($ci.Preset -like 'fpga-*') {
     $extra = "$($ci.BuildCommand)".Trim()
     if ($extra -and -not $extra.StartsWith('-')) {
         Write-Host "==> FPGA プリセットですがビルドコマンドを優先: $extra"
-        Invoke-Expression $extra
-        if ($LASTEXITCODE -ne 0) { throw "Build command failed (exit code $LASTEXITCODE)." }
-        Write-Host "Build succeeded."
+        try {
+            $code = Invoke-CiLoggedCommandLine -LogPath $buildLog -CommandLine $extra -Label "FPGA build command: $extra"
+            if ($code -ne 0) { throw "Build command failed (exit code $code). 詳細ログ: $buildLog" }
+            Write-Host "Build succeeded."
+        }
+        finally {
+            # 独自コマンドでも Vivado / Quartus の .rpt 等は作業フォルダに残るので、失敗時も含めて回収する。
+            Copy-CiFpgaReports -Root $ci.Root -SearchRoot $ci.Root
+        }
         return
     }
-    if ($extra -match '(?i)-Project(?:\s+|=)(\S+)') {
+    # 空白を含むパスは GUI が引用符付きで書き出すため、"..." も 1 つの値として受ける。
+    if ($extra -match '(?i)-Project(?:\s+|=)("[^"]+"|\S+)') {
         $fpgaArgs += @('-Project', $Matches[1].Trim('"'))
     }
-    if ($extra -match '(?i)-Tcl(?:\s+|=)(\S+)') {
+    if ($extra -match '(?i)-Tcl(?:\s+|=)("[^"]+"|\S+)') {
         $fpgaArgs += @('-Tcl', $Matches[1].Trim('"'))
     }
     Write-Host "==> FPGA helper: $fpga $($fpgaArgs -join ' ')"
@@ -52,8 +63,8 @@ if ($ci.Profile -eq 'custom') {
         throw "build.buildCommand is empty. Set a build command in the GUI (custom profile)."
     }
     Write-Host "==> Custom build: $($ci.BuildCommand)"
-    Invoke-Expression $ci.BuildCommand
-    if ($LASTEXITCODE -ne 0) { throw "Build command failed (exit code $LASTEXITCODE)." }
+    $code = Invoke-CiLoggedCommandLine -LogPath $buildLog -CommandLine $ci.BuildCommand -Label "Custom build: $($ci.BuildCommand)"
+    if ($code -ne 0) { throw "Build command failed (exit code $code). 詳細ログ: $buildLog" }
     Write-Host "Build succeeded."
     return
 }
@@ -62,15 +73,15 @@ $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"
 
 Write-Host "==> Restore"
-dotnet restore $ci.SolutionFile
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet restore failed (exit code $LASTEXITCODE)."
+$code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('restore', $ci.SolutionFile) -Label 'dotnet restore'
+if ($code -ne 0) {
+    throw "dotnet restore failed (exit code $code). 詳細ログ: $buildLog"
 }
 
 Write-Host "==> Build"
-dotnet build $ci.SolutionFile -c $Configuration --no-restore
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet build failed (exit code $LASTEXITCODE)."
+$code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('build', $ci.SolutionFile, '-c', $Configuration, '--no-restore') -Label 'dotnet build'
+if ($code -ne 0) {
+    throw "dotnet build failed (exit code $code). 詳細ログ: $buildLog"
 }
 
 Write-Host "Build succeeded."

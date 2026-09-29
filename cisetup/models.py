@@ -116,7 +116,7 @@ class JenkinsConfig:
     teams_credential_id: str = "teams-webhook-url"
     default_configuration: str = "Release"
     build_timeout_minutes: int = 30
-    log_retention_count: int = 30
+    log_retention_count: int = 10000
     timezone: str = "Asia/Tokyo"
     # Jenkinsfile 取得前の "Checkout" ステージで一時的な Git エラー（ネットワーク/サーバー瞬断）
     # が起きた際に何回まで自動リトライするか。

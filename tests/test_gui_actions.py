@@ -347,7 +347,7 @@ def test_open_legacy_layout_keeps_saved_values(app, tmp_path_factory):
 def test_scan_env_populates_text(app, monkeypatch):
     from cisetup.environment_scan import EnvironmentCheckResult
 
-    fake_scan = lambda: [
+    fake_scan = lambda *_args: [
         EnvironmentCheckResult(name="Git", guidance="", found=True, detail="git 2.4"),
         EnvironmentCheckResult(
             name="Java", found=False, detail="未検出", guidance="入れてね", download_url="http://j"

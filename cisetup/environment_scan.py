@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
+from .ci_preset_catalog import fpga_tool, is_fpga_preset, preset_mode
 from .process_util import no_window_kwargs
 
 
@@ -79,6 +83,105 @@ def _check_dotnet() -> EnvironmentCheckResult:
     return result
 
 
+def _first_existing_file(candidates: list[Path]) -> Path | None:
+    for candidate in candidates:
+        try:
+            if candidate.is_file():
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def _versioned_tool_paths(roots: list[str], relative: tuple[tuple[str, ...], ...]) -> list[Path]:
+    """`C:\\Xilinx\\Vivado\\2023.2\\bin\\vivado.bat` のようなバージョン階層を新しい順に並べる。"""
+    found: list[Path] = []
+    for root in roots:
+        if not root:
+            continue
+        base = Path(root)
+        try:
+            versions = sorted(
+                (d for d in base.iterdir() if d.is_dir()),
+                key=lambda d: d.name,
+                reverse=True,
+            )
+        except OSError:
+            continue
+        for version in versions:
+            found.extend(version.joinpath(*parts) for parts in relative)
+    return found
+
+
+def _check_vivado() -> EnvironmentCheckResult:
+    """Vivado の実行ファイルを探す（起動は遅いため実行はしない）。"""
+    result = EnvironmentCheckResult(
+        name="AMD/Xilinx Vivado",
+        guidance="FPGA 合成に必要です（エージェント PC に必須。設定 PC では未検出でも構いません）。"
+        "PATH か XILINX_VIVADO から見えるようにしてください。",
+        download_url="https://www.xilinx.com/support/download.html",
+    )
+    which = shutil.which("vivado")
+    if which:
+        result.found = True
+        result.detail = f"検出: {which}"
+        return result
+
+    candidates: list[Path] = []
+    for env_name in ("XILINX_VIVADO", "VIVADO_PATH"):
+        base = os.environ.get(env_name, "").strip()
+        if base:
+            candidates += [Path(base) / "bin" / "vivado.bat", Path(base) / "bin" / "vivado"]
+    candidates += _versioned_tool_paths(
+        [r"C:\Xilinx\Vivado", r"D:\Xilinx\Vivado", os.path.join(os.environ.get("ProgramFiles", ""), "Xilinx", "Vivado")],
+        (("bin", "vivado.bat"), ("bin", "vivado")),
+    )
+    hit = _first_existing_file(candidates)
+    if hit:
+        result.found = True
+        result.detail = f"検出: {hit}"
+    else:
+        result.detail = "見つかりません（vivado コマンド・XILINX_VIVADO ともに未検出）。"
+    return result
+
+
+def _check_quartus() -> EnvironmentCheckResult:
+    """Quartus の quartus_sh を探す（起動は遅いため実行はしない）。"""
+    result = EnvironmentCheckResult(
+        name="Intel/Altera Quartus",
+        guidance="FPGA コンパイルに必要です（エージェント PC に必須。設定 PC では未検出でも構いません）。"
+        "PATH か QUARTUS_ROOTDIR から見えるようにしてください。",
+        download_url="https://www.intel.com/content/www/us/en/software-kit/",
+    )
+    which = shutil.which("quartus_sh")
+    if which:
+        result.found = True
+        result.detail = f"検出: {which}"
+        return result
+
+    candidates: list[Path] = []
+    for env_name in ("QUARTUS_ROOTDIR", "QSYS_ROOTDIR"):
+        base = os.environ.get(env_name, "").strip()
+        if base:
+            candidates += [
+                Path(base) / "quartus_sh.exe",
+                Path(base) / "bin64" / "quartus_sh.exe",
+                Path(base) / "bin" / "quartus_sh.exe",
+                Path(base) / "quartus" / "bin64" / "quartus_sh.exe",
+            ]
+    candidates += _versioned_tool_paths(
+        [r"C:\intelFPGA_lite", r"C:\intelFPGA", r"C:\altera", r"D:\intelFPGA_lite", r"D:\intelFPGA"],
+        (("quartus", "bin64", "quartus_sh.exe"), ("quartus", "bin", "quartus_sh.exe")),
+    )
+    hit = _first_existing_file(candidates)
+    if hit:
+        result.found = True
+        result.detail = f"検出: {hit}"
+    else:
+        result.detail = "見つかりません（quartus_sh コマンド・QUARTUS_ROOTDIR ともに未検出）。"
+    return result
+
+
 def _check_java() -> EnvironmentCheckResult:
     result = EnvironmentCheckResult(
         name="Java (JRE/JDK)",
@@ -128,10 +231,16 @@ def _check_jenkins_service() -> EnvironmentCheckResult:
     return result
 
 
-def scan() -> list[EnvironmentCheckResult]:
-    return [
-        _check_git(),
-        _check_dotnet(),
-        _check_java(),
-        _check_jenkins_service(),
-    ]
+def scan(preset_id: str = "dotnet") -> list[EnvironmentCheckResult]:
+    """選んでいるプリセットに合わせてチェック項目を組み替える。
+
+    FPGA プリセットなら .NET SDK の代わりに Vivado / Quartus を確認する
+    （FPGA の CI に .NET SDK は不要で、未検出と出ると混乱するため）。
+    """
+    checks = [_check_git()]
+    if is_fpga_preset(preset_id):
+        checks.append(_check_vivado() if fpga_tool(preset_id) == "Vivado" else _check_quartus())
+    elif preset_mode(preset_id) == "dotnet":
+        checks.append(_check_dotnet())
+    checks += [_check_java(), _check_jenkins_service()]
+    return checks

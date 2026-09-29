@@ -16,6 +16,7 @@ from ..layout import (
     Expander,
     button,
     card,
+    card_frame,
     font,
     hint_label,
     log_text,
@@ -38,39 +39,24 @@ class DetailsMixin:
         self._build_details_server(details)
         self._build_details_manual(details)
     def _build_details_build(self, parent: tk.Frame) -> None:
-        frame = card(parent)
-        step_title(frame, "ビルド種別（.NET 以外でも使えます）").pack(anchor="w", pady=(0, 4))
-        step_desc(
-            frame,
-            "ふだんは「.NET」のままで OK。FPGA は上のプリセット（Vivado / Quartus）を適用すると、"
-            "エージェント上のツールを探して合成します。それ以外の言語は「カスタムコマンド」で各コマンドを入力します。",
-        ).pack(anchor="w", pady=(0, 8))
+        # ビルド種別そのものは画面上部の「CI の種類」で選ぶ。ここは種類が決めないコマンドだけ。
         self._profile_var = tk.StringVar(value="dotnet")
-        profile_row = tk.Frame(frame, bg=COLOR_CARD_BG)
-        profile_row.pack(anchor="w")
-        help_icon(profile_row, help_texts.BUILD_PROFILE, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(0, 4))
-        profile_combo = ttk.Combobox(
-            profile_row,
-            textvariable=self._profile_var,
-            values=[
-                ".NET（dotnet build / format / publish を自動実行）",
-                "カスタムコマンド（FPGA・C/C++・Python など任意）",
-            ],
-            state="readonly",
-            width=58,
-            font=font(12),
+        frame = card(parent)
+        step_title(frame, "追加コマンド").pack(anchor="w", pady=(0, 4))
+        desc = step_desc(frame, "")
+        desc.pack(anchor="w", pady=(0, 8))
+        self._mode_text(
+            desc,
+            dotnet="",
+            fpga="合成対象とタイムアウトは上の「FPGA ビルドの設定」です。"
+            "ここでは Lint / テスト / 解析など、合成の前後に足すコマンドだけ入力します。",
+            custom="各コマンドはリポジトリ直下で PowerShell として実行されます。"
+            "空欄のステップはスキップされます。ビルドコマンドは必須です。",
         )
-        profile_combo.pack(anchor="w", side=tk.LEFT)
-        profile_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_profile_changed())
         self._custom_build_panel = tk.Frame(frame, bg=COLOR_CARD_BG)
-        hint_label(
-            self._custom_build_panel,
-            "各コマンドはエージェントの作業ディレクトリ（リポジトリ直下）で PowerShell として実行されます。"
-            "空欄のステップはスキップされます（.NET 以外の手動カスタムではビルドコマンドが必須）。"
-            "FPGA プリセット適用時はビルドコマンド空で構いません（ci-fpga.ps1 が実行されます）。",
-        ).pack(anchor="w", pady=(12, 0))
+        self._custom_build_panel.pack(fill=tk.X, pady=(4, 0))
         for key, title, tip, field_help in (
-            ("build.build_command", "ビルド コマンド（必須・FPGA プリセット時は空で可）", "FPGA: 空、または -Project 名前 / -Tcl ファイル。その他: make など", help_texts.BUILD_COMMAND),
+            ("build.build_command", "ビルド コマンド（必須）", "例: make、cmake --build build", help_texts.BUILD_COMMAND),
             ("build.lint_command", "Lint / チェック コマンド（任意）", "例: verilator --lint-only -Wall src/top.v", help_texts.LINT_COMMAND),
             ("build.test_command", "テスト コマンド（任意）", "例: pytest -q または dotnet test tests/MyApp.Tests", help_texts.TEST_COMMAND),
             ("build.analyze_command", "解析 コマンド（任意）", "例: タイミング/使用率レポートの生成・集計スクリプト", help_texts.ANALYZE_COMMAND),
@@ -87,8 +73,15 @@ class DetailsMixin:
             ).pack(side=tk.LEFT)
             help_icon(title_row, field_help, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(4, 0))
             self._add_field(self._custom_build_panel, key, "", show_label=False)
-            if tip:
-                hint_label(self._custom_build_panel, tip).pack(anchor="w")
+            tip_label = hint_label(self._custom_build_panel, tip) if tip else None
+            if tip_label is not None:
+                tip_label.pack(anchor="w")
+            if key == "build.build_command":
+                # 合成コマンドは FPGA カードが組み立てるため、二重に編集させない。
+                self._mode_only(title_row, "dotnet", "custom")
+                self._mode_only(self._field_rows[key], "dotnet", "custom")
+                if tip_label is not None:
+                    self._mode_only(tip_label, "dotnet", "custom")
         glob_row = tk.Frame(self._custom_build_panel, bg=COLOR_CARD_BG)
         glob_row.pack(anchor="w", fill=tk.X, pady=(8, 2))
         tk.Label(
@@ -104,15 +97,28 @@ class DetailsMixin:
             self._custom_build_panel,
             "例: **/*.bit;**/*.bin;reports/*.rpt — マッチしたファイルを zip にして成果物として保存します。",
         ).pack(anchor="w")
+        # .NET はコマンドを自動実行するため、このカード自体を出さない。
+        self._details_commands_card = card_frame(frame)
+        self._mode_only(self._details_commands_card, "fpga", "custom")
     def _build_details_project(self, parent: tk.Frame) -> None:
         frame = card(parent)
         step_title(frame, "自動入力された項目（必要なら変更）").pack(anchor="w", pady=(0, 8))
+        # .sln / csproj / RID は .NET でしか使わないため、他のモードでは隠す。
+        dotnet_only = {
+            "project.solution_file",
+            "project.publish_project",
+            "project.test_project",
+            "build.runtime_identifier",
+            "build.analysis_exclude_paths",
+        }
         for key, label, help_text, browse in (
             ("project.name", "プロジェクト名", help_texts.PROJECT_NAME, None),
             ("project.solution_file", "ソリューション (.sln)", help_texts.SOLUTION_FILE, "file"),
             ("project.publish_project", "Publish 対象 (.csproj)", help_texts.PUBLISH_PROJECT, "file"),
             ("project.test_project", "テスト対象 (.csproj)", help_texts.TEST_PROJECT, "file"),
             ("project.artifact_prefix", "成果物 zip プレフィックス", help_texts.ARTIFACT_PREFIX, None),
+            ("build.runtime_identifier", "実行環境 (RID)", help_texts.RUNTIME_IDENTIFIER, None),
+            ("build.analysis_exclude_paths", "静的解析の除外パス", help_texts.ANALYSIS_EXCLUDE_PATHS, None),
         ):
             self._add_field(
                 frame,
@@ -123,23 +129,23 @@ class DetailsMixin:
                 browse=browse,
                 path_check=(browse == "file"),
             )
-        hint_label(
-            frame,
-            "テスト対象を空にすると CI の Test ステージはスキップされます。"
-            "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます。"
-            "（①でフォルダを開いたあと、見つからないパスだけ右側に表示します）",
-        ).pack(anchor="w")
-        for key, label, help_text in (
-            ("build.runtime_identifier", "実行環境 (RID)", help_texts.RUNTIME_IDENTIFIER),
-            ("build.analysis_exclude_paths", "静的解析の除外パス", help_texts.ANALYSIS_EXCLUDE_PATHS),
-        ):
-            self._add_field(frame, key, label, help_text, label_width=22)
-        hint_label(
-            frame,
+            if key in dotnet_only:
+                self._mode_only(self._field_rows[key], "dotnet")
+        project_hint = hint_label(frame, "")
+        project_hint.pack(anchor="w")
+        self._mode_text(
+            project_hint,
+            dotnet="テスト対象を空にすると CI の Test ステージはスキップされます。"
+            "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます"
+            "（①でフォルダを開いたあと、見つからないパスだけ右側に表示します）。"
             "RID は空欄ならエージェントの OS から自動（Windows: win-x64 / Linux: linux-x64）。"
-            "arm64 などは win-arm64 のように指定します。"
             "除外パスは「;」区切りで、gui_design_sample や vendor/** のように書きます。",
-        ).pack(anchor="w")
+            fpga="プロジェクト名は Teams 通知の表示名と保存先のフォルダ名に使います。"
+            "成果物 zip プレフィックスはビットストリーム等をまとめた zip のファイル名になります。"
+            "合成対象の指定は上の「FPGA ビルドの設定」です。",
+            custom="プロジェクト名は Teams 通知の表示名と保存先のフォルダ名に使います。"
+            "成果物 zip プレフィックスは成果物 zip のファイル名になります。",
+        )
         btn_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         btn_row.pack(anchor="w", pady=(12, 8))
         self._redetect_btn = button(
@@ -170,19 +176,45 @@ class DetailsMixin:
             ("jenkins.timezone", "タイムゾーン", help_texts.TIMEZONE),
         ):
             self._add_field(frame, key, label, help_text, label_width=22)
-        row = tk.Frame(frame, bg=COLOR_CARD_BG)
-        row.pack(fill=tk.X, pady=4)
+        # FPGA のタイムアウトは「FPGA ビルドの設定」だけに出す。ここは .NET / カスタム用。
+        self._details_timeout_row = tk.Frame(frame, bg=COLOR_CARD_BG)
+        self._details_timeout_row.pack(fill=tk.X, pady=4)
         tk.Label(
-            row, text="ビルドタイムアウト (分) / ログ保持数", width=22, anchor="w", bg=COLOR_CARD_BG, font=font(12)
+            self._details_timeout_row,
+            text="ビルドタイムアウト",
+            width=22,
+            anchor="w",
+            bg=COLOR_CARD_BG,
+            font=font(12),
         ).pack(side=tk.LEFT)
         self._register_field("jenkins.build_timeout_minutes")
+        ttk.Entry(
+            self._details_timeout_row,
+            textvariable=self._fields["jenkins.build_timeout_minutes"],
+            width=8,
+            font=font(12),
+        ).pack(side=tk.LEFT)
+        tk.Label(self._details_timeout_row, text="分", bg=COLOR_CARD_BG, font=font(12)).pack(
+            side=tk.LEFT, padx=(6, 0)
+        )
+        help_icon(self._details_timeout_row, help_texts.BUILD_TIMEOUT, bg=COLOR_CARD_BG).pack(
+            side=tk.LEFT, padx=(8, 0)
+        )
+        self._mode_only(self._details_timeout_row, "dotnet", "custom")
+
+        retention_row = tk.Frame(frame, bg=COLOR_CARD_BG)
+        retention_row.pack(fill=tk.X, pady=4)
+        tk.Label(
+            retention_row, text="ログ保持数", width=22, anchor="w", bg=COLOR_CARD_BG, font=font(12)
+        ).pack(side=tk.LEFT)
         self._register_field("jenkins.log_retention_count")
-        ttk.Entry(row, textvariable=self._fields["jenkins.build_timeout_minutes"], width=8, font=font(12)).pack(side=tk.LEFT)
-        tk.Label(row, text="分", bg=COLOR_CARD_BG, font=font(12)).pack(side=tk.LEFT, padx=(6, 16))
-        ttk.Entry(row, textvariable=self._fields["jenkins.log_retention_count"], width=8, font=font(12)).pack(side=tk.LEFT)
-        tk.Label(row, text="件保持", bg=COLOR_CARD_BG, font=font(12)).pack(side=tk.LEFT, padx=(6, 0))
-        help_icon(row, help_texts.BUILD_TIMEOUT, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(12, 0))
-        help_icon(row, help_texts.LOG_RETENTION, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Entry(
+            retention_row, textvariable=self._fields["jenkins.log_retention_count"], width=8, font=font(12)
+        ).pack(side=tk.LEFT)
+        tk.Label(retention_row, text="件保持", bg=COLOR_CARD_BG, font=font(12)).pack(
+            side=tk.LEFT, padx=(6, 0)
+        )
+        help_icon(retention_row, help_texts.LOG_RETENTION, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(8, 0))
 
         retry_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         retry_row.pack(fill=tk.X, pady=4)
@@ -296,16 +328,19 @@ class DetailsMixin:
         button(frame, "起動コマンドをコピー", self._copy_agent_command).pack(anchor="w")
     def _build_details_manual(self, parent: tk.Frame) -> None:
         frame = card(parent)
-        step_title(frame, "手動操作（個別に実行したいとき）").pack(anchor="w", pady=(0, 8))
+        step_title(frame, "手動操作（個別に実行したいとき）").pack(anchor="w", pady=(0, 4))
+        hint_label(
+            frame,
+            "設定の保存と、この PC でのビルド確認は ⑥ にあります。ここは Jenkins への反映と単発ビルドだけです。",
+        ).pack(anchor="w", pady=(0, 8))
         wrap = tk.Frame(frame, bg=COLOR_CARD_BG)
         wrap.pack(anchor="w")
         specs = [
-            ("保存のみ", self._save_only),
-            ("ローカルでビルド＆テスト", self._local_build_test_only),
             ("Jenkins に反映のみ", self._apply_jenkins),
             ("今すぐビルド", self._build_now),
             ("再読み込み", self._reload),
         ]
+        self._details_manual_labels = tuple(text for text, _func in specs)
         for text, func in specs:
             btn = button(wrap, text, lambda f=func: self._run_async(f), padx=16)
             btn.pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))

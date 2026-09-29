@@ -21,10 +21,13 @@ from .layout import (
     font,
     set_scale,
 )
+from .mode import ModeMixin
 from .multi_value_field import MultiValueField
 from .presets import PresetMixin
 from .repository import RepositoryMixin
+from .steps.fpga import FpgaStepMixin
 from .steps.intro import IntroStepsMixin
+from .steps.start import StartStepMixin
 from .steps.workflow import WorkflowStepsMixin
 from .util import enable_dpi_awareness
 
@@ -32,8 +35,11 @@ from .util import enable_dpi_awareness
 class ConfigureApp(
     tk.Tk,
     FieldMixin,
+    ModeMixin,
+    StartStepMixin,
     IntroStepsMixin,
     WorkflowStepsMixin,
+    FpgaStepMixin,
     DetailsMixin,
     FormSyncMixin,
     RepositoryMixin,
@@ -66,12 +72,19 @@ class ConfigureApp(
         self._loaded_default_configuration = "Release"
         self._fields: dict[str, tk.Variable] = {}
         self._field_widgets: dict[str, tk.Widget] = {}
+        self._field_rows: dict[str, tk.Widget] = {}
         self._multi_fields: dict[str, MultiValueField] = {}
         self._path_status: dict[str, tk.Label] = {}
         self._agent_command = tk.StringVar()
         self._server_log = tk.StringVar()
         self._env_result = tk.StringVar()
         self._loading = False
+        # プリセット（モード）関連の状態。
+        self._applied_preset_name = ""
+        # ビルドコマンド欄に手書きされた FPGA 以外のコマンド（あれば ci-fpga.ps1 より優先）。
+        self._fpga_raw_command = ""
+        self._fpga_scan_cache: dict[tuple[str, str], list[str]] = {}
+        self._init_mode_registry()
 
         self._build_ui()
         self._initial_load(initial_repository_root)
@@ -123,22 +136,28 @@ class ConfigureApp(
             bg=COLOR_WINDOW_BG,
             anchor="w",
         ).pack(side=tk.LEFT, padx=(12, 0), pady=(10, 0))
-        tk.Label(
+        self._header_hint = tk.Label(
             header,
             text="上から順に入力して、最後の「セットアップを実行」を押すだけです。",
             font=font(12),
             fg=COLOR_DESC,
             bg=COLOR_WINDOW_BG,
             anchor="w",
-        ).pack(anchor="w", pady=(4, 0))
+        )
+        self._header_hint.pack(anchor="w", pady=(4, 0))
 
         scroll_host = ScrollableFrame(outer)
         scroll_host.pack(fill=tk.BOTH, expand=True)
-        content = scroll_host.inner
+        # 起動直後の「CI の種類を選ぶ」画面と、入力フォームを入れ替えて表示する。
+        self._chooser_frame = tk.Frame(scroll_host.inner, bg=COLOR_WINDOW_BG)
+        self._form_frame = tk.Frame(scroll_host.inner, bg=COLOR_WINDOW_BG)
+        self._build_mode_chooser(self._chooser_frame)
 
+        content = self._form_frame
         self._build_beginner_card(content)
         self._build_env_card(content)
         self._build_preset_card(content)
+        self._build_fpga_card(content)
         self._build_step_folder(content)
         self._build_step_git(content)
         self._build_step_storage(content)
@@ -148,6 +167,7 @@ class ConfigureApp(
         self._build_details_expander(content)
 
         self._build_statusbar(outer)
+        self._show_chooser()
 
 
 def run_app(initial_repository_root: str | None = None) -> None:

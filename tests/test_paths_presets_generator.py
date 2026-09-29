@@ -302,7 +302,7 @@ def test_generate_jenkinsfile(tmp_path: Path):
     assert "pollSCM" in text
     assert "H/5 * * * *" in text
     assert r"\\\\server\\ci" in text  # backslash escaped for groovy
-    assert "timeout=30 retention=30" in text
+    assert "timeout=30 retention=10000" in text
 
 
 def test_generate_jenkinsfile_empty_poll(tmp_path: Path):

@@ -7,6 +7,32 @@ from pathlib import Path
 from .models import CISetupConfig
 from .template_store import extract_to_repository
 
+# FPGA プロジェクトの探索で無視するフォルダ（ci-fpga.ps1 の Test-IgnoredSearchPath と同じ）。
+_FPGA_SKIP_DIRS = frozenset(
+    {
+        ".git",
+        ".vs",
+        ".idea",
+        "bin",
+        "obj",
+        "artifacts",
+        "dist",
+        "node_modules",
+        "__pycache__",
+        "testresults",
+        "packages",
+        "db",
+        "incremental_db",
+        "output_files",
+    }
+)
+
+# ツールごとのプロジェクトファイル（ci-fpga.ps1 が探すものと同じ）。
+_FPGA_PATTERNS: dict[str, tuple[str, ...]] = {
+    "vivado": ("build.tcl", "*.xpr"),
+    "quartus": ("*.qpf",),
+}
+
 # .sln の Project(...) 行から csproj パス（sln からの相対）を取り出す。
 # ソリューションフォルダはパスが .csproj でないため自然に除外される。
 _SLN_PROJECT_RE = re.compile(
@@ -91,6 +117,56 @@ def deploy_ci_files(repository_root: Path, overwrite: bool = True) -> list[str]:
 
 def has_solution_file(repository_root: Path) -> bool:
     return any(repository_root.glob("*.sln"))
+
+
+def find_fpga_projects(repository_root: Path, tool: str = "") -> list[str]:
+    """FPGA プロジェクトファイルをリポジトリ内から列挙する（ルート相対 posix パス）。
+
+    エージェント上の `ci-fpga.ps1` と同じ規則（サブフォルダも対象・ビルド生成物の
+    フォルダは除外）で探すため、GUI に出す候補と CI が実際に選ぶものが一致する。
+
+    :param tool: ``Vivado`` / ``Quartus``。空ならどちらのファイルも返す。
+    """
+    patterns = _FPGA_PATTERNS.get(tool.strip().lower())
+    if patterns is None:
+        patterns = tuple(p for group in _FPGA_PATTERNS.values() for p in group)
+
+    found: set[str] = set()
+    for pattern in patterns:
+        for path in repository_root.rglob(pattern):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(repository_root)
+            if any(part.lower() in _FPGA_SKIP_DIRS for part in rel.parts[:-1]):
+                continue
+            found.add(rel.as_posix())
+    return sorted(found)
+
+
+def apply_fpga_auto_detection(
+    repository_root: Path, config: CISetupConfig, tool: str = ""
+) -> CISetupConfig:
+    """FPGA リポジトリ向けの自動入力（.sln が無くても名前を埋める）。
+
+    プロジェクト名は `.xpr` / `.qpf` の名前、無ければフォルダ名から決める。
+    `.NET` 専用のパス（.sln / csproj）はプレースホルダや実在しない値なら空にする
+    （FPGA では使わないうえ、画面から隠れた項目に古い値が残ると分かりにくいため）。
+    """
+    projects = find_fpga_projects(repository_root, tool)
+    named = [p for p in projects if p.lower().endswith((".xpr", ".qpf"))]
+
+    if not config.project.name.strip() or config.project.name.lower() == "yourproject":
+        config.project.name = Path(named[0]).stem if named else repository_root.name
+    if not config.project.artifact_prefix.strip() or config.project.artifact_prefix.lower() == "yourproject":
+        config.project.artifact_prefix = config.project.name
+    if not config.jenkins.job_name.strip() or config.jenkins.job_name.lower() == "cisetup-ci":
+        config.jenkins.job_name = f"{config.project.name}-CI"
+
+    for attr in ("solution_file", "publish_project", "test_project"):
+        value = getattr(config.project, attr)
+        if value.strip() and _needs_redetect(value, repository_root):
+            setattr(config.project, attr, "")
+    return config
 
 
 def _needs_redetect(value: str, repository_root: Path) -> bool:

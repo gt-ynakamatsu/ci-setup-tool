@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..ci_preset_catalog import PRESETS, find_preset
+from ..ci_preset_catalog import find_preset, find_preset_by_name, is_fpga_preset
+from ..fpga_build import compose_fpga_build_command, parse_fpga_build_command
 from .layout import COLOR_DESC, COLOR_TEXT
 from .util import safe_int
 
@@ -10,6 +11,12 @@ from .util import safe_int
 class FormSyncMixin:
     def _config_to_form(self) -> None:
         c = self._config
+        # FPGA プリセットのビルドコマンド欄は ci-fpga.ps1 のオプション。画面では
+        # 「合成するプロジェクト」「ビルド Tcl」に分解して見せる。欄を埋める前に
+        # 読み取っておく（欄の変更で _form_to_config が走り、元の値が消えるため）。
+        fpga = parse_fpga_build_command(c.build.build_command)
+        self._fpga_raw_command = fpga.raw
+
         mapping = {
             "project.name": c.project.name,
             "project.solution_file": c.project.solution_file,
@@ -85,10 +92,15 @@ class FormSyncMixin:
         )
         self._on_profile_changed()
 
+        self._fields["fpga.project"].set(fpga.project)
+        self._fields["fpga.tcl"].set(fpga.tcl)
+
         preset = find_preset(c.build.preset)
         if preset:
             self._preset_var.set(preset.name)
             self._preset_desc.configure(text=preset.description)
+            self._applied_preset_name = preset.name
+        self._refresh_mode_ui()
     def _form_to_config(self) -> None:
         def get(key: str) -> str:
             return self._fields[key].get().strip()
@@ -132,7 +144,7 @@ class FormSyncMixin:
         c.jenkins.teams_credential_id = get("jenkins.teams_credential_id")
         c.jenkins.timezone = get("jenkins.timezone")
         c.jenkins.build_timeout_minutes = safe_int(get("jenkins.build_timeout_minutes"), 30)
-        c.jenkins.log_retention_count = safe_int(get("jenkins.log_retention_count"), 30)
+        c.jenkins.log_retention_count = safe_int(get("jenkins.log_retention_count"), 10000)
         c.jenkins.checkout_retry_count = safe_int(get("jenkins.checkout_retry_count"), 3)
         c.jenkins.retry_wrapper_enabled = bool(self._retry_wrapper_var.get())
         c.jenkins.retry_max_count = safe_int(get("jenkins.retry_max_count"), 3)
@@ -153,8 +165,13 @@ class FormSyncMixin:
         c.build.artifact_glob = get("build.artifact_glob")
         c.build.runtime_identifier = get("build.runtime_identifier")
         c.build.analysis_exclude_paths = get("build.analysis_exclude_paths")
-        preset = next((p for p in PRESETS if p.name == self._preset_var.get()), None)
+        preset = find_preset_by_name(self._preset_var.get())
         c.build.preset = preset.id if preset else ("custom-empty" if is_custom else "dotnet")
+        if is_fpga_preset(c.build.preset):
+            # 合成対象の欄からビルドコマンド欄（ci-fpga.ps1 のオプション）を組み立てる。
+            c.build.build_command = compose_fpga_build_command(
+                get("fpga.project"), get("fpga.tcl"), self._fpga_raw_command
+            )
 
         self._secrets.jenkins_url = get("secrets.jenkins_url")
         self._secrets.jenkins_user = get("secrets.jenkins_user")
@@ -198,6 +215,7 @@ class FormSyncMixin:
             pass
         self._update_teams_url_states()
         self._update_path_statuses()
+        self._refresh_fpga_panel()
     def _update_teams_url_states(self) -> None:
         """Teams 通知 URL 欄を、カテゴリ有効フラグと格納フォルダの有無に連動させる。"""
         categories = getattr(self, "_teams_url_categories", None)

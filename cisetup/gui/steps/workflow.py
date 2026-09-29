@@ -27,7 +27,7 @@ from ..tooltip import help_icon
 
 # ③ 保存フォルダ ↔ ④ Teams URL の対応（表示名を統一）
 _STORAGE_CATEGORY_LABELS: dict[str, str] = {
-    "logs": "失敗時ログ",
+    "logs": "実行ログ",
     "releases": "成果物 zip",
     "analysis": "解析レポート",
     "tests": "テスト成果物",
@@ -43,11 +43,26 @@ def _category_label(category_key: str) -> str:
 class WorkflowStepsMixin:
     def _build_step_folder(self, parent: tk.Misc) -> None:
         frame = card(parent)
-        step_title(frame, "① アプリのフォルダ").pack(anchor="w", pady=(0, 4))
-        step_desc(
-            frame,
-            "ビルドしたいアプリのフォルダ（.sln がある場所）を選びます。選ぶと必要な CI ファイルが自動で置かれ、プロジェクト名なども自動入力されます。",
-        ).pack(anchor="w", pady=(0, 10))
+        title = step_title(frame, "① アプリのフォルダ")
+        title.pack(anchor="w", pady=(0, 4))
+        self._mode_text(
+            title,
+            dotnet="① アプリのフォルダ",
+            fpga="① FPGA プロジェクトのフォルダ",
+            custom="① ビルド対象のフォルダ",
+        )
+        desc = step_desc(frame, "")
+        desc.pack(anchor="w", pady=(0, 10))
+        self._mode_text(
+            desc,
+            dotnet="ビルドしたいアプリのフォルダ（.sln がある場所）を選びます。"
+            "選ぶと必要な CI ファイルが自動で置かれ、プロジェクト名なども自動入力されます。",
+            fpga="合成したい FPGA プロジェクトのリポジトリルートを選びます"
+            "（.xpr / .qpf / build.tcl はサブフォルダにあっても構いません）。"
+            "選ぶと必要な CI ファイルが自動で置かれ、プロジェクト名なども自動入力されます。",
+            custom="ビルドしたいリポジトリのルートを選びます。"
+            "選ぶと必要な CI ファイルが自動で置かれ、プロジェクト名なども自動入力されます。",
+        )
         folder_hdr = tk.Frame(frame, bg=COLOR_CARD_BG)
         folder_hdr.pack(anchor="w", pady=(0, 4))
         tk.Label(folder_hdr, text="対象フォルダ", font=font(12), bg=COLOR_CARD_BG).pack(side=tk.LEFT)
@@ -193,7 +208,7 @@ class WorkflowStepsMixin:
             anchor="w",
         ).pack(anchor="w", pady=(0, 4))
         for title, var in (
-            ("失敗時ログ（logs）", self._preview_logs),
+            ("実行ログ（logs）", self._preview_logs),
             ("成果物 zip（releases）", self._preview_releases),
             ("解析レポート（analysis）", self._preview_analysis),
             ("テスト成果物（tests）", self._preview_tests),
@@ -385,21 +400,33 @@ class WorkflowStepsMixin:
     def _build_step_run(self, parent: tk.Misc) -> None:
         frame = card(parent, bg=COLOR_RUN_BG, border=COLOR_RUN_BORDER, border_width=2)
         section_title(frame, "⑥ セットアップを実行", COLOR_RUN_TITLE).pack(anchor="w", pady=(0, 6))
-        tk.Label(
+        run_desc = tk.Label(
             frame,
-            text="「セットアップを実行」で次を順番に行います: 最新のコードを取り込む（git pull）→ 設定の保存 →\n"
-            "この PC でのビルド＆テスト → Jenkins に反映 → テストビルド。\n"
-            "テストは最新のコードに対して行うため、先に取り込みます（push はしません。"
-            "CI の手順は Jenkins ジョブに内蔵されます）。\n"
-            "個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」、"
-            "または詳細設定の手動操作を使ってください。",
             font=font(12),
             fg="#555555",
             bg=COLOR_RUN_BG,
             anchor="w",
             justify=tk.LEFT,
             wraplength=self._px(860),
-        ).pack(anchor="w", pady=(0, 12))
+        )
+        run_desc.pack(anchor="w", pady=(0, 12))
+        common_tail = (
+            "個別に行いたいときは「設定だけ保存」「ローカルでビルド＆テスト」を使ってください。"
+            "Jenkins への反映だけ、または今すぐビルドは詳細設定にあります。"
+        )
+        self._mode_text(
+            run_desc,
+            dotnet="「セットアップを実行」で次を順番に行います: 最新のコードを取り込む（git pull）→ 設定の保存 →\n"
+            "この PC でのビルド＆テスト → Jenkins に反映 → テストビルド。\n"
+            "テストは最新のコードに対して行うため、先に取り込みます（push はしません。"
+            "CI の手順は Jenkins ジョブに内蔵されます）。\n" + common_tail,
+            fpga="「セットアップを実行」で次を順番に行います: 最新のコードを取り込む（git pull）→ 設定の保存 →\n"
+            "この PC での合成（ci-fpga.ps1）→ Jenkins に反映 → テストビルド。\n"
+            "この PC に Vivado / Quartus が入っていない場合、ローカルの合成は失敗します"
+            "（エージェント PC で動けば CI としては問題ありません）。\n"
+            "合成は数十分〜数時間かかることがあるため、タイムアウト（既定 180 分）に余裕を持たせてください。\n"
+            + common_tail,
+        )
 
         row = tk.Frame(frame, bg=COLOR_RUN_BG)
         row.pack(anchor="w")

@@ -6,7 +6,9 @@
   <properties/>
   <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
     <script>{{PIPELINE_SCRIPT}}</script>
-    <sandbox>true</sandbox>
+    <!-- CISetup が生成・管理する内蔵 Pipeline。Console Output 本文をログへ回収するため
+         currentBuild.rawBuild を使うので、Script Security sandbox の外で実行する。 -->
+    <sandbox>false</sandbox>
   </definition>
   <triggers>
 {{JOB_TRIGGERS}}

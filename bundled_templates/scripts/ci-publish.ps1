@@ -14,7 +14,11 @@ Set-Location $ci.Root
 
 $env:CI = "true"
 
+# コンソールに出る内容を全文残す（publish の失敗理由はここに出る）。
+$publishLog = Get-CiLogPath -Root $ci.Root -Name 'publish-output.log'
+
 Write-Host "==> Project: $($ci.ProjectName)"
+Write-Host "==> Publish ログ: $publishLog"
 
 if ($ci.Profile -eq 'custom') {
     $releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
@@ -23,8 +27,8 @@ if ($ci.Profile -eq 'custom') {
 
     if (-not [string]::IsNullOrWhiteSpace($ci.PublishCommand)) {
         Write-Host "==> Custom publish: $($ci.PublishCommand)"
-        Invoke-Expression $ci.PublishCommand
-        if ($LASTEXITCODE -ne 0) { throw "Publish command failed (exit code $LASTEXITCODE)." }
+        $code = Invoke-CiLoggedCommandLine -LogPath $publishLog -CommandLine $ci.PublishCommand -Label "Custom publish: $($ci.PublishCommand)"
+        if ($code -ne 0) { throw "Publish command failed (exit code $code). 詳細ログ: $publishLog" }
     }
 
     if ([string]::IsNullOrWhiteSpace($ci.ArtifactGlob)) {
@@ -185,9 +189,9 @@ if ($Version) {
 
 $mode = if ($singleFile) { 'framework-dependent single-file' } else { 'framework-dependent (library)' }
 Write-Host "==> Publish ($mode, $platformTag)"
-dotnet @publishArgs
-if ($LASTEXITCODE -ne 0) {
-    throw "dotnet publish failed (exit code $LASTEXITCODE)."
+$code = Invoke-CiLogged -LogPath $publishLog -FilePath 'dotnet' -Arguments $publishArgs -Label 'dotnet publish'
+if ($code -ne 0) {
+    throw "dotnet publish failed (exit code $code). 詳細ログ: $publishLog"
 }
 
 $prefix = $ci.ArtifactPrefix

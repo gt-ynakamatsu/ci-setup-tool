@@ -286,6 +286,14 @@ def card(
     return holder.body
 
 
+def card_frame(body: tk.Misc) -> tk.Misc:
+    """`card()` が返した body から、親に pack されている外枠を得る。
+
+    カードごと表示・非表示を切り替えるときは、body ではなく外枠を pack し直す。
+    """
+    return body.master
+
+
 def step_title(parent: tk.Misc, text: str) -> tk.Label:
     return tk.Label(
         parent,

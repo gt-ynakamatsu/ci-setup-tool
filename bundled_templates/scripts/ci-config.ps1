@@ -85,6 +85,184 @@ function Join-StorageChild {
     return ($Base.TrimEnd('\', '/')) + $sep + ($Child.Trim('\', '/'))
 }
 
+# ---- 実行ログ（コンソールに出た内容をそのままファイルへ残す）----
+# Jenkins の Console Output には出ているのに artifacts/logs に残らない、という取りこぼしを防ぐための仕組み。
+# Start-Transcript は native コマンド（dotnet / vivado / quartus_sh 等）の出力をコンソールバッファ経由で
+# 記録するため、出力が多いと欠落する（PowerShell の既知の制約）。CI 失敗の原因はまさにその出力に
+# 書かれているので、native コマンドは Invoke-CiLogged / Invoke-CiLoggedCommandLine 経由で呼び、
+# 1 行ずつコンソールとログファイルの両方へ書き出す。
+# ログは <Root>/artifacts/logs に集約し、ci-deploy-fileserver.ps1 -Type Logs が格納先の logs へ配置する。
+
+function Get-CiLogDir {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $dir = Join-PathMulti $Root @('artifacts', 'logs')
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    return $dir
+}
+
+function Get-CiLogPath {
+    # $Root は絶対パス（Get-CiSettings の Root）を渡すこと。StreamWriter は PowerShell の
+    # カレント位置ではなくプロセスの作業フォルダを基準にするため、相対パスでは書き先がずれる。
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+    return Join-Path (Get-CiLogDir -Root $Root) $Name
+}
+
+function New-CiLogWriter {
+    param([Parameter(Mandatory = $true)][string]$LogPath)
+    $dir = Split-Path -Parent $LogPath
+    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    # 追記・UTF-8（BOM なし）。同じステージ内の複数コマンドを 1 本のログに積み上げる。
+    return (New-Object System.IO.StreamWriter($LogPath, $true, (New-Object System.Text.UTF8Encoding($false))))
+}
+
+function Write-CiLogLine {
+    param($Value, [System.IO.StreamWriter]$Writer)
+    # native コマンドの stderr は 2>&1 で ErrorRecord になるため文字列化して同じ扱いにする。
+    $line = if ($Value -is [System.Management.Automation.ErrorRecord]) { $Value.ToString() } else { "$Value" }
+    Write-Host $line
+    if ($Writer) { $Writer.WriteLine($line) }
+}
+
+function Write-CiLogHeader {
+    param([string]$Text, [System.IO.StreamWriter]$Writer)
+    Write-CiLogLine -Value ("==> $Text  [" + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + "]") -Writer $Writer
+}
+
+function Invoke-CiLogged {
+    <#
+      native コマンドを実行し、stdout / stderr の全行をコンソールとログへ流して終了コードを返す。
+
+      Windows PowerShell 5.1 は ErrorActionPreference=Stop のまま native の stderr を 2>&1 すると
+      stderr の 1 行目で NativeCommandError を投げ、終了コードを拾えなくなる。この関数の中だけ
+      Continue にすることで回避する（native コマンドの呼び出しがこの関数のスコープで起きるため、
+      呼び出し元スクリプトの Stop 設定は影響しない）。
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @(),
+        [string]$Label = ''
+    )
+    $ErrorActionPreference = 'Continue'
+    if (-not (Get-Command $FilePath -ErrorAction SilentlyContinue)) {
+        # EAP=Continue では CommandNotFound が握りつぶされ、古い $LASTEXITCODE で成功扱いに
+        # なりうるため、ここで明示的に失敗させる。
+        throw "コマンドが見つかりません: $FilePath"
+    }
+    $writer = New-CiLogWriter -LogPath $LogPath
+    try {
+        $header = if ($Label) { $Label } else { (@($FilePath) + $Arguments) -join ' ' }
+        Write-CiLogHeader -Text $header -Writer $writer
+        & $FilePath @Arguments 2>&1 | ForEach-Object { Write-CiLogLine -Value $_ -Writer $writer }
+        $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        Write-CiLogLine -Value "<== exit code $code" -Writer $writer
+        return $code
+    }
+    finally {
+        $writer.Flush()
+        $writer.Dispose()
+    }
+}
+
+function Copy-CiFpgaReports {
+    <#
+      Vivado / Quartus が作業フォルダへ書き出すレポートを artifacts/logs/fpga-reports へ集める。
+      コンソール出力だけではタイミング違反やフィット失敗の本文が足りないことがあるため、
+      ツール自身の .rpt / vivado.log 等をログ配置と同じフォルダへ残す。
+      呼び出しは成功・失敗どちらでも（throw の finally から）行う想定。
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$SearchRoot,
+        [int]$MaxFiles = 80,
+        [long]$MaxBytes = 20971520
+    )
+    if ([string]::IsNullOrWhiteSpace($SearchRoot) -or -not (Test-Path -LiteralPath $SearchRoot)) {
+        return
+    }
+    $destDir = Join-Path (Get-CiLogDir -Root $Root) 'fpga-reports'
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+
+    $skip = @(
+        '.git', '.vs', '.idea', 'bin', 'obj', 'artifacts', 'dist',
+        'node_modules', '__pycache__', 'incremental_db', 'db', '.xil'
+    )
+    $keepNames = @('vivado.log', 'vivado.jou', 'runme.log')
+    $keepExt = @('.rpt', '.summary', '.smsg', '.pin', '.jou')
+
+    $searchFull = (Get-Item -LiteralPath $SearchRoot).FullName
+    $candidates = @(Get-ChildItem -LiteralPath $searchFull -Recurse -File -ErrorAction SilentlyContinue)
+    $picked = New-Object System.Collections.Generic.List[object]
+    foreach ($file in $candidates) {
+        if ($file.Length -gt $MaxBytes) { continue }
+        $rel = $file.FullName.Substring($searchFull.Length).TrimStart('\', '/')
+        $skipHit = $false
+        foreach ($part in ($rel -split '[\\/]')) {
+            if ($skip -contains $part.ToLowerInvariant()) { $skipHit = $true; break }
+        }
+        if ($skipHit) { continue }
+        $nameLower = $file.Name.ToLowerInvariant()
+        $extLower = $file.Extension.ToLowerInvariant()
+        if (($keepNames -contains $nameLower) -or ($keepExt -contains $extLower)) {
+            $picked.Add($file) | Out-Null
+        }
+    }
+
+    $truncated = $false
+    if ($picked.Count -gt $MaxFiles) {
+        $picked = @($picked | Sort-Object FullName | Select-Object -First $MaxFiles)
+        $truncated = $true
+    }
+    else {
+        $picked = @($picked | Sort-Object FullName)
+    }
+
+    $copied = 0
+    foreach ($file in $picked) {
+        $rel = $file.FullName.Substring($searchFull.Length).TrimStart('\', '/')
+        $safe = ($rel -replace '[\\/]', '__')
+        if ([string]::IsNullOrWhiteSpace($safe)) { $safe = $file.Name }
+        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $destDir $safe) -Force
+        $copied++
+    }
+    if ($truncated) {
+        Write-Warning "FPGA レポートが $MaxFiles 件を超えたため先頭 $MaxFiles 件だけ logs へコピーしました。"
+    }
+    Write-Host "==> FPGA レポートを logs/fpga-reports へ $copied 件コピーしました（検索: $searchFull）"
+}
+
+function Invoke-CiLoggedCommandLine {
+    <#
+      GUI で設定した独自コマンド（buildCommand / lintCommand / publishCommand 等）を
+      Invoke-CiLogged と同じようにコンソールとログへ流して実行し、終了コードを返す。
+
+      NOTE: native の stderr で誤って止まらないよう ErrorActionPreference は Continue にする。
+      独自コマンド内の「非終了エラー」はログに残るがビルドは止めない（終了コードと throw で判定する）。
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$LogPath,
+        [Parameter(Mandatory = $true)][string]$CommandLine,
+        [string]$Label = ''
+    )
+    $ErrorActionPreference = 'Continue'
+    $writer = New-CiLogWriter -LogPath $LogPath
+    try {
+        $header = if ($Label) { $Label } else { $CommandLine }
+        Write-CiLogHeader -Text $header -Writer $writer
+        Invoke-Expression $CommandLine 2>&1 | ForEach-Object { Write-CiLogLine -Value $_ -Writer $writer }
+        $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+        Write-CiLogLine -Value "<== exit code $code" -Writer $writer
+        return $code
+    }
+    finally {
+        $writer.Flush()
+        $writer.Dispose()
+    }
+}
+
 function Get-CISetupLayout {
     $scriptsDir = $PSScriptRoot
     $parent = Split-Path -Parent $scriptsDir
@@ -149,7 +327,7 @@ function ConvertFrom-LegacyCiSettings {
             teamsCredentialId = 'teams-webhook-url'
             defaultConfiguration = 'Release'
             buildTimeoutMinutes = 30
-            logRetentionCount = 30
+            logRetentionCount = 10000
             timezone = 'Asia/Tokyo'
         }
         git = [PSCustomObject]@{

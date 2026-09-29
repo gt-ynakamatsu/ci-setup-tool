@@ -34,7 +34,7 @@
     "teamsCredentialId": "teams-webhook-url",
     "defaultConfiguration": "Release",
     "buildTimeoutMinutes": 30,
-    "logRetentionCount": 30,
+    "logRetentionCount": 10000,
     "timezone": "Asia/Tokyo",
     "checkoutRetryCount": 3,
     "retryWrapperEnabled": false,

@@ -33,19 +33,29 @@ class IntroStepsMixin:
             bg=COLOR_BEGINNER_BG,
             anchor="w",
         ).pack(anchor="w", pady=(0, 6))
-        tk.Label(
+        body = tk.Label(
             frame,
-            text=(
-                "① アプリのフォルダ → ② 社内 Git → ③ 保存先 → ④ Teams → ⑤ Jenkins 接続 を入力し、\n"
-                "最後に「セットアップを実行」を押すと、保存・手元のビルド確認・Jenkins 登録・テストビルドまで自動で行います。\n"
-                "むずかしい項目は「詳細設定（ふだんは開かなくて OK）」にまとめてあり、ほとんど自動で入力されます。"
-            ),
             font=font(12),
             fg="#555555",
             bg=COLOR_BEGINNER_BG,
             justify=tk.LEFT,
             anchor="w",
-        ).pack(anchor="w")
+        )
+        body.pack(anchor="w")
+        self._mode_text(
+            body,
+            dotnet=(
+                "① アプリのフォルダ → ② 社内 Git → ③ 保存先 → ④ Teams → ⑤ Jenkins 接続 を入力し、\n"
+                "最後に「セットアップを実行」を押すと、保存・手元のビルド確認・Jenkins 登録・テストビルドまで自動で行います。\n"
+                "むずかしい項目は「詳細設定（ふだんは開かなくて OK）」にまとめてあり、ほとんど自動で入力されます。"
+            ),
+            fpga=(
+                "まず上のプリセットで FPGA（Vivado / Quartus）を選び、\n"
+                "① プロジェクトのフォルダ → ② 社内 Git → ③ 保存先 → ④ Teams → ⑤ Jenkins 接続 を入力し、\n"
+                "最後に「セットアップを実行」を押します。合成コマンドは書かなくても、"
+                "エージェント上のツールと合成対象を自動で探します。"
+            ),
+        )
     def _build_env_card(self, parent: tk.Misc) -> None:
         frame = card(parent, bg=COLOR_ENV_BG)
         section_title(frame, "環境チェック（まず確認）", COLOR_STEP).pack(anchor="w", pady=(0, 6))
@@ -78,12 +88,15 @@ class IntroStepsMixin:
         ).pack(anchor="w", pady=(0, 4))
         links = tk.Frame(frame, bg=COLOR_ENV_BG)
         links.pack(anchor="w")
-        for label, url in ENV_LINKS:
-            button(
+        for label, url, modes in ENV_LINKS:
+            link_button = button(
                 links,
                 label,
                 lambda u=url: self._open_link(u),
-            ).pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))
+            )
+            link_button.pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))
+            if modes:
+                self._mode_only(link_button, *modes)
 
         prep = Expander(frame, "アプリで自動化できない準備（手順とリンク）")
         prep.configure(bg=COLOR_ENV_BG)
@@ -92,6 +105,17 @@ class IntroStepsMixin:
         prep.pack(fill=tk.X, pady=(6, 0))
         self._build_manual_prep(prep.content, COLOR_ENV_BG)
     def _build_manual_prep(self, parent: tk.Frame, bg: str) -> None:
+        agent_prep_dotnet = (
+            "エージェント PC に Java と .NET SDK 8 と Git を入れ、"
+            "「詳細設定 → Jenkins サーバー初回設定」で表示される起動コマンドを実行します。"
+            "Jenkins の Nodes で Online になれば準備完了です。"
+        )
+        agent_prep_fpga = (
+            "エージェント PC に Java と Git、そして Vivado / Quartus を入れ（PATH か "
+            "XILINX_VIVADO / QUARTUS_ROOTDIR から見えるように）、"
+            "「詳細設定 → Jenkins サーバー初回設定」で表示される起動コマンドを実行します。"
+            "合成は時間がかかるため、エージェント PC のディスク空きも確認してください。"
+        )
         blocks = [
             (
                 "① Jenkins 本体のインストール（初回・サーバー機）",
@@ -114,7 +138,7 @@ class IntroStepsMixin:
             ),
             (
                 "④ エージェント PC の起動",
-                "エージェント PC に Java と .NET SDK 8 と Git を入れ、「詳細設定 → Jenkins サーバー初回設定」で表示される起動コマンドを実行します。Jenkins の Nodes で Online になれば準備完了です。",
+                (agent_prep_dotnet, agent_prep_fpga),
                 None,
             ),
         ]
@@ -122,16 +146,19 @@ class IntroStepsMixin:
             tk.Label(parent, text=title, font=font(12, bold=True), fg="#444444", bg=bg, anchor="w").pack(
                 anchor="w", pady=(0, 2)
             )
-            tk.Label(
+            body = tk.Label(
                 parent,
-                text=body_text,
+                text=body_text if isinstance(body_text, str) else "",
                 font=font(12),
                 fg=COLOR_DESC,
                 bg=bg,
                 anchor="w",
                 wraplength=self._px(840),
                 justify=tk.LEFT,
-            ).pack(anchor="w", pady=(0, 4))
+            )
+            body.pack(anchor="w", pady=(0, 4))
+            if not isinstance(body_text, str):
+                self._mode_text(body, dotnet=body_text[0], fpga=body_text[1])
             if link:
                 button(
                     parent,
@@ -142,10 +169,10 @@ class IntroStepsMixin:
                 tk.Frame(parent, height=8, bg=bg).pack()
     def _build_preset_card(self, parent: tk.Misc) -> None:
         frame = card(parent, bg=COLOR_PRESET_BG, border_width=2)
-        section_title(frame, "まずはプリセットを選ぶ", COLOR_STEP).pack(anchor="w", pady=(0, 6))
+        section_title(frame, "CI の種類（プリセット）", COLOR_STEP).pack(anchor="w", pady=(0, 6))
         tk.Label(
             frame,
-            text="作りたい CI の種類を選んで「適用」を押すと、ビルド種別やコマンドなどの環境設定が一括で入ります。.NET で問題なければそのままで、FPGA は Vivado / Quartus を選んでください。",
+            text="選び直すと、その場で画面と設定項目が切り替わります（ビルド種別・コマンド・設定欄）。ビルドコマンドを手入力していた場合は上書き確認が出ます。",
             font=font(12),
             fg="#555555",
             bg=COLOR_PRESET_BG,
@@ -167,12 +194,18 @@ class IntroStepsMixin:
         self._preset_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_preset_selected())
         button(
             row,
-            "このプリセットを適用",
+            "もう一度適用",
             self._apply_preset,
-            kind="accent",
             padx=18,
             pady=7,
         ).pack(side=tk.LEFT, padx=(10, 0))
+        button(
+            row,
+            "種類の選択に戻る",
+            self._show_chooser,
+            padx=18,
+            pady=7,
+        ).pack(side=tk.LEFT, padx=(8, 0))
         self._preset_desc = tk.Label(
             frame,
             text="",
@@ -184,3 +217,22 @@ class IntroStepsMixin:
             justify=tk.LEFT,
         )
         self._preset_desc.pack(fill=tk.X, pady=(8, 0))
+        # いま何モードなのかを一目で分かるようにする（設定欄の出入りと連動）。
+        mode_label = tk.Label(
+            frame,
+            font=font(12, bold=True),
+            fg=COLOR_STEP,
+            bg=COLOR_PRESET_BG,
+            anchor="w",
+            wraplength=self._px(860),
+            justify=tk.LEFT,
+        )
+        mode_label.pack(fill=tk.X, pady=(8, 0))
+        self._mode_text(
+            mode_label,
+            dotnet="現在の画面: .NET — .sln / csproj を指定し、dotnet build / test / publish を実行します。",
+            fpga="現在の画面: FPGA — 合成対象（.xpr / .qpf / build.tcl）を指定し、"
+            "エージェント上の Vivado / Quartus で合成します（.NET 専用の項目は隠しています）。",
+            custom="現在の画面: カスタム — 各ステージのコマンドを詳細設定で指定します"
+            "（.NET 専用の項目は隠しています）。",
+        )

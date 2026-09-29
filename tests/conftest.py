@@ -25,3 +25,12 @@ def sln_repo(tmp_path: Path) -> Path:
     test.mkdir(parents=True)
     (test / "MyApp.Tests.csproj").write_text("<Project/>", encoding="utf-8")
     return tmp_path
+
+
+@pytest.fixture
+def qpf_repo(tmp_path: Path) -> Path:
+    """サブフォルダに Quartus プロジェクトだけを持つ最小リポジトリ（.sln なし）。"""
+    nested = tmp_path / "hw" / "quartus"
+    nested.mkdir(parents=True)
+    (nested / "blink.qpf").write_text("dummy", encoding="utf-8")
+    return tmp_path

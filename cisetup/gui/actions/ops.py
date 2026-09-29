@@ -282,7 +282,8 @@ class ActionsMixin:
         self._set_status("エージェント起動コマンドをコピーしました。")
     def _scan_env(self) -> None:
         self._set_status("環境をスキャンしています...")
-        results = deps.env_scan.scan()
+        # FPGA では .NET SDK ではなく Vivado / Quartus を確認する。
+        results = deps.env_scan.scan(self._current_preset_id())
         lines = []
         for r in results:
             lines.append(("[OK] " if r.found else "[未検出] ") + r.name + " : " + r.detail)

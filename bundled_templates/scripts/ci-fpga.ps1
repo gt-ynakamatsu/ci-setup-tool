@@ -10,13 +10,9 @@
 # FPGA ビルド（Vivado / Quartus）。ci-build.ps1 からプリセット fpga-* のとき呼ばれる。
 # Windows PowerShell 5.1 / pwsh 両対応。ツールが見つからない・プロジェクトが複数ある場合は明示エラー。
 $ErrorActionPreference = "Stop"
-
-function Join-PathMulti {
-    param([string]$Base, [string[]]$ChildPaths)
-    $result = $Base
-    foreach ($child in $ChildPaths) { $result = Join-Path $result $child }
-    return $result
-}
+# Join-PathMulti と実行ログのヘルパー（Invoke-CiLogged 等）を借りる。
+# cisetup.config.json は読まないので、設定が無いリポジトリでも単体で動く。
+. (Join-Path $PSScriptRoot 'ci-config.ps1')
 
 function Get-RepoRoot {
     $scriptsDir = $PSScriptRoot
@@ -265,7 +261,10 @@ if {[string match -nocase "*ERROR*" `$st]} {
 
 $root = Get-RepoRoot
 Set-Location $root
+# 合成ツールがコンソールへ出す内容（エラー・警告・タイミング結果）はここに全文残す。
+$fpgaLog = Get-CiLogPath -Root $root -Name 'fpga-output.log'
 Write-Host "==> FPGA CI  root=$root  tool=$Tool"
+Write-Host "==> FPGA ログ: $fpgaLog"
 
 $resolvedTool = Detect-Tool -Root $root -Requested $Tool
 Write-Host "==> 使用ツール: $resolvedTool"
@@ -286,13 +285,15 @@ if ($resolvedTool -eq 'Quartus') {
     Write-Host "==> $exe --flow compile $projName  (cwd=$($qpf.DirectoryName))"
     Push-Location $qpf.DirectoryName
     try {
-        & $exe --flow compile $projName
-        if ($LASTEXITCODE -ne 0) { throw "Quartus コンパイルが失敗しました (exit code $LASTEXITCODE)." }
+        $code = Invoke-CiLogged -LogPath $fpgaLog -FilePath $exe `
+            -Arguments @('--flow', 'compile', $projName) -Label "quartus_sh --flow compile $projName"
+        if ($code -ne 0) { throw "Quartus コンパイルが失敗しました (exit code $code)。詳細ログ: $fpgaLog" }
+        Write-Host "Quartus ビルド成功。"
     }
     finally {
         Pop-Location
+        Copy-CiFpgaReports -Root $root -SearchRoot $qpf.DirectoryName
     }
-    Write-Host "Quartus ビルド成功。"
     exit 0
 }
 
@@ -322,13 +323,15 @@ try {
     Write-Host "==> $exe -mode batch -notrace -source $tclToRun  (cwd=$workDir)"
     Push-Location $workDir
     try {
-        & $exe -mode batch -notrace -source $tclToRun
-        if ($LASTEXITCODE -ne 0) { throw "Vivado が失敗しました (exit code $LASTEXITCODE)." }
+        $code = Invoke-CiLogged -LogPath $fpgaLog -FilePath $exe `
+            -Arguments @('-mode', 'batch', '-notrace', '-source', $tclToRun) -Label "vivado -mode batch -source $tclToRun"
+        if ($code -ne 0) { throw "Vivado が失敗しました (exit code $code)。詳細ログ: $fpgaLog" }
+        Write-Host "Vivado ビルド成功。"
     }
     finally {
         Pop-Location
+        Copy-CiFpgaReports -Root $root -SearchRoot $workDir
     }
-    Write-Host "Vivado ビルド成功。"
 }
 finally {
     if ($tempTcl -and (Test-Path $tempTcl)) {

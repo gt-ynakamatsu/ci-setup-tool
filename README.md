@@ -71,7 +71,8 @@ cisetup/
 │   │   ├── app.py           … シェル（ConfigureApp 合成・UI 配線）
 │   │   ├── deps.py          … 外部依存集約（Jenkins/Teams 等・テスト patch 用）
 │   │   ├── fields.py / form_sync.py / repository.py / presets.py / file_picks.py / dialogs.py
-│   │   ├── steps/           … intro.py（冒頭）/ workflow.py（①〜⑥）
+│   │   ├── mode.py          … CI の種類（.NET / FPGA / カスタム）で文言・入力欄を切替
+│   │   ├── steps/           … start.py（種類選択）/ intro.py（冒頭）/ fpga.py（FPGA）/ workflow.py（①〜⑥）
 │   │   ├── details/panels.py … 詳細設定 Expander
 │   │   ├── actions/ops.py   … 保存・Jenkins・セットアップ実行
 │   │   ├── layout.py        … 配色・共通ウィジェット
@@ -80,7 +81,8 @@ cisetup/
 │   ├── models.py            … 設定/シークレットのデータモデル + JSON 変換（camelCase）
 │   ├── config_repository.py … 設定の保存・読込（標準/旧レイアウト対応）
 │   ├── paths.py             … リポジトリルート探索・レイアウト判定
-│   ├── project_setup.py     … .sln 自動検出・CI ファイル配置
+│   ├── project_setup.py     … .sln / FPGA プロジェクト自動検出・CI ファイル配置
+│   ├── fpga_build.py        … FPGA の合成対象 ⇔ ビルドコマンド欄（ci-fpga.ps1 オプション）
 │   ├── template_store.py    … bundled_templates の展開（exe では _MEIPASS から）
 │   ├── jenkinsfile_generator.py … Jenkinsfile 生成
 │   ├── ci_preset_catalog.py … ビルドプリセット定義（.NET / Python など）
@@ -88,7 +90,7 @@ cisetup/
 │   ├── teams_service.py     … Teams 通知カードの生成・送信
 │   ├── git_service.py       … リモート最新の取り込み（fetch + ff-only merge。push はしない）
 │   ├── local_ci.py          … ローカルでビルド＆テスト（ci-build/ci-test を実行）
-│   ├── environment_scan.py  … 開発環境スキャン（git/java 等）
+│   ├── environment_scan.py  … 開発環境スキャン（git/java、.NET SDK か Vivado/Quartus）
 │   ├── recent_project.py    … 直近プロジェクトの記憶
 │   ├── help_texts.py        … GUI ヘルプ文言
 │   ├── version.py           … アプリの VERSION / リビジョン（正本）
@@ -257,6 +259,7 @@ configure.py --help
 | API Token の発行方法 | CI-GUIDE.md「6.9」 |
 | ポート番号の変更（8086 など） | CI-GUIDE.md「6.10」 |
 | ビルドエージェントの起動・サービス化 | CI-GUIDE.md「8.」 |
+| **.NET と FPGA でエージェントを分けるか** | CI-GUIDE.md「12. 日常運用」の「エージェントを分けるか」 |
 | 設定 GUI の各項目の意味・保存先 | GUI 内ヘルプ / CI-GUIDE.md「9. 設定値↔JSON 対応」 |
 | 保存先・閲覧 URL を「複数」設定する（＋/− 行追加） | CI-GUIDE.md「③ 保存先」の注記 / GUI の ③・④ の各「＋」ボタン |
 | 個人 ID（OneDrive/Git ユーザー名）を Git に push しない運用 | CI-GUIDE.md「9.」の該当注記（書き込み先は `cisetup.local.json`、CI 側は `CI_FILE_SERVER`） |

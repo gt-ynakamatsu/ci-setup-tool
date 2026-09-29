@@ -193,12 +193,21 @@ if ($ci.EnableTests -and (Test-Path $testSummaryPath)) {
     }
 }
 
+$logFallback = ''
 if (-not $isSuccess -and $ci.EnableLogs) {
+    # ci-deploy-fileserver.ps1 -Type Logs が配置したフォルダ（1 ビルド 1 フォルダ）をそのまま案内する。
+    if ($deploy -and $deploy.logDir) {
+        $logFallback = ConvertTo-FileUri $deploy.logDir
+        $logText = "ビルドログ: $($deploy.logDir)`nbuild.log（各ステージ）と *-output.log（dotnet / 合成ツールの全出力）が入っています。"
+    }
+    else {
+        $logText = "ビルドログ: 設定済みの書き込み先（$($ci.ProjectName) の logs フォルダ）を確認してください。"
+    }
     $body += @{
         type  = 'TextBlock'
         color = 'Attention'
         wrap  = $true
-        text  = "ビルドログ: 設定済みの書き込み先（$($ci.ProjectName) の logs フォルダ）を確認してください。"
+        text  = $logText
     }
 }
 
@@ -215,8 +224,8 @@ if ($deploy -and $deploy.artifactDir -and $ci.EnableReleases) {
 if ($deploy -and $deploy.sourceDir -and $ci.ArchiveSource) {
     Add-LinkActions -Actions $actions -Title '開発環境 zip を開く' -Urls $ci.SourceUrls -Fallback (ConvertTo-FileUri $deploy.sourceDir)
 }
-if (-not $isSuccess -and $ci.EnableLogs -and $ci.LogsUrls.Count -gt 0) {
-    Add-LinkActions -Actions $actions -Title 'ログフォルダを開く' -Urls $ci.LogsUrls -Fallback ''
+if (-not $isSuccess -and $ci.EnableLogs -and ($ci.LogsUrls.Count -gt 0 -or $logFallback)) {
+    Add-LinkActions -Actions $actions -Title 'ログフォルダを開く' -Urls $ci.LogsUrls -Fallback $logFallback
 }
 
 $card = @{

@@ -6,11 +6,38 @@ import subprocess
 from pathlib import Path
 
 # これまでの main 履歴から逆算したセマンティックバージョン。
-# 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI → 1.5 FPGA
-VERSION = "1.5.1"
+# 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI
+# → 1.5 FPGA → 1.6 CI の種類ごとに画面を切り替え
+VERSION = "1.6.1"
 
 # (version, date, notes) 新しい順。VERSION は先頭と一致させる。
 RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "1.6.1",
+        "2026-09-15",
+        (
+            "失敗理由（例外メッセージ・発生位置・呼び出し履歴）を build.log に記録。従来は Jenkins の画面だけに出ていた",
+            "Jenkins Console Output 本文を jenkins-console.log として logs フォルダへ保存",
+            "各ステージのコンソール出力を build.log へ追記",
+            "dotnet / Vivado / Quartus / 独自コマンドの出力を *-output.log に 1 行ずつ記録",
+            "ログの配置を成功時も実行し、1 ビルド 1 フォルダにログ一式をまとめる",
+            "Vivado / Quartus の vivado.log や *.rpt を logs/fpga-reports へ回収（失敗時も含む）",
+            "Teams の失敗通知にログ格納先フォルダを表示",
+            "詳細設定から、通常画面と重複する種別選択・合成タイムアウト・保存/ローカルビルドを外した",
+        ),
+    ),
+    (
+        "1.6.0",
+        "2026-09-10",
+        (
+            "起動時に CI の種類（.NET / FPGA / C・C++ / Python / カスタム）を選ぶ画面を追加",
+            "選んだ種類に合わせて画面を切り替え（説明文・入力欄・環境チェック・フォルダ選択）",
+            "FPGA は専用カードで合成対象（.xpr / .qpf / build.tcl）とタイムアウトを指定",
+            "FPGA プロジェクトの候補をリポジトリから検出し、プロジェクト名も自動入力",
+            "FPGA では .NET SDK ではなく Vivado / Quartus の有無を環境チェック",
+            "プリセットは選んだ時点で適用（「適用」を押し忘れて切り替わらない状態を解消）",
+        ),
+    ),
     (
         "1.5.1",
         "2026-09-07",

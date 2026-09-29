@@ -212,7 +212,8 @@ Teams の受信 Webhook。これらの構築自体は [docs/CI-GUIDE.md](CI-GUID
 3. **`Jenkinsfile` 側は `isUnix()` でエージェント OS を実行時判定し、呼び出すステップを
    `powershell`（Windows）/ `pwsh`（Linux）で切り替える。** 既存の Windows PowerShell 5.1
    環境（`pwsh` 未インストール）を壊さないよう、Windows 側は従来どおり `powershell` ステップの
-   ままにしてある。切り替えは `Jenkinsfile.template` 冒頭の `runPs()` ヘルパー1箇所に集約。
+   ままにしてある。切り替えは `Jenkinsfile.template` 冒頭の `runPsRaw()` ヘルパー1箇所に集約
+   （通常のステージは、その上に Transcript を重ねる `runPs(label, script)` を使う）。
 
 Linux エージェント側の追加要件: PowerShell 7 以降（`pwsh`）、および build プロファイルが
 要求するツールチェイン（dotnet プロファイルなら .NET SDK）。Windows Forms/WPF など
@@ -236,14 +237,15 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `app_paths.py` | パッケージルートの解決（ソース実行と `_MEIPASS` の差を吸収） | `get_package_root` |
 | `recent_project.py` | 直近に開いたプロジェクトを `%AppData%\CISetup\recent-project.txt` に記憶 | `RecentProjectStore.get_last_project_root` / `save` |
 | `template_store.py` | 同梱テンプレート一覧の正本、`CISetup\` への展開（`.ps1` は BOM 付与）、`.gitignore` への secrets 追記 | `BUNDLED_FILES`、`read_template`、`extract_to_repository`、`bundled_template_dir` |
-| `project_setup.py` | `.sln` 解析・プロジェクト自動検出・CI ファイル配置 | `deploy_ci_files`、`has_solution_file`、`parse_solution_projects`、`apply_auto_detection`、`find_test_project`、`count_projects` |
-| `ci_preset_catalog.py` | ビルドプリセット定義と検索 | `CiPreset`、`PRESETS`、`find_preset` |
+| `project_setup.py` | `.sln` 解析・プロジェクト自動検出・FPGA プロジェクト検出・CI ファイル配置 | `deploy_ci_files`、`has_solution_file`、`parse_solution_projects`、`apply_auto_detection`、`find_fpga_projects`、`apply_fpga_auto_detection`、`find_test_project`、`count_projects` |
+| `ci_preset_catalog.py` | ビルドプリセット定義と検索、CI の種類判定 | `CiPreset`、`PRESETS`、`find_preset`、`find_preset_by_name`、`preset_mode`、`fpga_tool` |
+| `fpga_build.py` | FPGA の合成対象 ⇔ ビルドコマンド欄（`ci-fpga.ps1` のオプション）の変換 | `parse_fpga_build_command`、`compose_fpga_build_command` |
 | `jenkinsfile_generator.py` | テンプレートのプレースホルダ置換で `Jenkinsfile` を生成 | `generate_jenkinsfile`、`build_agent_declaration` |
 | `jenkins_client.py` | Jenkins API（接続・Crumb・資格情報 upsert・ジョブ upsert・ビルド起動・サーバー初回設定）、ファイルサーバー書き込みテスト | `JenkinsClient`、`apply_settings`、`test_file_server_write`、`extract_agent_secret`、`format_jenkins_error` |
 | `teams_service.py` | Teams アダプティブカード（テスト送信）の生成と送信、URL 検証 | `send_test`、`build_test_card_payload`、`validate_url`、`normalize_url` |
 | `git_service.py` | リモート最新の取り込み（`fetch` → `merge --ff-only`）。push はしない | `pull_latest`、`GitError`、`GitTimeout` |
 | `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1`（→ `ci-publish.ps1`）をローカルで実行（このモジュール自体は git を呼ばない）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
-| `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins サービスの有無チェック | `scan`、`EnvironmentCheckResult` |
+| `environment_scan.py` | Git / Java / Jenkins サービスと、種類別のビルドツール（.NET SDK 8 か Vivado / Quartus）の有無チェック | `scan(preset_id)`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
 | `help_texts.py` | 各設定項目の GUI ツールチップ文言（保存先 JSON キーまで明記） | 文字列定数群 |
 | `version.py` | アプリのセマンティックバージョンと git リビジョン表示 | `VERSION` / `display_version` / `RELEASES` |
@@ -259,7 +261,8 @@ cisetup/gui/
   fields.py           … FieldMixin（入力欄の生成・バインド）
   form_sync.py        … FormSyncMixin（フォーム ↔ モデル変換・プレビュー）
   repository.py       … RepositoryMixin（設定の読み書き・プロジェクト切替）
-  presets.py          … PresetMixin（プリセット適用）
+  presets.py          … PresetMixin（プリセット適用＝CI の種類の切り替え）
+  mode.py             … ModeMixin（種類別の文言差し替えと入力欄の表示切替）
   file_picks.py       … FilePickMixin（フォルダ・ファイル選択）
   dialogs.py          … DialogMixin（確認・エラー表示）
   constants.py        … 環境チェック用リンク定数
@@ -269,7 +272,9 @@ cisetup/gui/
   layout.py           … 配色・共通ウィジェット・DPI 倍率フォント
   tooltip.py          … `help_icon`（「?」）とホバー時のヘルプ吹き出し
   steps/
+    start.py          … StartStepMixin（起動直後の「どの CI を作るか」選択画面）
     intro.py          … IntroStepsMixin（はじめての方へ・環境チェック・プリセット）
+    fpga.py           … FpgaStepMixin（FPGA の合成対象・タイムアウト・候補検出）
     workflow.py       … WorkflowStepsMixin（①〜⑥メインステップ UI）
   details/
     panels.py         … DetailsMixin（詳細設定 Expander）
@@ -280,6 +285,9 @@ cisetup/gui/
 | モジュール | 役割 | 主要なクラス / 関数 |
 |------------|------|----------------------|
 | `app.py` | メインウィンドウの組み立てと `run_app` | `ConfigureApp`、`run_app` |
+| `mode.py` | CI の種類（`dotnet` / `fpga` / `custom`）での文言差し替え・入力欄の表示切替 | `ModeMixin`、`_mode_text`、`_mode_only`、`_refresh_mode_ui` |
+| `steps/start.py` | 起動直後の種類選択画面（保存済み設定があれば省略） | `StartStepMixin`、`_choose_mode`、`_show_form` |
+| `steps/fpga.py` | FPGA の合成対象・ビルド Tcl・合成タイムアウトと候補検出 | `FpgaStepMixin`、`_detect_fpga_projects` |
 | `steps/intro.py` | 冒頭カード（初心者向け・環境スキャン・プリセット） | `IntroStepsMixin` |
 | `steps/workflow.py` | ①フォルダ〜⑥実行のメインフロー（③保存先・④ Teams 含む） | `WorkflowStepsMixin` |
 | `details/panels.py` | 詳細設定 Expander 内の追加項目 | `DetailsMixin` |
@@ -416,7 +424,7 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | Python 属性 | JSON キー | 型 | 既定値 | 説明 | 保存先 |
 |-------------|-----------|----|--------|------|--------|
 | `base_paths` | `basePaths` | list[str] | `[]` | プロジェクト名を付けずに使う書き込み先（複数可） | **local** |
-| `logs_dir` | `logsDir` | str | `"logs"` | 失敗時ログのフォルダ名 | config |
+| `logs_dir` | `logsDir` | str | `"logs"` | 実行ログ（コンソール出力）のフォルダ名 | config |
 | `releases_dir` | `releasesDir` | str | `"releases"` | 成果物のフォルダ名 | config |
 | `analysis_dir` | `analysisDir` | str | `"analysis"` | 解析レポートを置く `<root>` 配下のカテゴリフォルダ名 | config |
 | `tests_dir` | `testsDir` | str | `"tests"` | テスト結果を置く `<root>` 配下のカテゴリフォルダ名 | config |
@@ -449,7 +457,7 @@ frozen かつ該当引数があるときだけ `_attach_console_for_cli` が `Al
 | `teams_credential_id` | `teamsCredentialId` | str | `"teams-webhook-url"` | Teams Webhook の Jenkins Credential ID | config |
 | `default_configuration` | `defaultConfiguration` | str | `"Release"` | 既定の Build Configuration | config |
 | `build_timeout_minutes` | `buildTimeoutMinutes` | int | `30` | 1 ビルドのタイムアウト（分） | config（+ Jenkinsfile） |
-| `log_retention_count` | `logRetentionCount` | int | `30` | ビルド履歴保持数 | config（+ Jenkinsfile） |
+| `log_retention_count` | `logRetentionCount` | int | `10000` | ビルド履歴保持数（長期保持。ディスク使用量に注意） | config（+ Jenkinsfile） |
 | `timezone` | `timezone` | str | `"Asia/Tokyo"` | cron の基準 TZ | config |
 | `checkout_retry_count` | `checkoutRetryCount` | int | `3` | Checkout ステージの git 取得失敗リトライ回数 | config（+ Jenkinsfile） |
 | `retry_wrapper_enabled` | `retryWrapperEnabled` | bool | `false` | true なら cron を別建てジョブ（`<job_name>-trigger`）に移し、Naginator で失敗時リトライ。false に戻すと既存 trigger ジョブを無効化 | config + Jenkins ジョブ |
@@ -694,19 +702,23 @@ GUI 表示用に代表（先頭の書き込み先）のレイアウト例を返�
 `ConfigureApp`（`tk.Tk` サブクラス）は縦スクロール（`ScrollableFrame`）の 1 画面に、上から順に
 カードを並べる。起動時に高 DPI 対応（`util.enable_dpi_awareness`）と表示倍率取得（`set_scale`）を行う。
 
+起動直後は同じスクロール領域に**種類選択画面**（`steps/start.py`）だけを出し、種類を選ぶ（または保存済み設定を読み込む）とフォーム側に差し替える。
+
 | 順 | セクション | 主な内容 |
 |----|------------|----------|
-| — | ヘッダ | タイトル「CISetup」と説明 |
-| — | はじめての方へ | 使い方の概要カード |
-| — | 環境チェック | 「環境をスキャン」/ 入手先リンク / 自動化できない準備の手順（Expander） |
-| — | まずはプリセットを選ぶ | プリセット選択 + 「このプリセットを適用」 |
-| ① | アプリのフォルダ | フォルダ選択・読み込み・保存した設定を開く |
+| — | ヘッダ | タイトル「CISetup」と説明（選択画面／フォームで文言が変わる） |
+| — | 種類選択（起動時のみ） | .NET / FPGA / C・C++ / Python / カスタムから選ぶ。保存済み設定があれば省略 |
+| — | はじめての方へ | 使い方の概要カード（種類で文言が変わる） |
+| — | 環境チェック | 「環境をスキャン」/ 入手先リンク（種類で .NET SDK ↔ Vivado / Quartus が入れ替わる）/ 自動化できない準備の手順（Expander） |
+| — | CI の種類（プリセット） | 現在の種類・説明・選び直し（選択＝適用）・「種類の選択に戻る」 |
+| — | FPGA ビルドの設定（FPGA のみ） | 使用ツール表示 / 合成するプロジェクト（候補検出つき）/ ビルド Tcl（Vivado のみ）/ 合成タイムアウト（詳細設定には出さない）/ 実行されるコマンドの表示 |
+| ① | アプリのフォルダ | フォルダ選択・読み込み・保存した設定を開く（種類で表題・説明が変わる） |
 | ② | 社内 Git | リポジトリ URL / ブランチ / ユーザー名 / パスワード(PAT) |
 | ③ | 成果物・ログの保存先 | 書き込み先ベース（複数可）/ 共有フォルダルート（CI_FILE_SERVER・複数可）/ カテゴリ別「保存フォルダ名」（logs / releases / analysis / tests / source）と有効チェック / 日付フォルダ / プレビュー / 格納先フォルダ作成 / エージェント兄弟パス / CI_FILE_SERVER グローバル登録 |
 | ④ | Teams 通知 | Webhook URL / ③ と同じカテゴリ表示名の閲覧 URL（logs / releases / analysis / tests / source、各複数可）/ テスト送信 |
 | ⑤ | Jenkins への接続 | Jenkins URL / ユーザー名 / API Token / 接続テスト |
 | ⑥ | セットアップを実行 | 「セットアップを実行」（取り込み → 保存 → ローカル → Jenkins 反映 → テストビルド）+ 「設定だけ保存」+ 「ローカルでビルド＆テスト」+ publish チェック + ローカル実行ログ欄 |
-| — | 詳細設定（Expander） | ビルド種別 / 自動入力項目 / CI ジョブ / Jenkins サーバー初回設定 / 手動操作 |
+| — | 詳細設定（Expander） | 追加コマンド（.NET では非表示。種別の選び直しはしない）/ 自動入力項目 / CI ジョブ（FPGA ではタイムアウト欄なし）/ Jenkins サーバー初回設定 / 手動操作（保存とローカルビルドは ⑥ のみ） |
 | — | ステータスバー | 状態表示 |
 
 ### 8.2 入力欄の種類
@@ -723,8 +735,16 @@ GUI 表示用に代表（先頭の書き込み先）のレイアウト例を返�
 ### 8.3 相互排他・後勝ち・併用の挙動
 
 - ③ 書き込み先ベースと共有フォルダルートは**併用可**（両方の全先へコピー）。相互排他ではない。
-- プロファイルは `dotnet` / `custom` の二択（コンボ）。`custom` 選択時のみカスタムコマンド欄が表示される。
-- プリセット「適用」は、既存のビルドコマンドがあると上書き確認ダイアログを出す。
+- ビルド種別は画面上部のプリセットだけで選ぶ。詳細設定に同じ選択は出さない。`.NET` では追加コマンドカードを隠し、FPGA では合成タイムアウトを FPGA カードだけに出す。
+- プリセットは**選んだ時点で適用**される（`_on_preset_selected` → `_apply_preset`）。適用済みプリセットの値から
+  書き換えられたコマンド欄があるときだけ上書き確認ダイアログを出し、断られたら選択を元の種類へ戻す。
+- 種類による画面差分は `mode.py` に集約する。文言は `_mode_text(widget, dotnet=..., fpga=..., custom=...)`、
+  入力欄の出し入れは `_mode_only(widget, "dotnet")` で登録し、`_refresh_mode_ui` が一括反映する。
+  非表示は `pack_forget` で行い、元の並び順を保つため初回反映時に親フレーム内の順序を記録して
+  「後ろの兄弟の手前」へ戻す。
+- FPGA の合成対象（`fpga.project` / `fpga.tcl`）は config のフィールドではなく、
+  `build.buildCommand` へ `-Project` / `-Tcl` として書き出す（`fpga_build.py`）。
+  `-` 始まりでないビルドコマンド（利用者の独自コマンド）は解釈せず保持し、そのことを画面に表示する。
 - 実効値は常に 1 つに収束する（[7.5](#75-書き込み先の実効ルートと後勝ち)）。
 
 ### 8.4 プロジェクトを開く際の状態遷移
@@ -739,7 +759,11 @@ stateDiagram-v2
     HasConfig --> Load: 設定あり → RepositoryMixin._load_repository
     Deploy --> Load: deploy_ci_files + apply_auto_detection
     Load --> FormSync: FormSyncMixin._config_to_form
-    FormSync --> Preview: _update_preview
+    FormSync --> Mode: _refresh_mode_ui（種類に合わせて文言・入力欄）
+    Mode --> ShowForm: 設定あり → _show_form
+    Mode --> ShowChooser: 設定なし → 種類選択画面のまま
+    ShowForm --> Preview: _update_preview
+    ShowChooser --> Preview: _update_preview
     Preview --> [*]
 ```
 
@@ -747,7 +771,7 @@ stateDiagram-v2
 
 `help_texts.py` の文言を `help_icon`（ラベル横の「?」）または `attach_tooltip`（`ToolTip`、ホバー 400ms 後に表示）で付ける。
 各文言は「【何を】【なぜ】【どこで使う】【例】【保存先】」の体裁で、JSON キーまで明記している。
-③ と ④ のカテゴリ行（logs / releases / analysis / tests / source）は `_category_label` で表示名を統一する（例: `失敗時ログ（logs）`）。
+③ と ④ のカテゴリ行（logs / releases / analysis / tests / source）は `_category_label` で表示名を統一する（例: `実行ログ（logs）`）。
 
 ### 8.6 非同期実行とエラー表示
 
@@ -845,7 +869,7 @@ sequenceDiagram
 CI 定義は Jenkins ジョブに内蔵するため、アプリの Git への CI ファイル push は行わない。
 `repositoryUrl` は取り込みと Jenkins 側の checkout に使うため必須。
 
-個別実行は「設定だけ保存」「ローカルでビルド＆テスト」、または詳細設定の手動操作。
+個別実行は「設定だけ保存」「ローカルでビルド＆テスト」（⑥）。Jenkins への反映だけと今すぐビルドは詳細設定。
 
 **最新の取り込み**（`pull` ステップ）は `git_service.pull_latest` が `git fetch <remote> <branch>` →
 `git merge --ff-only FETCH_HEAD` を実行する。**取り込み方向だけで push はしない**。
@@ -1008,7 +1032,7 @@ sequenceDiagram
     participant T as Teams
 
     J->>J: Checkout (checkout scm)
-    J->>PS: Prepare (artifacts 再作成 + Start-Transcript build.log)
+    J->>PS: Prepare (artifacts 再作成。ここだけ Transcript 無し)
     J->>PS: Archive Source → ci-archive-source.ps1 (archiveSource=true のみ)
     J->>PS: Lint (!SKIP_LINT) → ci-lint.ps1
     J->>PS: Build → ci-build.ps1
@@ -1020,16 +1044,24 @@ sequenceDiagram
     Note over J: post 全体
     J->>PS: always: ci-deploy-fileserver.ps1 -Type Analysis / Test / Source
     PS->>FS: 解析 / テスト / ソース zip を配置
+    J->>PS: always: deploy -Type Logs（成功・失敗どちらでも）
+    PS->>FS: artifacts/logs のログ全部を 1 ビルド 1 フォルダで配置
     alt 成功
         J->>PS: success: deploy -Type Artifact → ci-notify-teams.ps1 -Status complete
         PS->>FS: 成果物 zip を配置
         PS->>T: 成功カード送信
     else 失敗
-        J->>PS: failure: deploy -Type Logs → ci-notify-teams.ps1 -Status error
-        PS->>FS: build.log を配置
-        PS->>T: 失敗カード送信
+        J->>PS: failure: ci-notify-teams.ps1 -Status error
+        PS->>T: 失敗カード送信（ログ格納先フォルダ付き）
     end
 ```
+
+各ステージのスクリプトは `runPs(label, script)` 経由で呼ぶ。Jenkins は `powershell` / `pwsh`
+ステップごとに**別プロセス**を起こすため、Transcript は 1 回開いても次のステージには残らない。
+そこでステップごとに `Start-Transcript -Append` で `artifacts/logs/build.log` を開き直し、
+`===== <ステージ> : start/end =====` の見出しつきで 1 本のログに積み上げる。
+`artifacts` を作り直す Prepare とログ配置だけは、開いているログを自分で消さない/コピーしないため
+Transcript 無しの `runPsRaw` で実行する。
 
 `Publish Artifact` ステージの実行条件は `PUBLISH_RELEASE=true` または ブランチ `main`/`master`、
 タグ `v\d+.*`、`TimerTrigger`（cron）、`SCMTrigger`（pollSCM）のいずれか。詳細は [10 章](#10-ci-パイプライン詳細)。
@@ -1080,13 +1112,13 @@ sequenceDiagram
 
 | ステージ | スクリプト | dotnet 動作 | custom 動作 | 主な出力 |
 |----------|------------|-------------|-------------|----------|
-| Prepare | （Jenkinsfile 内 inline） | `artifacts` 削除→再作成、`Start-Transcript artifacts\logs\build.log` | 同左 | `artifacts\logs\build.log` |
+| Prepare | （Jenkinsfile 内 inline） | `artifacts` 削除→再作成（`artifacts\logs` を作る） | 同左 | `artifacts\logs\` |
 | Archive Source | `ci-archive-source.ps1` | `archiveSource=true` のときソースツリーを zip 化 | 同左 | `artifacts\source\<prefix>-<番号|日時>-src.zip` |
-| Lint | `ci-lint.ps1` | `dotnet restore` → `dotnet format --verify-no-changes`（差分は警告のみ）→ アナライザ付きビルド | `lintCommand`（空ならスキップ） | コンソール |
-| Build | `ci-build.ps1` | `dotnet restore` → `dotnet build` | FPGA プリセットは `ci-fpga.ps1`。その他は `buildCommand` | ビルド成果 |
+| Lint | `ci-lint.ps1` | `dotnet restore` → `dotnet format --verify-no-changes`（差分は警告のみ）→ アナライザ付きビルド | `lintCommand`（空ならスキップ） | `artifacts\logs\lint-output.log` |
+| Build | `ci-build.ps1` | `dotnet restore` → `dotnet build` | FPGA プリセットは `ci-fpga.ps1`。その他は `buildCommand` | ビルド成果 / `artifacts\logs\build-output.log`（FPGA は `fpga-output.log`） |
 | Test | `ci-test.ps1` | `dotnet test`（TRX 出力）→ TRX 解析 | `testCommand`（空ならスキップ） | `artifacts\test\test-results.trx` / `test-summary.json` / `test-failures.log` |
 | Static Analysis | `ci-analyze.ps1` | Roslyn 全ルール有効でビルド→指摘を High/Medium/Low に分類 | `analyzeCommand`（空ならスキップ） | `artifacts\analysis\analysis-report.html` / `.md` / `.csv` / `analysis-summary.json` / `analysis-build.log` |
-| Publish Artifact | `ci-publish.ps1` | `dotnet publish`（framework-dependent + `PublishSingleFile`）→ **`.exe`**（+ 後方互換 zip） | `publishCommand` 実行 → `artifactGlob` で収集 → zip | `artifacts\release\*.exe` / `*.zip` |
+| Publish Artifact | `ci-publish.ps1` | `dotnet publish`（framework-dependent + `PublishSingleFile`）→ **`.exe`**（+ 後方互換 zip） | `publishCommand` 実行 → `artifactGlob` で収集 → zip | `artifacts\release\*.exe` / `*.zip` / `artifacts\logs\publish-output.log` |
 | Post: deploy | `ci-deploy-fileserver.ps1` | 各カテゴリを全書き込み先へコピー、配置先を `deploy-manifest.json` に記録 | 同左 | ファイルサーバー上の各フォルダ |
 | Post: notify | `ci-notify-teams.ps1` | 1 枚のアダプティブカードを送信 | 同左 | Teams 通知 |
 
@@ -1096,12 +1128,28 @@ sequenceDiagram
 - `ci-analyze.ps1` の `FailOn`（`None`/`High`/`Medium`）で重大度に応じてステージ失敗にできる。
   セキュリティ系ルール（`CA3xxx`/`CA5xxx`/特定 `CA2xxx`/`SCS*`/`SEC*`）は High 扱い。
 - `ci-publish.ps1`（custom）の glob は `Convert-GlobToRegex` で `*`/`?`/`**` を正規表現へ変換して収集する。
+- native コマンド（`dotnet` / `vivado` / `quartus_sh` / 独自コマンド）は `ci-config.ps1` の
+  `Invoke-CiLogged` / `Invoke-CiLoggedCommandLine` 経由で呼ぶ。`Start-Transcript` は native コマンドの
+  出力をコンソールバッファ経由で記録するため出力が多いと欠けるので、これらのヘルパーは
+  stdout / stderr を 1 行ずつコンソールとログの両方（`artifacts\logs\*-output.log`、UTF-8）へ書き、
+  終了コードを返す。Windows PowerShell 5.1 は `ErrorActionPreference=Stop` のまま native の stderr を
+  `2>&1` すると `NativeCommandError` で止まるため、ヘルパー内だけ `Continue` にして回避している
+  （呼び出し元スクリプトの `Stop` はそのまま）。
 
 ### 10.3 `artifacts\` ディレクトリ構造（エージェント上）
 
 ```
 artifacts\
-├── logs\build.log              … Prepare で Transcript 開始
+├── logs\
+│   ├── build.log               … 全ステージのコンソール出力（ステップ毎に Transcript 追記）
+│   │                             失敗時は runPs の catch が理由・発生位置・呼び出し履歴を追記
+│   ├── build-output.log        … dotnet restore/build または独自ビルドコマンドの全出力
+│   ├── fpga-output.log         … Vivado / Quartus の全出力（FPGA プリセット）
+│   ├── lint-output.log         … dotnet format / アナライザ付きビルドの全出力
+│   ├── publish-output.log      … dotnet publish の全出力
+│   ├── jenkins-console.log     … Jenkins Console Output の本文（post always で回収）
+│   ├── jenkins-build-info.log  … 結果・所要時間などのビルド情報
+│   └── fpga-reports\           … Vivado / Quartus の vivado.log / *.rpt 等（失敗時も回収）
 ├── source\<prefix>-<n>-src.zip … Archive Source（archiveSource=true 時）
 ├── test\
 │   ├── test-results.trx
@@ -1128,7 +1176,7 @@ artifacts\
 
 | Type | 配置先 |
 |------|--------|
-| Logs | `<root>\<logsDir>\<date>\<job>-<番号>-<時刻>.log` |
+| Logs | `<root>\<logsDir>\<date>\<job>-<番号>-<時刻>\<files>` |
 | Artifact | `<root>\<releasesDir>\<date>\<zip>` |
 | Analysis | `<root>\<analysisDir>\<date>\<job>-<番号>-<時刻>\<files>` |
 | Source | `<root>\<sourceDir>\<date>\<zip>` |
@@ -1152,7 +1200,11 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
 
 ### 10.6 成果物・テスト結果・ログの流れ（まとめ）
 
-- ログ: Prepare で Transcript 開始 → 失敗時に `deploy -Type Logs` でファイルサーバーへ。
+- ログ: 各ステージが `artifacts\logs\` に出力（`build.log` + `*-output.log` + FPGA 時は
+  `fpga-reports`）→ 成功・失敗どちらでも `deploy -Type Logs` で `artifacts\logs` の全ファイル
+  （サブフォルダ含む。+ `test-output.log` / `test-failures.log` / `analysis-build.log`）を
+  1 ビルド 1 フォルダにまとめてファイルサーバーへ → 失敗時は Teams の「ログフォルダを開く」でそのフォルダへ。
+  FPGA の `vivado.log` / `*.rpt` は `Copy-CiFpgaReports` が合成の成否に関係なく回収する。
 - テスト結果: `ci-test.ps1` が `artifacts\test\` に出力 → Jenkins が `archiveArtifacts` で保管 →
   `deploy -Type Test` でファイルサーバーへ → 失敗時は Teams に失敗テスト名とログリンク。
 - 解析: `ci-analyze.ps1` が `artifacts\analysis\` に出力 → `deploy -Type Analysis` →
@@ -1235,7 +1287,7 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 | GUI テスト | `tkinter` を `importorskip`、ディスプレイ不可なら skip。`ConfigureApp` を生成し `withdraw()`、ダイアログ/通知をモンキーパッチで無効化 |
 | 外部依存のモック | `cisetup.gui.deps` を patch（`JenkinsClient` / `apply_settings` / `teams_service.send_test` / `run_local_ci` / `env_scan.scan` / `messagebox` 等）。`FakeClient` で Jenkins API を差し替え |
 | 主な観点 | ① `save_all` で config.json 生成、② テスト未設定の確認ダイアログ、③ run-setup の順序（`test_run_setup_ordering`）、④ 全書き込み先への書き込みテスト、⑤ レイアウト正規化（`CISetup\` / 旧 `cisetup\` 選択→親）、⑥ 旧レイアウトで保存値が自動検出に上書きされないこと、⑦ exe 鮮度 |
-| 代表的なテストファイル | `test_gui_actions.py` / `test_repository_setup_templates.py` / `test_models.py` / `test_paths_presets_generator.py` / `test_jenkins_client.py` / `test_teams_service.py` / `test_git_env_recent.py` / `test_configure_cli.py` / `test_app_paths.py` / `test_exe_freshness.py` |
+| 代表的なテストファイル | `test_gui_actions.py` / `test_gui_modes.py`（種類別の画面切替）/ `test_fpga_ci.py` / `test_repository_setup_templates.py` / `test_models.py` / `test_paths_presets_generator.py` / `test_jenkins_client.py` / `test_teams_service.py` / `test_git_env_recent.py` / `test_configure_cli.py` / `test_app_paths.py` / `test_exe_freshness.py` |
 | 補助 | `tools\smoke_test.py`（C# 版との JSON 互換などの素早い確認） |
 
 ---
