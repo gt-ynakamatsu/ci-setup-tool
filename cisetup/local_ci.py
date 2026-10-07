@@ -33,6 +33,30 @@ def _powershell_candidates() -> list[str]:
     return ["pwsh", "powershell"]
 
 
+def _ps_single_quote(value: str) -> str:
+    """PowerShell の単一引用符リテラル。パス中の ' は '' にする。"""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _powershell_command(script: Path, configuration: str) -> str:
+    """スクリプト起動前にコンソールを UTF-8 にする。
+
+    Windows PowerShell 5.1 はパイプ先へ CP932 で書く。GUI は UTF-8 として読むため、
+    そのままだと日本語が文字化けする。dotnet はパイプ先へ UTF-8 を書くので、
+    受け側の ``[Console]::OutputEncoding`` も UTF-8 にしておかないと、
+    復元メッセージなどが壊れたままログに残る。
+    """
+    script_lit = _ps_single_quote(str(script))
+    config_lit = _ps_single_quote(configuration)
+    return (
+        "$utf8 = New-Object System.Text.UTF8Encoding $false; "
+        "[Console]::OutputEncoding = $utf8; "
+        "[Console]::InputEncoding = $utf8; "
+        "$OutputEncoding = $utf8; "
+        f"& {script_lit} -Configuration {config_lit}"
+    )
+
+
 def _run_script(
     root: Path,
     script: Path,
@@ -50,10 +74,8 @@ def _run_script(
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
-        "-File",
-        str(script),
-        "-Configuration",
-        configuration,
+        "-Command",
+        _powershell_command(script, configuration),
     ]
 
     proc = None

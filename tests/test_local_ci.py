@@ -61,10 +61,11 @@ def test_run_local_ci_runs_build_then_test(tmp_path, monkeypatch):
     assert len(calls) == 2
     assert "ci-build.ps1" in joined[0]
     assert "ci-test.ps1" in joined[1]
-    # 両方に -Configuration Debug が渡る
+    # 両方に -Configuration Debug が渡る。起動前にコンソールを UTF-8 にする。
     for cmd in calls:
-        assert "-Configuration" in cmd
-        assert "Debug" in cmd
+        text = " ".join(cmd)
+        assert "-Configuration 'Debug'" in text
+        assert "UTF8Encoding" in text
     # ビルドがテストより前
     assert joined[0].index("ci-build.ps1") >= 0 and joined[1].index("ci-test.ps1") >= 0
     # ストリームされた出力が届く
@@ -168,5 +169,4 @@ def test_run_local_ci_default_configuration(tmp_path, monkeypatch):
     local_ci.run_local_ci(tmp_path)
 
     for cmd in calls:
-        idx = cmd.index("-Configuration")
-        assert cmd[idx + 1] == "Release"
+        assert "-Configuration 'Release'" in " ".join(cmd)
