@@ -131,6 +131,8 @@ class Recorder:
         for key, resp in self.responses.items():
             if key in url:
                 return resp
+        if "scriptText" in url:
+            return FakeResponse("preapproved")
         return FakeResponse("{}")
 
 
@@ -139,6 +141,14 @@ def recorder(monkeypatch):
     rec = Recorder()
     monkeypatch.setattr(urllib.request, "urlopen", rec.handler)
     return rec
+
+
+def _job_xml(recorder: Recorder) -> str:
+    return next(
+        body.decode("utf-8")
+        for body in reversed(recorder.bodies)
+        if b"flow-definition" in body
+    )
 
 
 def _http_error(url: str, code: int, body: str = "err") -> urllib.error.HTTPError:
@@ -272,7 +282,7 @@ def test_upsert_pipeline_job_includes_scm_trigger(recorder):
     cfg.jenkins.poll_schedule = "H/10 * * * *"
     cfg.jenkins.cron_schedule = ""
     client.upsert_pipeline_job(cfg)
-    body = recorder.bodies[-1].decode("utf-8")
+    body = _job_xml(recorder)
     assert "CpsFlowDefinition" in body
     assert "CpsScmFlowDefinition" not in body
     assert "scriptPath" not in body
@@ -292,10 +302,37 @@ def test_upsert_pipeline_job_includes_timer_trigger(recorder):
     cfg.jenkins.cron_schedule = "0 0 * * *"
     cfg.jenkins.timezone = "Asia/Tokyo"
     client.upsert_pipeline_job(cfg)
-    body = recorder.bodies[-1].decode("utf-8")
+    body = _job_xml(recorder)
     assert "hudson.triggers.TimerTrigger" in body
     assert "TZ=Asia/Tokyo" in body
     assert "0 0 * * *" in body
+
+
+def test_upsert_pipeline_job_preapproves_only_that_script(recorder):
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    cfg.jenkins.job_name = "MyApp-CI"
+    client.upsert_pipeline_job(cfg)
+    script_posts = [body for (method, url), body in zip(recorder.calls, recorder.bodies) if "scriptText" in url]
+    assert len(script_posts) == 1
+    groovy = urllib.parse.unquote_plus(script_posts[0].decode("utf-8"))
+    assert "ScriptApproval.get().preapprove" in groovy
+    assert "approveScript" not in groovy
+    encoded = groovy.split("decode('", 1)[1].split("')", 1)[0]
+    approved = __import__("base64").b64decode(encoded).decode("utf-8")
+    job_xml = next(body.decode("utf-8") for body in recorder.bodies if "CpsFlowDefinition" in body.decode("utf-8", errors="replace"))
+    assert jenkins_client._escape_xml(approved) in job_xml
+
+
+def test_preapprove_failure_explains_administer(recorder):
+    recorder.responses["scriptText"] = FakeResponse("AccessDeniedException: administer")
+    client = JenkinsClient(_secrets())
+    cfg = CISetupConfig()
+    cfg.git.repository_url = "http://git/x.git"
+    with pytest.raises(JenkinsError, match="Overall/Administer"):
+        client.upsert_pipeline_job(cfg)
+    assert any("config.xml" in url or "createItem" in url for _, url in recorder.calls)
 
 
 def test_upsert_pipeline_job_keeps_cron_in_script_when_poll_enabled(recorder):
@@ -307,7 +344,7 @@ def test_upsert_pipeline_job_keeps_cron_in_script_when_poll_enabled(recorder):
     cfg.jenkins.cron_schedule = "0 0 * * *"
     cfg.jenkins.timezone = "Asia/Tokyo"
     client.upsert_pipeline_job(cfg)
-    body = recorder.bodies[-1].decode("utf-8")
+    body = _job_xml(recorder)
     assert "pollSCM" in body
     assert "cron(spec:" in body
     assert "0 0 * * *" in body
@@ -410,7 +447,7 @@ def test_apply_settings_skips_env_by_default(recorder):
     cfg.git.repository_url = "http://git/x.git"
     cfg.jenkins.ci_file_servers = [r"\\srv\ci"]
     apply_settings(cfg, _secrets())
-    assert not any("scriptText" in url for _, url in recorder.calls)
+    assert not any(b"EnvironmentVariablesNodeProperty" in body for body in recorder.bodies)
 
 
 def test_apply_settings_skips_env_when_no_target(recorder):
@@ -419,7 +456,7 @@ def test_apply_settings_skips_env_when_no_target(recorder):
     cfg.jenkins.push_ci_file_server_env = True
     cfg.jenkins.ci_file_servers = []
     apply_settings(cfg, _secrets())
-    assert not any("scriptText" in url for _, url in recorder.calls)
+    assert not any(b"EnvironmentVariablesNodeProperty" in body for body in recorder.bodies)
 
 
 def test_apply_settings(recorder):

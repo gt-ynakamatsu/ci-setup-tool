@@ -863,6 +863,7 @@ CISetup 設定アプリ の「Jenkins サーバーを初期設定」は Groovy�
 
 - 使用ユーザー（通常 `admin`）に **Overall/Administer** または **Overall/RunScripts** があること
 - **Manage Jenkins → In-process Script Approval** に未承認があれば Approve
+- 「Jenkinsに反映」は、反映ユーザーが **Overall/Administer** を持つとき、保存したパイプラインだけを事前承認する。未承認の別スクリプトは承認しない。権限がないとジョブは保存されるが承認は残るので、そのときは管理者が In-process Script Approval で今回のパイプラインを承認する
 
 ---
 

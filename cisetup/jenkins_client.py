@@ -228,6 +228,18 @@ class JenkinsClient:
         self._ensure_crumb()
         self._request("POST", path, data=xml.encode("utf-8"), content_type="application/xml; charset=utf-8")
 
+    def preapprove_pipeline_script(self, script: str) -> None:
+        """今保存したパイプラインだけを In-process Script Approval に事前承認する。
+
+        未承認キューにある別スクリプトは承認しない。config.xml 保存後に呼ぶ。
+        """
+        try:
+            result = self.run_groovy(_preapprove_pipeline_script(script))
+        except JenkinsHTTPError as exc:
+            raise JenkinsError(_preapprove_failure_message(str(exc))) from exc
+        if "preapproved" not in result:
+            raise JenkinsError(_preapprove_failure_message(result))
+
     def run_groovy(self, script: str) -> str:
         self._ensure_crumb()
         result = self._request("POST", "scriptText", form={"script": script})
@@ -322,6 +334,9 @@ class JenkinsClient:
         exists = self._job_exists(config.jenkins.job_name)
         path = f"job/{encoded}/config.xml" if exists else f"createItem?name={encoded}"
         self._post_xml(path, job_xml)
+        # config.xml の POST は UI の Save と違い ScriptApproval.configuring を通らない。
+        # 反映ユーザーが Overall/Administer なら、今書いた Jenkinsfile だけを事前承認する。
+        self.preapprove_pipeline_script(pipeline)
 
     def upsert_trigger_job(self, config: CISetupConfig) -> None:
         """cron 失敗時に Naginator で再試行するラッパー Freestyle ジョブを作成/更新する。
@@ -493,6 +508,33 @@ def _set_location_script(jenkins_url: str) -> str:
 loc.setUrl('{escaped}')
 loc.save()
 return 'OK: Jenkins URL set to {escaped}'"""
+
+
+def _preapprove_pipeline_script(script: str) -> str:
+    """保存した Jenkinsfile だけを ScriptApproval.preapprove する Groovy。
+
+    スクリプト本文は Base64 で渡し、引用符や改行で Groovy が壊れないようにする。
+    承認対象はこの文字列のハッシュだけで、pending の全件承認はしない。
+    """
+    encoded = base64.b64encode(script.encode("utf-8")).decode("ascii")
+    return f"""import org.jenkinsci.plugins.scriptsecurity.scripts.ScriptApproval
+import org.jenkinsci.plugins.scriptsecurity.scripts.languages.GroovyLanguage
+def script = new String(java.util.Base64.decoder.decode('{encoded}'), 'UTF-8')
+ScriptApproval.get().preapprove(script, GroovyLanguage.get())
+return 'preapproved'"""
+
+
+def _preapprove_failure_message(detail: str) -> str:
+    snippet = detail.strip().replace("\r", "")
+    if len(snippet) > 500:
+        snippet = snippet[:500] + "..."
+    return (
+        "ジョブは保存しましたが、パイプラインの自動承認に失敗しました。\n"
+        "反映に使う Jenkins ユーザーに Overall/Administer が必要です。\n"
+        "権限がない場合は、管理者で Manage Jenkins → In-process Script Approval から、"
+        "今回のパイプラインだけを承認してください。\n"
+        f"詳細: {snippet}"
+    )
 
 
 def _set_global_env_var_script(name: str, value: str) -> str:
