@@ -1021,6 +1021,7 @@ sequenceDiagram
 
 GUI からアプリの Git へ CI 定義を commit / push する機能はない。
 ② の Git URL / ブランチ / 認証は、最新の取り込みと、Jenkins ジョブがアプリソースを checkout するために使う。
+Jenkins の Checkout は毎回 `WipeWorkspace` でワークスペースの中身を削除してから clone する。前回ビルドの作業ツリーは残さない。手元の「最新の取り込み」は作業コピーを消さない。
 `git.checkoutSubmodules` がオフ（既定）のときは親リポジトリだけ取得する。
 オンのときは、生成する checkout の `extensions` に `SubmoduleOption`
 （`disableSubmodules: false`、`recursiveSubmodules: true`、`parentCredentials: true`）が入り、
@@ -1031,7 +1032,7 @@ GUI からアプリの Git へ CI 定義を commit / push する機能はない�
 ### 9.6 Jenkins 上の CI パイプライン実行
 
 実際のステージ順（`Jenkinsfile.template`）は次のとおり。**Archive Source は Prepare の直後**に走る点に注意。
-Checkout はジョブに埋め込んだ `GitSCM` である。`git.checkoutSubmodules` がオンのときだけ `extensions` に `SubmoduleOption` が入る。
+Checkout はジョブに埋め込んだ `GitSCM` である。`extensions` には常に `WipeWorkspace` が入る。`git.checkoutSubmodules` がオンのときだけ `SubmoduleOption` も入る。
 
 ```mermaid
 sequenceDiagram

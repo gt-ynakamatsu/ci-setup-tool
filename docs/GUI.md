@@ -78,7 +78,7 @@ GUI は `cisetup/gui/app.py` が薄いシェルで、`ConfigureApp` は Mixin �
 
 ローカルはビルドが失敗するとテストを実行しません。
 
-CI の手順は Jenkins ジョブに内蔵されます。Git URL / ブランチ / 認証は、最新の取り込みと、Jenkins がアプリソースを checkout するために使います。
+CI の手順は Jenkins ジョブに内蔵されます。Git URL / ブランチ / 認証は、最新の取り込みと、Jenkins がアプリソースを checkout するために使います。Jenkins の Checkout は毎回ワークスペースを削除してから clone します。手元の「最新の取り込み」は作業コピーを残します。
 
 ② の **「サブモジュールも取得する」** は既定オフです。先方リポジトリが git submodule で部品を分けているプロジェクトだけオンにします。オンのときは Jenkins の Checkout と「最新の取り込み」が、親と同じ認証で `git submodule update --init --recursive` 相当の取得をします。変更は「Jenkins に反映」したジョブから有効になります。手順と MSB3202 の対処は [CI-GUIDE.md の ②](CI-GUIDE.md) と [トラブルシューティング](CI-GUIDE.md) を参照してください。
 

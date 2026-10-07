@@ -39,14 +39,17 @@ def _escape_groovy(value: str) -> str:
 def build_git_checkout_groovy(config) -> str:
     """アプリの Git からソースを取る checkout（ジョブ SCM に依存しない）。
 
+    毎回 ``WipeWorkspace`` でワークスペースを空にしてから clone する。
+    前回ビルドの作業ツリーは残さない。
     ``git.checkoutSubmodules`` がオンのときだけ、親リポジトリと同じ認証で
-    サブモジュールを再帰取得する。オフのときは extensions を空のままにする。
+    サブモジュールを再帰取得する。
     """
     url = _escape_groovy(config.git.repository_url)
     cred = _escape_groovy(config.git.credential_id)
     branch = _escape_groovy(config.git.branch or "main")
     if config.git.checkout_submodules:
         extensions = """[
+                            [$class: 'WipeWorkspace'],
                             [$class: 'SubmoduleOption',
                                 disableSubmodules: false,
                                 recursiveSubmodules: true,
@@ -55,7 +58,9 @@ def build_git_checkout_groovy(config) -> str:
                                 reference: '']
                         ]"""
     else:
-        extensions = "[]"
+        extensions = """[
+                            [$class: 'WipeWorkspace']
+                        ]"""
     return f"""                    checkout([
                         $class: 'GitSCM',
                         branches: [[name: '*/{branch}']],

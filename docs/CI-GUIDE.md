@@ -1476,6 +1476,8 @@ cd C:\Jenkins
 | ユーザー名 | `GIT_USER` | |
 | パスワード / トークン | `GIT_PAT` | PAT 推奨。`cisetup.secrets.local.json` にのみ保存 |
 
+Jenkins の Checkout は、毎回エージェントのワークスペースを削除してから clone します。前回ビルドのファイルは残りません。手元の「最新の取り込み」はこの削除をしません。
+
 **サブモジュールを使うリポジトリ（先方の要望で submodule 化している場合）**
 
 既定のままでは、Jenkins も「最新の取り込み」も親リポジトリだけ取得します。`vendor\` 以下が別リポジトリになっていると、ソリューションが参照する `.csproj` がワークスペースに無く、Lint の `dotnet restore` が MSB3202 で失敗します。そのプロジェクトだけ、次の手順にします。
@@ -1552,8 +1554,8 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
   - ※ **CISetup のオプションでグローバル環境変数 `CI_FILE_SERVER` を自動登録できます**（別 PC 環境向け）: ③ 保存先セクションの **「書き込み先を Jenkins のグローバル環境変数 (CI_FILE_SERVER) として登録する」** にチェックを入れて「Jenkinsに反映」すると、先頭の書き込み先が Jenkins 本体の Global properties（`Manage Jenkins → System → Global properties`）に登録され、別 PC・共有アクセス不可のエージェントにも届きます（単一値・Jenkins 管理者権限が必要）。
 - Git URL のユーザー名は除去され、認証は Jenkins 資格情報（`git.credentialId` ＋ secrets のユーザー/パスワード）で行います。
 
-> **⚠️ `cisetup.local.json` はワークスペースの「ワイプ＋再クローン」で失われることがあります:**
-> このファイルはジョブのワークスペース内（`<ワークスペース>\CISetup\cisetup.local.json`）に置く運用のため、Git チェックアウトが失敗直後に「フレッシュクローン」へフォールバックした場合（例: 一時的な git サーバーエラーで `.git` が不完全な状態になり、Checkout ステージの `retry()` が再チェックアウトする際に git plugin がワークスペースの内容を丸ごと削除して再クローンするケース）、このファイルも一緒に削除され、次のビルドで書き込み先が「未設定」に戻ってしまいます。ビルド自体は `retry()` で成功するため、**成果物が保存されないまま `SUCCESS` になる**という気づきにくい形で発生します。
+> **⚠️ `cisetup.local.json` は毎回の Checkout で一旦消えます:**
+> Jenkins は毎回ワークスペースを削除してから clone します。このファイルはワークスペース内（`<ワークスペース>\CISetup\cisetup.local.json`）に置く運用のため、Checkout の時点では消えます。続く Materialize CISetup が、最後に「Jenkins に反映」したときの内容を展開し直します。反映より後にエージェント上だけで編集した内容は、次のビルドでは戻りません。Checkout が Materialize の前に失敗したビルドでは、このファイルが無いまま後処理が走り、書き込み先が空のままになることがあります。
 > **対策（推奨）:** `cisetup.local.json` と同じ内容を、ワークスペースの**兄弟パス**（ワークスペースの一つ上の階層に `<ワークスペース名>.cisetup.local.json` というファイル名で配置）にも置いてください。例えばワークスペースが `C:\jenkins-agent\workspace\IPU_TEST_APP` であれば、`C:\jenkins-agent\workspace\IPU_TEST_APP.cisetup.local.json` に同じ内容を置きます。このパスはワークスペースの**外側**にあるためワイプの影響を受けず、ワークスペース内の `cisetup.local.json` が失われた場合にのみ自動でフォールバックとして読み込まれます（ワークスペース内にファイルがある場合はそちらが優先されます）。
 >
 > **CISetup アプリを使う場合（同一 PC でエージェントを動かしているとき）:** ③ 保存先セクションにある **「Jenkins エージェントのワークスペースパス」** にエージェントのワークスペース（例: `C:\jenkins-agent\workspace\IPU_TEST_APP`）を入力しておけば、**「設定を保存」時に上記の兄弟パスへ自動配置**されます（手動コピー不要）。その場で配置したいときは同セクションの **「エージェントへ書き込み先設定を配置」ボタン**を押します。この設定は機械固有のため `cisetup.local.json`（git 非追跡）に保存され、Git には push されません。
@@ -1988,7 +1990,7 @@ Console Output の先頭付近に `Waiting for next available executor` や `The
 
 | 症状 | 原因 | 対処 |
 |------|------|------|
-| `error MSB3202`: `vendor\DevicePlatform\...\.csproj` など、サブモジュール先のプロジェクトが見つからない。Checkout 自体は成功している | 親リポジトリだけ checkout していて、サブモジュールの中身がワークスペースに無い | ②「サブモジュールも取得する」をオンにし、**Jenkins に反映してから再ビルド**する。反映前のジョブは `extensions` が空のままなので、アプリ側で submodule 対応をマージしても Checkout は変わらない |
+| `error MSB3202`: `vendor\DevicePlatform\...\.csproj` など、サブモジュール先のプロジェクトが見つからない。Checkout 自体は成功している | 親リポジトリだけ checkout していて、サブモジュールの中身がワークスペースに無い | ②「サブモジュールも取得する」をオンにし、**Jenkins に反映してから再ビルド**する。反映前のジョブには `SubmoduleOption` が無いので、アプリ側で submodule 対応をマージしても Checkout は変わらない |
 | 上記のあと、サブモジュールの `fetch` だけ失敗する | サブモジュール先を、親と同じ Git 認証で読めない | ② のユーザー（既定 Credential `internal-git`）に、サブモジュールのリポジトリを読む権限を付ける。別認証の submodule は未対応 |
 
 ソース zip は Lint より前に作られるため、この失敗でも欠けた zip がファイルサーバーに残ることがあります。サブモジュール取得を直したビルドの zip を正とします。
