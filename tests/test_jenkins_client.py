@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import io
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -149,6 +151,12 @@ def _job_xml(recorder: Recorder) -> str:
         for body in reversed(recorder.bodies)
         if b"flow-definition" in body
     )
+
+
+def _decode_preapprove_script(groovy: str) -> str:
+    body = groovy.split("def encoded = [", 1)[1].split("].join", 1)[0]
+    encoded = "".join(re.findall(r"'([^']*)'", body))
+    return base64.b64decode(encoded).decode("utf-8")
 
 
 def _http_error(url: str, code: int, body: str = "err") -> urllib.error.HTTPError:
@@ -319,10 +327,19 @@ def test_upsert_pipeline_job_preapproves_only_that_script(recorder):
     groovy = urllib.parse.unquote_plus(script_posts[0].decode("utf-8"))
     assert "ScriptApproval.get().preapprove" in groovy
     assert "approveScript" not in groovy
-    encoded = groovy.split("decode('", 1)[1].split("')", 1)[0]
-    approved = __import__("base64").b64decode(encoded).decode("utf-8")
+    approved = _decode_preapprove_script(groovy)
     job_xml = next(body.decode("utf-8") for body in recorder.bodies if "CpsFlowDefinition" in body.decode("utf-8", errors="replace"))
     assert jenkins_client._escape_xml(approved) in job_xml
+
+
+def test_preapprove_script_splits_over_groovy_string_limit():
+    script = "x" * 80_000
+    groovy = jenkins_client._preapprove_pipeline_script(script)
+    body = groovy.split("def encoded = [", 1)[1].split("].join", 1)[0]
+    parts = re.findall(r"'([^']*)'", body)
+    assert len(parts) >= 2
+    assert all(len(part) <= jenkins_client._GROOVY_STRING_CHUNK for part in parts)
+    assert base64.b64decode("".join(parts)).decode("utf-8") == script
 
 
 def test_preapprove_failure_explains_administer(recorder):

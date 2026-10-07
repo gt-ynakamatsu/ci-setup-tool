@@ -510,16 +510,27 @@ loc.save()
 return 'OK: Jenkins URL set to {escaped}'"""
 
 
+# Groovy の文字列リテラルは 65535 文字まで。Jenkinsfile の Base64 はこれを超える。
+_GROOVY_STRING_CHUNK = 50000
+
+
 def _preapprove_pipeline_script(script: str) -> str:
     """保存した Jenkinsfile だけを ScriptApproval.preapprove する Groovy。
 
     スクリプト本文は Base64 で渡し、引用符や改行で Groovy が壊れないようにする。
+    1 つの文字列リテラルにすると上限を超えるため、分割して結合する。
     承認対象はこの文字列のハッシュだけで、pending の全件承認はしない。
     """
     encoded = base64.b64encode(script.encode("utf-8")).decode("ascii")
+    chunks = [
+        encoded[index : index + _GROOVY_STRING_CHUNK]
+        for index in range(0, len(encoded), _GROOVY_STRING_CHUNK)
+    ] or [""]
+    joined = ", ".join(f"'{chunk}'" for chunk in chunks)
     return f"""import org.jenkinsci.plugins.scriptsecurity.scripts.ScriptApproval
 import org.jenkinsci.plugins.scriptsecurity.scripts.languages.GroovyLanguage
-def script = new String(java.util.Base64.decoder.decode('{encoded}'), 'UTF-8')
+def encoded = [{joined}].join('')
+def script = new String(java.util.Base64.decoder.decode(encoded), 'UTF-8')
 ScriptApproval.get().preapprove(script, GroovyLanguage.get())
 return 'preapproved'"""
 
