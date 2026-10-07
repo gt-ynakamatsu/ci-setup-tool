@@ -117,22 +117,28 @@ function Test-PathExcluded {
 }
 
 Write-Host "==> Project: $($ci.ProjectName)"
-Write-Host "==> Restore"
-dotnet restore $ci.SolutionFile | Out-Host
+Add-CiPreviewLangVersionOverride -Root $ci.Root
+try {
+    Write-Host "==> Restore"
+    dotnet restore $ci.SolutionFile | Out-Host
 
-Write-Host "==> Static analysis (Roslyn analyzers: all rules enabled)"
-# プロジェクトファイルを書き換えずに全アナライザーを有効化。ここではビルドを失敗させない。
-$buildOutput = & dotnet build $ci.SolutionFile `
-    -c $Configuration `
-    --no-restore `
-    --nologo `
-    -p:EnableNETAnalyzers=true `
-    -p:AnalysisMode=AllEnabledByDefault `
-    -p:AnalysisLevel=latest `
-    -p:EnforceCodeStyleInBuild=true `
-    -p:RunAnalyzersDuringBuild=true `
-    -p:TreatWarningsAsErrors=false 2>&1
-$buildExit = $LASTEXITCODE
+    Write-Host "==> Static analysis (Roslyn analyzers: all rules enabled)"
+    # プロジェクトファイルを書き換えずに全アナライザーを有効化。ここではビルドを失敗させない。
+    $buildOutput = & dotnet build $ci.SolutionFile `
+        -c $Configuration `
+        --no-restore `
+        --nologo `
+        -p:EnableNETAnalyzers=true `
+        -p:AnalysisMode=AllEnabledByDefault `
+        -p:AnalysisLevel=latest `
+        -p:EnforceCodeStyleInBuild=true `
+        -p:RunAnalyzersDuringBuild=true `
+        -p:TreatWarningsAsErrors=false 2>&1
+    $buildExit = $LASTEXITCODE
+}
+finally {
+    Remove-CiPreviewLangVersionOverride -Root $ci.Root
+}
 $buildOutput | Out-String | Set-Content -Path $rawPath -Encoding UTF8
 
 $patternLoc = '^(?<file>(?:[A-Za-z]:)?[^()]+?)\((?<line>\d+)(?:,\d+)?\):\s+(?<sev>error|warning|info)\s+(?<rule>[A-Za-z]+\d+):\s+(?<msg>.+?)(?:\s+\[[^\]]*\])?\s*$'

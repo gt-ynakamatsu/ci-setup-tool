@@ -189,9 +189,15 @@ if ($Version) {
 
 $mode = if ($singleFile) { 'framework-dependent single-file' } else { 'framework-dependent (library)' }
 Write-Host "==> Publish ($mode, $platformTag)"
-$code = Invoke-CiLogged -LogPath $publishLog -FilePath 'dotnet' -Arguments $publishArgs -Label 'dotnet publish'
-if ($code -ne 0) {
-    throw "dotnet publish failed (exit code $code). 詳細ログ: $publishLog"
+Add-CiPreviewLangVersionOverride -Root $ci.Root
+try {
+    $code = Invoke-CiLogged -LogPath $publishLog -FilePath 'dotnet' -Arguments $publishArgs -Label 'dotnet publish'
+    if ($code -ne 0) {
+        throw "dotnet publish failed (exit code $code). 詳細ログ: $publishLog"
+    }
+}
+finally {
+    Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 
 $prefix = $ci.ArtifactPrefix

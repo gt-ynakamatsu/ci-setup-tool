@@ -520,3 +520,77 @@ function Get-CiSettings {
         CiDir = $layout.CiDir
     }
 }
+
+# device-platform は C# preview 構文を含む。顧客側の修正はすぐ入らないため、
+# サブモジュールのソースは変更せず、コンパイル中だけこのディレクトリ配下の
+# LangVersion を preview にする。ファイルは CISetup の印があるときだけ消し、
+# ソース zip や git の作業ツリーには残さない。
+function Get-CiPreviewLangVersionMarker {
+    return 'CISetup temporary: allow C# preview'
+}
+
+function Get-CiPreviewLangVersionRelPaths {
+    return , @('vendor/DevicePlatform')
+}
+
+function Get-CiPreviewLangVersionDir {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$RelativePath
+    )
+    $parts = @($RelativePath -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    return (Join-PathMulti $Root $parts)
+}
+
+function Test-CiOwnedPreviewFile {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) { return $false }
+    $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+    return ($text -and $text.Contains((Get-CiPreviewLangVersionMarker)))
+}
+
+function Remove-CiPreviewLangVersionOverride {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    foreach ($rel in (Get-CiPreviewLangVersionRelPaths)) {
+        $dir = Get-CiPreviewLangVersionDir -Root $Root -RelativePath $rel
+        foreach ($name in @('Directory.Build.props', 'Directory.Build.targets')) {
+            $path = Join-Path $dir $name
+            if (Test-CiOwnedPreviewFile -Path $path) {
+                Remove-Item -LiteralPath $path -Force
+            }
+        }
+    }
+}
+
+function Add-CiPreviewLangVersionOverride {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $marker = Get-CiPreviewLangVersionMarker
+    $xml = @"
+<Project>
+  <!-- $marker in this directory until upstream builds on stable C#. -->
+  <PropertyGroup>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+</Project>
+"@
+    foreach ($rel in (Get-CiPreviewLangVersionRelPaths)) {
+        $dir = Get-CiPreviewLangVersionDir -Root $Root -RelativePath $rel
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        $props = Join-Path $dir 'Directory.Build.props'
+        $targets = Join-Path $dir 'Directory.Build.targets'
+        $chosen = $null
+        if (-not (Test-Path -LiteralPath $props) -or (Test-CiOwnedPreviewFile -Path $props)) {
+            $chosen = $props
+        }
+        elseif (-not (Test-Path -LiteralPath $targets) -or (Test-CiOwnedPreviewFile -Path $targets)) {
+            $chosen = $targets
+        }
+        else {
+            Write-Warning "LangVersion=preview を入れられません。既存の Directory.Build.props と Directory.Build.targets は変更していません: $dir"
+            continue
+        }
+        $utf8 = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($chosen, ($xml.Trim() + "`r`n"), $utf8)
+        Write-Host "==> LangVersion=preview (temporary): $rel"
+    }
+}

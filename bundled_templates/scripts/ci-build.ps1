@@ -72,16 +72,22 @@ if ($ci.Profile -eq 'custom') {
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"
 
-Write-Host "==> Restore"
-$code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('restore', $ci.SolutionFile) -Label 'dotnet restore'
-if ($code -ne 0) {
-    throw "dotnet restore failed (exit code $code). 詳細ログ: $buildLog"
-}
+Add-CiPreviewLangVersionOverride -Root $ci.Root
+try {
+    Write-Host "==> Restore"
+    $code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('restore', $ci.SolutionFile) -Label 'dotnet restore'
+    if ($code -ne 0) {
+        throw "dotnet restore failed (exit code $code). 詳細ログ: $buildLog"
+    }
 
-Write-Host "==> Build"
-$code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('build', $ci.SolutionFile, '-c', $Configuration, '--no-restore') -Label 'dotnet build'
-if ($code -ne 0) {
-    throw "dotnet build failed (exit code $code). 詳細ログ: $buildLog"
+    Write-Host "==> Build"
+    $code = Invoke-CiLogged -LogPath $buildLog -FilePath 'dotnet' -Arguments @('build', $ci.SolutionFile, '-c', $Configuration, '--no-restore') -Label 'dotnet build'
+    if ($code -ne 0) {
+        throw "dotnet build failed (exit code $code). 詳細ログ: $buildLog"
+    }
+}
+finally {
+    Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 
 Write-Host "Build succeeded."

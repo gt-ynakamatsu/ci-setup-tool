@@ -11,6 +11,9 @@ $ErrorActionPreference = 'Stop'
 $ci = Get-CiSettings
 Set-Location $ci.Root
 
+# 前回ビルドが途中で止まったときに残る一時ファイルを、ソース zip に混ぜない。
+Remove-CiPreviewLangVersionOverride -Root $ci.Root
+
 if (-not $ci.ArchiveSource) {
     Write-Host 'Source archive disabled (storage.archiveSource = false). Skipping.'
     exit 0
