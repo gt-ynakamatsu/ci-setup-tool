@@ -88,7 +88,7 @@ cisetup/
 │   ├── ci_preset_catalog.py … ビルドプリセット定義（.NET / Python など）
 │   ├── jenkins_client.py    … Jenkins API（接続/認証情報/ジョブ/エージェント/ビルド）
 │   ├── teams_service.py     … Teams 通知カードの生成・送信
-│   ├── git_service.py       … リモート最新の取り込み（fetch + ff-only merge。push はしない）
+│   ├── git_service.py       … リモート最新の取り込み（fetch + ff-only merge。サブモジュール取得がオンなら再帰 update。push はしない）
 │   ├── local_ci.py          … ローカルでビルド＆テスト（ci-build/ci-test を実行）
 │   ├── environment_scan.py  … 開発環境スキャン（git/java、.NET SDK か Vivado/Quartus）
 │   ├── recent_project.py    … 直近プロジェクトの記憶

@@ -82,6 +82,7 @@ class FormSyncMixin:
         self._enable_analysis_var.set(c.storage.enable_analysis)
         self._enable_tests_var.set(c.storage.enable_tests)
         self._push_env_var.set(c.jenkins.push_ci_file_server_env)
+        self._checkout_submodules_var.set(bool(c.git.checkout_submodules))
         self._retry_wrapper_var.set(c.jenkins.retry_wrapper_enabled)
         self._on_retry_wrapper_changed()
         is_custom = c.build.profile.lower() == "custom"
@@ -154,6 +155,7 @@ class FormSyncMixin:
         c.git.repository_url = get("git.repository_url")
         c.git.branch = get("git.branch")
         c.git.credential_id = get("git.credential_id")
+        c.git.checkout_submodules = bool(self._checkout_submodules_var.get())
 
         is_custom = self._profile_var.get().startswith("カスタム")
         c.build.profile = "custom" if is_custom else "dotnet"

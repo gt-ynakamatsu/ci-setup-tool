@@ -38,6 +38,20 @@ def test_form_roundtrip(app):
     assert app._config.jenkins.build_timeout_minutes == 45
 
 
+def test_checkout_submodules_form_roundtrip(app):
+    assert app._config.git.checkout_submodules is False
+    app._checkout_submodules_var.set(True)
+    app._form_to_config()
+    assert app._config.git.checkout_submodules is True
+    app._config.git.checkout_submodules = False
+    app._loading = True
+    try:
+        app._config_to_form()
+    finally:
+        app._loading = False
+    assert app._checkout_submodules_var.get() is False
+
+
 def test_agent_workspace_path_form_roundtrip(app):
     app._fields["jenkins.agent_workspace_path"].set(r"C:\jenkins-agent\workspace\App")
     app._form_to_config()

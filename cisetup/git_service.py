@@ -83,12 +83,20 @@ def _current_branch(repository_root: Path) -> str:
     return name
 
 
-def pull_latest(repository_root: Path, branch: str = "", remote: str = "origin") -> str:
+def pull_latest(
+    repository_root: Path,
+    branch: str = "",
+    remote: str = "origin",
+    checkout_submodules: bool = False,
+) -> str:
     """リモートの最新を取り込む（fetch → fast-forward マージ）。
 
     :param repository_root: リポジトリルート。
     :param branch: 取り込むブランチ。空なら現在のブランチ。
     :param remote: リモート名（既定 ``origin``）。
+    :param checkout_submodules: true のとき、マージ後に
+        ``git submodule update --init --recursive`` を実行する。
+        親が既に最新でもサブモジュールは取り込む。
     :return: 実行結果の要約（画面表示用）。
     """
     if not (repository_root / ".git").is_dir():
@@ -116,6 +124,19 @@ def pull_latest(repository_root: Path, branch: str = "", remote: str = "origin")
         ) from exc
 
     after = _run_git(repository_root, LOCAL_GIT_TIMEOUT, "rev-parse", "HEAD")
+    submodule_note = ""
+    if checkout_submodules:
+        _run_git(
+            repository_root,
+            REMOTE_GIT_TIMEOUT,
+            "submodule",
+            "update",
+            "--init",
+            "--recursive",
+        )
+        submodule_note = "サブモジュールを取り込みました。"
     if before == after:
-        return f"{remote}/{target} は既に最新です。"
-    return f"{remote}/{target} の最新を取り込みました（{before[:7]} → {after[:7]}）。"
+        base = f"{remote}/{target} は既に最新です。"
+        return f"{base}{submodule_note}"
+    base = f"{remote}/{target} の最新を取り込みました（{before[:7]} → {after[:7]}）。"
+    return f"{base}{submodule_note}"

@@ -46,7 +46,8 @@
   "git": {
     "repositoryUrl": "https://git.example.com/team/YourProject.git",
     "branch": "main",
-    "credentialId": "internal-git"
+    "credentialId": "internal-git",
+    "checkoutSubmodules": false
   },
   "build": {
     "preset": "dotnet",

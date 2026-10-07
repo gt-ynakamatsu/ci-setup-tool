@@ -37,14 +37,29 @@ def _escape_groovy(value: str) -> str:
 
 
 def build_git_checkout_groovy(config) -> str:
-    """アプリの Git からソースだけを取る checkout（ジョブ SCM に依存しない）。"""
+    """アプリの Git からソースを取る checkout（ジョブ SCM に依存しない）。
+
+    ``git.checkoutSubmodules`` がオンのときだけ、親リポジトリと同じ認証で
+    サブモジュールを再帰取得する。オフのときは extensions を空のままにする。
+    """
     url = _escape_groovy(config.git.repository_url)
     cred = _escape_groovy(config.git.credential_id)
     branch = _escape_groovy(config.git.branch or "main")
+    if config.git.checkout_submodules:
+        extensions = """[
+                            [$class: 'SubmoduleOption',
+                                disableSubmodules: false,
+                                recursiveSubmodules: true,
+                                parentCredentials: true,
+                                trackingSubmodules: false,
+                                reference: '']
+                        ]"""
+    else:
+        extensions = "[]"
     return f"""                    checkout([
                         $class: 'GitSCM',
                         branches: [[name: '*/{branch}']],
-                        extensions: [],
+                        extensions: {extensions},
                         userRemoteConfigs: [[
                             url: '{url}',
                             credentialsId: '{cred}'

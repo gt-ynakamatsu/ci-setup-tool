@@ -162,6 +162,7 @@ Jenkins 導入・Teams Webhook・アプリ操作をスライド形式で網羅�
 | `AGENT_LABEL` | ラベル（迷ったら空欄） | （空欄） |
 | `GIT_URL` | リポジトリ URL | `https://git.../MyApp.git` |
 | `GIT_BRANCH` | 対象ブランチ | `master` |
+| `GIT_SUBMODULES` | サブモジュールも取得するか | 既定オフ。先方が submodule 化したリポジトリだけオン |
 | `GIT_USER` / `GIT_PAT` | 認証 | — |
 | `TEAMS_WEBHOOK` | Webhook URL | `https://...` |
 | `PROJECT_FOLDER` | `.sln` があるフォルダ | `C:\work\MyApp` |
@@ -229,7 +230,7 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 | STEP | 作業 | どこで | ゲート |
 |------|------|--------|--------|
 | **D-1** | 設定アプリ ① プロジェクトフォルダ選択 | 開発 PC | `Jenkinsfile` / `scripts/` がフォルダに配置される |
-| **D-2** | 設定アプリ ② Git URL / ブランチ / 認証 | 開発 PC | ブランチ = マージ検知したいブランチ |
+| **D-2** | 設定アプリ ② Git URL / ブランチ / 認証。submodule 利用時は「サブモジュールも取得する」をオン | 開発 PC | ブランチ = マージ検知したいブランチ。submodule 利用時はチェックがオン |
 | **D-3** | 設定アプリ ③ 保存先 = `FILE_SHARE` | 開発 PC | プレビューに UNC パス表示 |
 | **D-4** | 設定アプリ ④ Teams Webhook + **テスト送信** | 開発 PC | Teams にテストカードが届く |
 | **D-5** | 設定アプリ ⑤ 接続テスト（再確認） | 開発 PC | 成功 |
@@ -280,7 +281,7 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 
 | タイミング | 処理 |
 |-----------|------|
-| 毎日 0:00（cron 設定可） | 社内 Git から最新ソースを pull してビルド |
+| 毎日 0:00（cron 設定可） | 社内 Git から最新ソースを pull してビルド。サブモジュールは ② の「サブモジュールも取得する」がオンのプロジェクトだけ再帰取得する |
 | **master / main へマージ（push）時** | pollSCM が変更を検知して自動ビルド（既定 約5分ごとに確認） |
 | **手動実行** | CISetup アプリの「今すぐビルド」ボタン、または Jenkins / API から任意に実行 |
 | ビルド後（毎回） | **静的解析でバグの可能性を自動検出し、危険度別にレポート化（HTML / Markdown / CSV）** |
@@ -1471,8 +1472,20 @@ cd C:\Jenkins
 |----|------|------|
 | リポジトリ URL | `GIT_URL` | `https://...git` 形式 |
 | ブランチ | `GIT_BRANCH` | **自動ビルドしたいブランチ**（例: `master`） |
+| サブモジュールも取得する | `git.checkoutSubmodules` | 既定オフ。先方リポジトリが submodule のときだけオン。オンにすると親と同じ認証で再帰取得する |
 | ユーザー名 | `GIT_USER` | |
 | パスワード / トークン | `GIT_PAT` | PAT 推奨。`cisetup.secrets.local.json` にのみ保存 |
+
+**サブモジュールを使うリポジトリ（先方の要望で submodule 化している場合）**
+
+既定のままでは、Jenkins も「最新の取り込み」も親リポジトリだけ取得します。`vendor\` 以下が別リポジトリになっていると、ソリューションが参照する `.csproj` がワークスペースに無く、Lint の `dotnet restore` が MSB3202 で失敗します。そのプロジェクトだけ、次の手順にします。
+
+1. ② の **「サブモジュールも取得する」** をオンにする（`cisetup.config.json` の `git.checkoutSubmodules`）。サブモジュールが無いプロジェクトはオフのままにする。
+2. サブモジュールの URL が、② のユーザー（Jenkins の Git Credential、既定 `internal-git`）で読めることを確認する。別ホスト・別認証の submodule には対応しない。
+3. **「設定を保存」または「セットアップを実行」で Jenkins に反映する。** checkout の定義はジョブに内蔵されているため、反映前のジョブは親だけ取得したままになる。
+4. テストビルドの Console Output で、Checkout がサブモジュールまで取っていることを確認する。手元の「最新の取り込み」も同じフラグで `git submodule update --init --recursive` を実行する（親が既に最新でもサブモジュールは取り込む）。
+
+オフのまま Lint まで進むと、Archive Source は Lint より前に走るため、サブモジュールが欠けたソース zip がファイルサーバーに保存されることがあります。
 
 #### ③ 保存先（STEP D-3）
 
@@ -1573,6 +1586,7 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 
 > **最初に最新を取り込みます:** 古いコードをテストしても意味がないため、② のブランチの最新を
 > `git fetch` → `git merge --ff-only` で取り込んでからビルド＆テストします。**push はしません。**
+> ② の「サブモジュールも取得する」がオンなら、続けて `git submodule update --init --recursive` を実行します。
 > リモートと分岐している（手元に未 push のコミットがある）場合はエラーになるので、
 > `git status` を確認して commit / stash か `git pull --rebase` で解決してから再実行してください。
 
@@ -1603,6 +1617,7 @@ OneDrive のパスには個人名 ID（`C:\Users\<個人名>\...`）が、Kallit
 |------|-----------|
 | 接続テスト失敗 | B-5 / D-5（Token・URL） |
 | Jenkins 反映で Git URL エラー | ② のリポジトリ URL（Jenkins がアプリソースを checkout するため） |
+| Lint で MSB3202（`vendor\...\.csproj` が無い） | ②「サブモジュールも取得する」がオフ、またはオンにしたあと Jenkins に未反映（[15](#lint-で-msb3202プロジェクト-ファイルが見つからない)） |
 | セットアップ後ビルドが始まらない | GATE C（エージェント Offline） |
 
 ---
@@ -1664,6 +1679,7 @@ LDAP は認証だけ。Jenkins 上の Job/Build 権限は Authorization で別�
 1. exe「セットアップを実行」後 **「テストビルドを実行しますか？」→ はい**  
    または Jenkins → ジョブ → **Build Now** / exe「今すぐビルド」
 2. **ゲート:** Console Output 末尾が `Finished: SUCCESS`
+3. サブモジュールを使うプロジェクトは、Checkout のログにサブモジュール取得が出ていること。`vendor\` 配下の `.csproj` 不足で MSB3202 になる場合は [15](#lint-で-msb3202プロジェクト-ファイルが見つからない)
 
 ### 11.2 Teams（STEP E-2）
 
@@ -1833,6 +1849,7 @@ Phase 6（exe ①〜⑥）だけ繰り返す。ジョブ名はフォルダを選
 | `storage.sourceDir` | ソース zip の保存サブフォルダ名（既定 `source`） |
 | `git.repositoryUrl` | `https://git.../MyApp.git` |
 | `git.branch` | `master`（マージ検知の対象ブランチ） |
+| `git.checkoutSubmodules` | `true`/`false`。サブモジュールを再帰取得するか（既定 `false`。オンのとき Jenkins Checkout と「最新の取り込み」が親と同じ認証で取得する） |
 
 > 書き込み先（`jenkins.ciFileServers` / `storage.basePaths`）および Teams 閲覧 URL（`storage.releaseUrls` 等）は `cisetup.config.json` には**空配列**で出力され、実値は `cisetup.local.json` に保持されます（下表）。旧単一キー（`ciFileServer` / `basePath` / `releaseUrl` …）も読み込み時に配列へ正規化されます。
 
@@ -1966,6 +1983,15 @@ Console Output の先頭付近に `Waiting for next available executor` や `The
 - 設定アプリ ④ Teams「テスト送信」
 - 設定アプリ 詳細設定「ファイルサーバー書き込みテスト」
 - Jenkins Console Output で Git エラー確認
+
+### Lint で MSB3202（プロジェクト ファイルが見つからない）
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| `error MSB3202`: `vendor\DevicePlatform\...\.csproj` など、サブモジュール先のプロジェクトが見つからない。Checkout 自体は成功している | 親リポジトリだけ checkout していて、サブモジュールの中身がワークスペースに無い | ②「サブモジュールも取得する」をオンにし、**Jenkins に反映してから再ビルド**する。反映前のジョブは `extensions` が空のままなので、アプリ側で submodule 対応をマージしても Checkout は変わらない |
+| 上記のあと、サブモジュールの `fetch` だけ失敗する | サブモジュール先を、親と同じ Git 認証で読めない | ② のユーザー（既定 Credential `internal-git`）に、サブモジュールのリポジトリを読む権限を付ける。別認証の submodule は未対応 |
+
+ソース zip は Lint より前に作られるため、この失敗でも欠けた zip がファイルサーバーに残ることがあります。サブモジュール取得を直したビルドの zip を正とします。
 
 ### Test ステージで「テスト ソース ファイルが見つかりません」
 

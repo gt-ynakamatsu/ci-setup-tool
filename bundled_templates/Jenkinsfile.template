@@ -109,7 +109,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // 顧客 Git からアプリソースのみ取得（ジョブ SCM / 顧客リポジトリ上の Jenkinsfile は使わない）。
+                // 顧客 Git からアプリソースを取得（ジョブ SCM / 顧客リポジトリ上の Jenkinsfile は使わない）。
+                // git.checkoutSubmodules がオンのときだけ、extensions でサブモジュールを再帰取得する。
                 retry({{CHECKOUT_RETRY_COUNT}}) {
 {{GIT_CHECKOUT}}
                 }

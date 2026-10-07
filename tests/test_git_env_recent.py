@@ -81,6 +81,24 @@ def test_pull_latest_diverged_reports_manual_fix(tmp_path: Path, monkeypatch):
         git_service.pull_latest(tmp_path, "main")
 
 
+def test_pull_latest_skips_submodules_by_default(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit()
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    git_service.pull_latest(tmp_path, "main")
+    assert ["submodule", "update", "--init", "--recursive"] not in fake.commands
+
+
+def test_pull_latest_updates_submodules_when_requested(tmp_path: Path, monkeypatch):
+    (tmp_path / ".git").mkdir()
+    fake = FakeGit(revs=["aaaaaaaaaaaa", "aaaaaaaaaaaa"])
+    monkeypatch.setattr(subprocess, "run", fake.run)
+    summary = git_service.pull_latest(tmp_path, "main", checkout_submodules=True)
+    assert ["submodule", "update", "--init", "--recursive"] in fake.commands
+    assert "既に最新" in summary
+    assert "サブモジュールを取り込みました" in summary
+
+
 def test_pull_latest_never_pushes(tmp_path: Path, monkeypatch):
     (tmp_path / ".git").mkdir()
     fake = FakeGit()

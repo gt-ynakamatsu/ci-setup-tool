@@ -46,7 +46,7 @@ CISetup が行うことは大きく次の 3 つに分けられる。
 
 1. **CI 定義の生成** — 作業用に `CISetup\` を置きつつ、**正本は Jenkins ジョブへ内蔵**する（アプリの Git への CI 定義 push は不要）。
 2. **Jenkins への反映** — 資格情報登録、内蔵パイプライン・ジョブの作成/更新、任意でビルド起動。
-3. **アプリソースの Git** — アプリの Git からはアプリ本体だけ checkout する（CISetup の Jenkinsfile は使わない）。
+3. **アプリソースの Git** — アプリの Git からソースを checkout する（CISetup の Jenkinsfile は使わない）。サブモジュールは `git.checkoutSubmodules` がオンのプロジェクトだけ、親と同じ認証で再帰取得する。
 
 配置された CI 定義は Jenkins 上で動作し、ビルド・テスト・静的解析・成果物生成を行い、
 結果をファイルサーバーへ配置し、Teams へ通知する。
@@ -243,7 +243,7 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `jenkinsfile_generator.py` | テンプレートのプレースホルダ置換で `Jenkinsfile` を生成 | `generate_jenkinsfile`、`build_agent_declaration` |
 | `jenkins_client.py` | Jenkins API（接続・Crumb・資格情報 upsert・ジョブ upsert・ビルド起動・サーバー初回設定）、ファイルサーバー書き込みテスト | `JenkinsClient`、`apply_settings`、`test_file_server_write`、`extract_agent_secret`、`format_jenkins_error` |
 | `teams_service.py` | Teams アダプティブカード（テスト送信）の生成と送信、URL 検証 | `send_test`、`build_test_card_payload`、`validate_url`、`normalize_url` |
-| `git_service.py` | リモート最新の取り込み（`fetch` → `merge --ff-only`）。push はしない | `pull_latest`、`GitError`、`GitTimeout` |
+| `git_service.py` | リモート最新の取り込み（`fetch` → `merge --ff-only`）。`checkoutSubmodules` がオンなら `submodule update --init --recursive`。push はしない | `pull_latest`、`GitError`、`GitTimeout` |
 | `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1`（→ `ci-publish.ps1`）をローカルで実行（このモジュール自体は git を呼ばない）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
 | `environment_scan.py` | Git / Java / Jenkins サービスと、種類別のビルドツール（.NET SDK 8 か Vivado / Quartus）の有無チェック | `scan(preset_id)`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
@@ -523,6 +523,7 @@ Jenkins 管理者権限（Groovy 実行）が必要。Groovy へ埋め込む値�
 | `repository_url` | `repositoryUrl` | str | `""` | clone 用 URL。保存時に埋め込みユーザー情報を除去 | config |
 | `branch` | `branch` | str | `"main"` | CI 対象ブランチ | config |
 | `credential_id` | `credentialId` | str | `"internal-git"` | Git 認証の Jenkins Credential ID | config |
+| `checkout_submodules` | `checkoutSubmodules` | bool | `false` | オンのときだけ Checkout と最新の取り込みがサブモジュールを再帰取得する。親と同じ認証を使う | config |
 
 ### 6.5 `BuildConfig`（JSON: `build`）
 
@@ -877,6 +878,8 @@ CI 定義は Jenkins ジョブに内蔵するため、アプリの Git への CI
 ボタン単独でも同様）。`--ff-only` に限定して履歴を書き換えず、リモートと分岐している場合は
 `GitError` で手動解決を促す。ブランチは `config.git.branch`、未設定なら現在のブランチ
 （detached HEAD はエラー）。fetch はリモート通信のため 120 秒、ローカル操作は 30 秒でタイムアウトする。
+`git.checkoutSubmodules` がオンのときは、親が既に最新でも続けて
+`git submodule update --init --recursive` を実行する（タイムアウトは fetch と同じ 120 秒）。
 
 **ローカルでビルド＆テスト**は、配置済みの `CISetup\scripts\ci-build.ps1` →
 `ci-test.ps1` を `local_ci.run_local_ci` でこの PC でそのまま実行する。`local_ci` 自体は git を
@@ -1014,15 +1017,21 @@ sequenceDiagram
 空値（Webhook 未設定・Git ユーザー名未設定）はスキップする。HTTP エラーは
 `format_jenkins_error` で 401/403 を分かりやすい日本語メッセージに整形する。
 
-### 9.5 Git（アプリのリポジトリの checkout のみ）
+### 9.5 Git（アプリのリポジトリの checkout）
 
-GUI からアプリの Git へ CI 定義を commit / push する機能はない（`git_service` は廃止）。
-② で入力する Git URL / ブランチ / 認証は、Jenkins ジョブがアプリソースを checkout するためだけに使う。
+GUI からアプリの Git へ CI 定義を commit / push する機能はない。
+② の Git URL / ブランチ / 認証は、最新の取り込みと、Jenkins ジョブがアプリソースを checkout するために使う。
+`git.checkoutSubmodules` がオフ（既定）のときは親リポジトリだけ取得する。
+オンのときは、生成する checkout の `extensions` に `SubmoduleOption`
+（`disableSubmodules: false`、`recursiveSubmodules: true`、`parentCredentials: true`）が入り、
+手元の取り込みも `git submodule update --init --recursive` を実行する。
+サブモジュール先は親と同じ Credential で読む。別認証は持たない。
 `cisetup.local.json` と secrets は `.gitignore` により Git 非追跡のまま残る。
 
 ### 9.6 Jenkins 上の CI パイプライン実行
 
 実際のステージ順（`Jenkinsfile.template`）は次のとおり。**Archive Source は Prepare の直後**に走る点に注意。
+Checkout はジョブに埋め込んだ `GitSCM` である。`git.checkoutSubmodules` がオンのときだけ `extensions` に `SubmoduleOption` が入る。
 
 ```mermaid
 sequenceDiagram
@@ -1335,7 +1344,7 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 | Teams Credential ID | `jenkins.teamsCredentialId` | config |
 | タイムゾーン | `jenkins.timezone` | config |
 | ビルドタイムアウト / ログ保持 | `jenkins.buildTimeoutMinutes` / `logRetentionCount` | config |
-| Git リポジトリ URL / ブランチ / Credential ID | `git.repositoryUrl` / `branch` / `credentialId` | config |
+| Git リポジトリ URL / ブランチ / Credential ID / サブモジュール取得 | `git.repositoryUrl` / `branch` / `credentialId` / `checkoutSubmodules` | config |
 | ビルド種別 / 各コマンド / glob | `build.profile` ほか `build.*` | config |
 | Jenkins URL / ユーザー / API Token | `jenkinsUrl` / `jenkinsUser` / `jenkinsApiToken` | **secrets** |
 | Git ユーザー名 / パスワード | `gitUsername` / `gitPassword` | **secrets** |

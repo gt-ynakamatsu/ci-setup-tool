@@ -229,6 +229,15 @@ SECRETS_EXAMPLE = (
 )
 
 
+def test_checkout_submodules_defaults_off_and_roundtrips():
+    assert config_from_dict({}).git.checkout_submodules is False
+    assert config_from_dict({"git": {"branch": "master"}}).git.checkout_submodules is False
+    cfg = config_from_dict({"git": {"checkoutSubmodules": True, "branch": "master"}})
+    assert cfg.git.checkout_submodules is True
+    assert config_to_dict(cfg)["git"]["checkoutSubmodules"] is True
+    assert config_from_dict(config_to_dict(cfg)).git.checkout_submodules is True
+
+
 def test_snake_camel_conversions():
     assert _snake_to_camel("solution_file") == "solutionFile"
     assert _snake_to_camel("build_timeout_minutes") == "buildTimeoutMinutes"

@@ -367,6 +367,16 @@ GIT_BRANCH = (
     "【保存先】cisetup.config.json → git.branch"
 )
 
+GIT_CHECKOUT_SUBMODULES = (
+    "【何を】Checkout と「最新の取り込み」で git submodule も再帰的に取得するか\n"
+    "【なぜ】先方の要望でベンダーなどを submodule にしたリポジトリは、"
+    "親だけだとソリューションが参照するプロジェクトが無くビルドできないため\n"
+    "【既定】オフ。サブモジュールが無いプロジェクトは親リポジトリだけ取得する\n"
+    "【オンのとき】Jenkins は親と同じ Git 認証で再帰取得する。"
+    "手元の取り込みも git submodule update --init --recursive を実行する\n"
+    "【保存先】cisetup.config.json → git.checkoutSubmodules"
+)
+
 GIT_USERNAME = (
     "【何を】社内 Git にログインするユーザー名\n"
     "【なぜ】Jenkins がリポジトリを clone する際の認証に使います（Git には保存されません）\n"

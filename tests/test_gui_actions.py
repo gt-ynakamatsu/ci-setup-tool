@@ -213,18 +213,21 @@ def test_run_setup_completion_popup_omits_customer_wording(app, fake_jenkins, mo
 
 def test_run_setup_pulls_configured_branch(app, fake_jenkins, monkeypatch):
     captured = {}
-    monkeypatch.setattr(
-        deps_mod.git_service,
-        "pull_latest",
-        lambda root, branch: captured.setdefault("args", (root, branch)) or "ok",
-    )
+
+    def fake_pull(root, branch="", remote="origin", checkout_submodules=False):
+        captured["args"] = (root, branch, checkout_submodules)
+        return "ok"
+
+    monkeypatch.setattr(deps_mod.git_service, "pull_latest", fake_pull)
     monkeypatch.setattr(deps_mod, "run_local_ci", lambda *a, **k: None)
     monkeypatch.setattr(deps_mod, "apply_settings", lambda *a, **k: None)
     _set_jenkins_secrets(app)
     app._fields["git.repository_url"].set("http://git/x.git")
     app._fields["git.branch"].set("develop")
+    app._checkout_submodules_var.set(True)
     app._run_setup()
     assert captured["args"][1] == "develop"
+    assert captured["args"][2] is True
 
 
 def test_run_setup_stops_when_pull_fails(app, fake_jenkins, monkeypatch):

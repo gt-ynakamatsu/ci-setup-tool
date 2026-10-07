@@ -214,7 +214,11 @@ class ActionsMixin:
         実行ログ欄はここで初期化する。後続のビルド＆テストは同じ欄へ追記していく。
         """
         self.after(0, lambda: self._set_text(self._run_log_text, ""))
-        summary = deps.git_service.pull_latest(root, self._config.git.branch)
+        summary = deps.git_service.pull_latest(
+            root,
+            self._config.git.branch,
+            checkout_submodules=self._config.git.checkout_submodules,
+        )
         self.after(0, lambda: self._append_text(self._run_log_text, f"==> {summary}"))
     def _local_build_test_only(self) -> None:
         root = self._ensure_repo()

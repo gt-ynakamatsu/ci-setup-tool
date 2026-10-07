@@ -150,6 +150,9 @@ class GitConfig:
     repository_url: str = ""
     branch: str = "main"
     credential_id: str = "internal-git"
+    # true のときだけ Checkout と「最新の取り込み」がサブモジュールを再帰取得する。
+    # 先方リポジトリが submodule 化したプロジェクト向け。既定はオフ（親リポジトリのみ）。
+    checkout_submodules: bool = False
 
 
 @dataclass

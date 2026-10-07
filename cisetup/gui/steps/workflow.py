@@ -103,6 +103,26 @@ class WorkflowStepsMixin:
         hint_label(frame, "ビルド対象のブランチ。例: main または master（このブランチへのマージで自動ビルドされます）").pack(
             anchor="w", padx=(150, 0)
         )
+        sub_row = tk.Frame(frame, bg=COLOR_CARD_BG)
+        sub_row.pack(fill=tk.X, pady=(8, 0))
+        self._checkout_submodules_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            sub_row,
+            text="サブモジュールも取得する",
+            variable=self._checkout_submodules_var,
+            command=self._on_field_changed,
+            font=font(12),
+            bg=COLOR_CARD_BG,
+            activebackground=COLOR_CARD_BG,
+        ).pack(side=tk.LEFT)
+        help_icon(sub_row, help_texts.GIT_CHECKOUT_SUBMODULES, bg=COLOR_CARD_BG).pack(
+            side=tk.LEFT, padx=(4, 0)
+        )
+        hint_label(
+            frame,
+            "先方リポジトリが git submodule で部品を分けている場合だけオン（既定オフ）。"
+            "オンにすると Jenkins と「最新の取り込み」が、親と同じ認証で再帰的に取得します。",
+        ).pack(anchor="w", padx=(24, 0))
         self._add_field(frame, "secrets.git_username", "ユーザー名", help_texts.GIT_USERNAME, label_width=16)
         self._add_field(frame, "secrets.git_password", "パスワード / トークン", help_texts.GIT_PASSWORD, label_width=16)
         hint_label(frame, "社内 Git のパスワード、または個人アクセストークン (PAT)。Git には保存されません。").pack(

@@ -709,6 +709,7 @@ Jenkins 基盤（Phase 1〜5）は **共通**
 |------|------|
 | `windows` で待ったまま | エージェント Offline / ラベル不一致 |
 | Git checkout 失敗 | Credential / ネットワーク |
+| `MSB3202` で `vendor\...\.csproj` が無い | ②「サブモジュールも取得する」をオンにして Jenkins に反映。既定は親リポジトリのみ |
 | Teams 届かない | Webhook URL / ワークフロー ON |
 | UNC 書き込み失敗 | エージェントアカウントの共有権限 |
 

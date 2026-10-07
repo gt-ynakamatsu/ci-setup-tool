@@ -43,10 +43,11 @@ flowchart LR
 - **テストが落ちると CI も失敗扱い**になります（Teams のログリンクから確認 → 修正 → 再 push）。
 - **整形（whitespace）の警告**は通常ビルドを止めませんが、気になる場合はローカルで `dotnet format` を実行してください。
 - CI の定義（`CISetup/` 配下の Jenkinsfile やスクリプト）を勝手に編集すると挙動が変わります。変更が必要なときは CI 管理者に相談してください。
+- **サブモジュールで部品を分けているリポジトリ**では、親だけ clone / pull すると `vendor\` 以下のプロジェクトが無く、ビルドできません。手元では `git submodule update --init --recursive` を実行してください。CI 側は管理者が「サブモジュールも取得する」をオンにして Jenkins に反映している必要があります。
 
 ## ローカルで事前確認したいとき
 
-push 前に手元で同じビルド/テストを回せます（スクリプト自体は git を触りません。最新で試すときは先に `git pull` してください）:
+push 前に手元で同じビルド/テストを回せます（スクリプト自体は git を触りません。最新で試すときは先に `git pull` してください。サブモジュールを使うリポジトリは、続けて `git submodule update --init --recursive` も実行してください）:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\CISetup\scripts\ci-build.ps1 -Configuration Release

@@ -409,3 +409,20 @@ def test_generated_jenkinsfile_has_no_empty_triggers_block(tmp_path: Path):
     assert "{{CRON_TRIGGER_LINE}}" not in text
     assert "{{GIT_CHECKOUT}}" not in text
     assert "{{CISETUP_PACK_B64}}" not in text
+    assert "extensions: []" in text
+    assert "SubmoduleOption" not in text
+
+
+def test_generate_jenkinsfile_checkout_submodules_when_enabled(tmp_path: Path):
+    template = read_template("Jenkinsfile.template")
+    cfg = CISetupConfig()
+    cfg.git.checkout_submodules = True
+    cfg.git.credential_id = "internal-git"
+    out = tmp_path / "Jenkinsfile"
+    generate_jenkinsfile(template, out, cfg)
+    text = out.read_text(encoding="utf-8")
+    assert "SubmoduleOption" in text
+    assert "recursiveSubmodules: true" in text
+    assert "parentCredentials: true" in text
+    assert "disableSubmodules: false" in text
+    assert "extensions: []" not in text
