@@ -522,24 +522,17 @@ function Get-CiSettings {
 }
 
 # device-platform は C# preview 構文を含む。顧客側の修正はすぐ入らないため、
-# サブモジュールのソースは変更せず、コンパイル中だけこのディレクトリ配下の
-# LangVersion を preview にする。ファイルは CISetup の印があるときだけ消し、
-# ソース zip や git の作業ツリーには残さない。
+# サブモジュールの Directory.Build.* は変更しない。コンパイル中だけ、
+# プロジェクトパスに DevicePlatform を含むものへ LangVersion=preview を足す。
+# 既存の Directory.Build.props があるとサブモジュール直下のファイルは読まれないため、
+# MSBuild が全プロジェクトの後段で読む CustomAfterDirectoryBuildTargets を使う。
 function Get-CiPreviewLangVersionMarker {
     return 'CISetup temporary: allow C# preview'
 }
 
-function Get-CiPreviewLangVersionRelPaths {
-    return , @('vendor/DevicePlatform')
-}
-
-function Get-CiPreviewLangVersionDir {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$RelativePath
-    )
-    $parts = @($RelativePath -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    return (Join-PathMulti $Root $parts)
+function Get-CiPreviewLangVersionTargetsPath {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    return (Join-PathMulti $Root @('artifacts', 'ci', 'device-platform-langversion.targets'))
 }
 
 function Test-CiOwnedPreviewFile {
@@ -551,46 +544,30 @@ function Test-CiOwnedPreviewFile {
 
 function Remove-CiPreviewLangVersionOverride {
     param([Parameter(Mandatory = $true)][string]$Root)
-    foreach ($rel in (Get-CiPreviewLangVersionRelPaths)) {
-        $dir = Get-CiPreviewLangVersionDir -Root $Root -RelativePath $rel
-        foreach ($name in @('Directory.Build.props', 'Directory.Build.targets')) {
-            $path = Join-Path $dir $name
-            if (Test-CiOwnedPreviewFile -Path $path) {
-                Remove-Item -LiteralPath $path -Force
-            }
-        }
+    Remove-Item Env:CustomAfterDirectoryBuildTargets -ErrorAction SilentlyContinue
+    $path = Get-CiPreviewLangVersionTargetsPath -Root $Root
+    if (Test-CiOwnedPreviewFile -Path $path) {
+        Remove-Item -LiteralPath $path -Force
     }
 }
 
 function Add-CiPreviewLangVersionOverride {
     param([Parameter(Mandatory = $true)][string]$Root)
+    $path = Get-CiPreviewLangVersionTargetsPath -Root $Root
+    $dir = Split-Path -Parent $path
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $marker = Get-CiPreviewLangVersionMarker
+    # $(...) は PowerShell が展開しないよう `$ にする。MSBuild 側のプロパティ参照として残す。
     $xml = @"
 <Project>
-  <!-- $marker in this directory until upstream builds on stable C#. -->
-  <PropertyGroup>
+  <!-- $marker until upstream builds on stable C#. -->
+  <PropertyGroup Condition="`$(MSBuildProjectFullPath.Contains('DevicePlatform'))">
     <LangVersion>preview</LangVersion>
   </PropertyGroup>
 </Project>
 "@
-    foreach ($rel in (Get-CiPreviewLangVersionRelPaths)) {
-        $dir = Get-CiPreviewLangVersionDir -Root $Root -RelativePath $rel
-        if (-not (Test-Path -LiteralPath $dir)) { continue }
-        $props = Join-Path $dir 'Directory.Build.props'
-        $targets = Join-Path $dir 'Directory.Build.targets'
-        $chosen = $null
-        if (-not (Test-Path -LiteralPath $props) -or (Test-CiOwnedPreviewFile -Path $props)) {
-            $chosen = $props
-        }
-        elseif (-not (Test-Path -LiteralPath $targets) -or (Test-CiOwnedPreviewFile -Path $targets)) {
-            $chosen = $targets
-        }
-        else {
-            Write-Warning "LangVersion=preview を入れられません。既存の Directory.Build.props と Directory.Build.targets は変更していません: $dir"
-            continue
-        }
-        $utf8 = New-Object System.Text.UTF8Encoding $false
-        [System.IO.File]::WriteAllText($chosen, ($xml.Trim() + "`r`n"), $utf8)
-        Write-Host "==> LangVersion=preview (temporary): $rel"
-    }
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($path, ($xml.Trim() + "`r`n"), $utf8)
+    $env:CustomAfterDirectoryBuildTargets = $path
+    Write-Host "==> LangVersion=preview (temporary, DevicePlatform): $path"
 }

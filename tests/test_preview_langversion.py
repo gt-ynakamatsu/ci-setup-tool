@@ -12,7 +12,8 @@ from cisetup import template_store
 def test_compile_scripts_apply_and_remove_preview_override():
     scripts = template_store.bundled_template_dir() / "scripts"
     config = (scripts / "ci-config.ps1").read_text(encoding="utf-8-sig")
-    assert "vendor/DevicePlatform" in config
+    assert "CustomAfterDirectoryBuildTargets" in config
+    assert "DevicePlatform" in config
     assert "function Add-CiPreviewLangVersionOverride" in config
     assert "function Remove-CiPreviewLangVersionOverride" in config
     for name in ("ci-lint.ps1", "ci-build.ps1", "ci-test.ps1", "ci-publish.ps1", "ci-analyze.ps1"):
@@ -64,16 +65,15 @@ def test_preview_override_is_scoped_and_removed(tmp_path: Path):
         )
         assert proc.returncode == 0, proc.stderr + proc.stdout
 
+    override = tmp_path / "artifacts" / "ci" / "device-platform-langversion.targets"
     run("add")
     assert customer_props.read_text(encoding="utf-8") == "<Project />\n"
     assert customer_targets.read_text(encoding="utf-8") == "<Project />\n"
-    customer_props.unlink()
-    customer_targets.unlink()
-    run("add")
-    written = customer_props.read_text(encoding="utf-8")
+    written = override.read_text(encoding="utf-8")
     assert "<LangVersion>preview</LangVersion>" in written
+    assert "$(MSBuildProjectFullPath.Contains('DevicePlatform'))" in written
     assert "CISetup temporary: allow C# preview" in written
-    assert not customer_targets.exists()
     run("remove")
-    assert not customer_props.exists()
+    assert not override.exists()
+    assert customer_props.read_text(encoding="utf-8") == "<Project />\n"
     assert not (other / "Directory.Build.props").exists()
