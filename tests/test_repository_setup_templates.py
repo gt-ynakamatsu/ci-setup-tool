@@ -311,6 +311,14 @@ def test_notify_teams_uses_toarray_for_actions_list():
     assert "$actions.ToArray()" in text, "actions は ToArray() で配列化すること"
 
 
+def test_notify_teams_log_text_names_output_source_by_preset():
+    script = template_store.bundled_template_dir() / "scripts" / "ci-notify-teams.ps1"
+    text = script.read_text(encoding="utf-8-sig")
+    assert "dotnet / 合成ツール" not in text, ".NET と FPGA の文言を混ぜないこと"
+    assert "$ci.Preset" in text and "StartsWith('fpga-')" in text
+    assert "'合成ツール'" in text and "'dotnet'" in text
+
+
 def test_bundled_ps1_no_array_op_on_generic_lists():
     # New-Object / ::new() で作った Generic.List 変数を @(...) で配列化していないことを保証する。
     import re

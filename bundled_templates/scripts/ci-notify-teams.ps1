@@ -198,7 +198,8 @@ if (-not $isSuccess -and $ci.EnableLogs) {
     # ci-deploy-fileserver.ps1 -Type Logs が配置したフォルダ（1 ビルド 1 フォルダ）をそのまま案内する。
     if ($deploy -and $deploy.logDir) {
         $logFallback = ConvertTo-FileUri $deploy.logDir
-        $logText = "ビルドログ: $($deploy.logDir)`nbuild.log（各ステージ）と *-output.log（dotnet / 合成ツールの全出力）が入っています。"
+        $outputSource = if ("$($ci.Preset)".StartsWith('fpga-')) { '合成ツール' } else { 'dotnet' }
+        $logText = "ビルドログ: $($deploy.logDir)`nbuild.log（各ステージ）と *-output.log（$outputSource の全出力）が入っています。"
     }
     else {
         $logText = "ビルドログ: 設定済みの書き込み先（$($ci.ProjectName) の logs フォルダ）を確認してください。"
