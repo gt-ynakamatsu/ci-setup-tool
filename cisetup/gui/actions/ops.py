@@ -33,8 +33,6 @@ class ActionsMixin:
 
         戻り値 True で続行、False で中断（呼び出し側は処理を中止する）。
         """
-        if self._config.build.profile.lower() == "custom":
-            return True
         if self._config.project.test_project.strip():
             return True
         if self._repository_root is None:
@@ -286,8 +284,7 @@ class ActionsMixin:
         self._set_status("エージェント起動コマンドをコピーしました。")
     def _scan_env(self) -> None:
         self._set_status("環境をスキャンしています...")
-        # FPGA では .NET SDK ではなく Vivado / Quartus を確認する。
-        results = deps.env_scan.scan(self._current_preset_id())
+        results = deps.env_scan.scan()
         lines = []
         for r in results:
             lines.append(("[OK] " if r.found else "[未検出] ") + r.name + " : " + r.detail)

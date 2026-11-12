@@ -363,7 +363,8 @@ def test_upsert_pipeline_job_keeps_cron_in_script_when_poll_enabled(recorder):
     client.upsert_pipeline_job(cfg)
     body = _job_xml(recorder)
     assert "pollSCM" in body
-    assert "cron(spec:" in body
+    # XML 埋め込み時は ' が &apos; になるため、関数呼び出しと TZ 値だけを確認する。
+    assert "cron(&apos;TZ=Asia/Tokyo" in body
     assert "0 0 * * *" in body
     assert "Asia/Tokyo" in body
     assert "hudson.triggers.TimerTrigger" in body

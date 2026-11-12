@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import paths
-from .ci_preset_catalog import is_fpga_preset
 from .jenkinsfile_generator import generate_jenkinsfile
 from .models import (
     CISetupConfig,
@@ -16,6 +15,8 @@ from .models import (
     config_from_dict,
     config_to_dict,
     default_config,
+    foreign_preset_message,
+    is_foreign_preset,
     local_from_config,
     local_from_dict,
     local_to_dict,
@@ -333,7 +334,7 @@ class ConfigRepository:
         for base, root in self.build_target_roots(config):
             if paths.is_url(base) or paths.is_url(root):
                 continue
-            if Path(paths.join_location(root, dir_name)).is_dir():
+            if paths.is_existing_dir(paths.join_location(root, dir_name)):
                 return True
         return False
 
@@ -384,19 +385,14 @@ class ConfigRepository:
         if not config.project.name.strip():
             raise ValueError("プロジェクト名を入力してください。")
 
-        is_custom = config.build.profile.lower() == "custom"
-        if is_custom:
-            if not is_fpga_preset(config.build.preset) and not config.build.build_command.strip():
-                raise ValueError(
-                    "カスタムビルドの「ビルド コマンド」を入力してください（詳細設定 → ビルド種別）。"
-                )
-        else:
-            if not config.project.solution_file.strip():
-                raise ValueError("ソリューションファイルを入力してください。")
-            if not config.project.publish_project.strip():
-                raise ValueError("Publish 対象 csproj を入力してください。")
-            if not config.project.artifact_prefix.strip():
-                raise ValueError("成果物プレフィックスを入力してください。")
+        if is_foreign_preset(config.build.preset):
+            raise ValueError(foreign_preset_message(config.build.preset))
+        if not config.project.solution_file.strip():
+            raise ValueError("ソリューションファイルを入力してください。")
+        if not config.project.publish_project.strip():
+            raise ValueError("Publish 対象 csproj を入力してください。")
+        if not config.project.artifact_prefix.strip():
+            raise ValueError("成果物プレフィックスを入力してください。")
 
         if not config.jenkins.cron_schedule.strip():
             raise ValueError("cron スケジュールを入力してください。")
@@ -426,9 +422,6 @@ class ConfigRepository:
                     "『③ 保存先 → 書き込み先ベース』に URL が入っています。"
                     "ここには UNC またはローカルパスを指定してください。" + url_guide
                 )
-
-        if is_custom:
-            return
 
         # 保存値は "/" 区切り。pathlib は Windows でも "/" を解釈できるため置換不要
         # （置換すると Linux では単一ファイル名として誤解釈されてしまう）。

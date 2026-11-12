@@ -16,12 +16,10 @@ from ..layout import (
     Expander,
     button,
     card,
-    card_frame,
     font,
     hint_label,
     log_text,
     section_title,
-    step_desc,
     step_title,
 )
 from ..tooltip import help_icon
@@ -33,84 +31,13 @@ class DetailsMixin:
         exp.pack(fill=tk.X, pady=(0, 14))
         self._details_expander = exp
         details = exp.content
-        self._build_details_build(details)
         self._build_details_project(details)
         self._build_details_ci_job(details)
         self._build_details_server(details)
         self._build_details_manual(details)
-    def _build_details_build(self, parent: tk.Frame) -> None:
-        # ビルド種別そのものは画面上部の「CI の種類」で選ぶ。ここは種類が決めないコマンドだけ。
-        self._profile_var = tk.StringVar(value="dotnet")
-        frame = card(parent)
-        step_title(frame, "追加コマンド").pack(anchor="w", pady=(0, 4))
-        desc = step_desc(frame, "")
-        desc.pack(anchor="w", pady=(0, 8))
-        self._mode_text(
-            desc,
-            dotnet="",
-            fpga="合成対象とタイムアウトは上の「FPGA ビルドの設定」です。"
-            "ここでは Lint / テスト / 解析など、合成の前後に足すコマンドだけ入力します。",
-            custom="各コマンドはリポジトリ直下で PowerShell として実行されます。"
-            "空欄のステップはスキップされます。ビルドコマンドは必須です。",
-        )
-        self._custom_build_panel = tk.Frame(frame, bg=COLOR_CARD_BG)
-        self._custom_build_panel.pack(fill=tk.X, pady=(4, 0))
-        for key, title, tip, field_help in (
-            ("build.build_command", "ビルド コマンド（必須）", "例: make、cmake --build build", help_texts.BUILD_COMMAND),
-            ("build.lint_command", "Lint / チェック コマンド（任意）", "例: verilator --lint-only -Wall src/top.v", help_texts.LINT_COMMAND),
-            ("build.test_command", "テスト コマンド（任意）", "例: pytest -q または dotnet test tests/MyApp.Tests", help_texts.TEST_COMMAND),
-            ("build.analyze_command", "解析 コマンド（任意）", "例: タイミング/使用率レポートの生成・集計スクリプト", help_texts.ANALYZE_COMMAND),
-            ("build.publish_command", "成果物生成 コマンド（任意）", "例: ビットストリーム生成など（成果物は下の glob で収集します）", help_texts.PUBLISH_COMMAND),
-        ):
-            title_row = tk.Frame(self._custom_build_panel, bg=COLOR_CARD_BG)
-            title_row.pack(anchor="w", fill=tk.X, pady=(8, 2))
-            tk.Label(
-                title_row,
-                text=title,
-                font=font(12, bold=True),
-                bg=COLOR_CARD_BG,
-                anchor="w",
-            ).pack(side=tk.LEFT)
-            help_icon(title_row, field_help, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(4, 0))
-            self._add_field(self._custom_build_panel, key, "", show_label=False)
-            tip_label = hint_label(self._custom_build_panel, tip) if tip else None
-            if tip_label is not None:
-                tip_label.pack(anchor="w")
-            if key == "build.build_command":
-                # 合成コマンドは FPGA カードが組み立てるため、二重に編集させない。
-                self._mode_only(title_row, "dotnet", "custom")
-                self._mode_only(self._field_rows[key], "dotnet", "custom")
-                if tip_label is not None:
-                    self._mode_only(tip_label, "dotnet", "custom")
-        glob_row = tk.Frame(self._custom_build_panel, bg=COLOR_CARD_BG)
-        glob_row.pack(anchor="w", fill=tk.X, pady=(8, 2))
-        tk.Label(
-            glob_row,
-            text="成果物ファイル（glob・; 区切り）",
-            font=font(12, bold=True),
-            bg=COLOR_CARD_BG,
-            anchor="w",
-        ).pack(side=tk.LEFT)
-        help_icon(glob_row, help_texts.ARTIFACT_GLOB, bg=COLOR_CARD_BG).pack(side=tk.LEFT, padx=(4, 0))
-        self._add_field(self._custom_build_panel, "build.artifact_glob", "", show_label=False)
-        hint_label(
-            self._custom_build_panel,
-            "例: **/*.bit;**/*.bin;reports/*.rpt — マッチしたファイルを zip にして成果物として保存します。",
-        ).pack(anchor="w")
-        # .NET はコマンドを自動実行するため、このカード自体を出さない。
-        self._details_commands_card = card_frame(frame)
-        self._mode_only(self._details_commands_card, "fpga", "custom")
     def _build_details_project(self, parent: tk.Frame) -> None:
         frame = card(parent)
         step_title(frame, "自動入力された項目（必要なら変更）").pack(anchor="w", pady=(0, 8))
-        # .sln / csproj / RID は .NET でしか使わないため、他のモードでは隠す。
-        dotnet_only = {
-            "project.solution_file",
-            "project.publish_project",
-            "project.test_project",
-            "build.runtime_identifier",
-            "build.analysis_exclude_paths",
-        }
         for key, label, help_text, browse in (
             ("project.name", "プロジェクト名", help_texts.PROJECT_NAME, None),
             ("project.solution_file", "ソリューション (.sln)", help_texts.SOLUTION_FILE, "file"),
@@ -129,23 +56,14 @@ class DetailsMixin:
                 browse=browse,
                 path_check=(browse == "file"),
             )
-            if key in dotnet_only:
-                self._mode_only(self._field_rows[key], "dotnet")
-        project_hint = hint_label(frame, "")
-        project_hint.pack(anchor="w")
-        self._mode_text(
-            project_hint,
-            dotnet="テスト対象を空にすると CI の Test ステージはスキップされます。"
+        hint_label(
+            frame,
+            "テスト対象を空にすると CI の Test ステージはスキップされます。"
             "「再検出」は空欄・プレースホルダに加え、実在しないパスも探し直して差し替えます"
             "（①でフォルダを開いたあと、見つからないパスだけ右側に表示します）。"
             "RID は空欄ならエージェントの OS から自動（Windows: win-x64 / Linux: linux-x64）。"
             "除外パスは「;」区切りで、gui_design_sample や vendor/** のように書きます。",
-            fpga="プロジェクト名は Teams 通知の表示名と保存先のフォルダ名に使います。"
-            "成果物 zip プレフィックスはビットストリーム等をまとめた zip のファイル名になります。"
-            "合成対象の指定は上の「FPGA ビルドの設定」です。",
-            custom="プロジェクト名は Teams 通知の表示名と保存先のフォルダ名に使います。"
-            "成果物 zip プレフィックスは成果物 zip のファイル名になります。",
-        )
+        ).pack(anchor="w")
         btn_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         btn_row.pack(anchor="w", pady=(12, 8))
         self._redetect_btn = button(
@@ -176,7 +94,6 @@ class DetailsMixin:
             ("jenkins.timezone", "タイムゾーン", help_texts.TIMEZONE),
         ):
             self._add_field(frame, key, label, help_text, label_width=22)
-        # FPGA のタイムアウトは「FPGA ビルドの設定」だけに出す。ここは .NET / カスタム用。
         self._details_timeout_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         self._details_timeout_row.pack(fill=tk.X, pady=4)
         tk.Label(
@@ -200,7 +117,6 @@ class DetailsMixin:
         help_icon(self._details_timeout_row, help_texts.BUILD_TIMEOUT, bg=COLOR_CARD_BG).pack(
             side=tk.LEFT, padx=(8, 0)
         )
-        self._mode_only(self._details_timeout_row, "dotnet", "custom")
 
         retention_row = tk.Frame(frame, bg=COLOR_CARD_BG)
         retention_row.pack(fill=tk.X, pady=4)

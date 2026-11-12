@@ -7,11 +7,22 @@ from pathlib import Path
 
 # これまでの main 履歴から逆算したセマンティックバージョン。
 # 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI
-# → 1.5 FPGA → 1.6 CI の種類ごとに画面を切り替え
-VERSION = "1.6.1"
+# → 1.5 FPGA → 1.6 CI の種類ごとに画面を切り替え → 2.0 .NET 専用（FPGA は CISetup-FPGA へ分離）
+VERSION = "2.0.0"
 
 # (version, date, notes) 新しい順。VERSION は先頭と一致させる。
 RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "2.0.0",
+        "2026-11-10",
+        (
+            "FPGA（Vivado / Quartus）を別アプリ CISetup-FPGA に分離し、CISetup は .NET 専用に",
+            "起動時の CI 種類選択・プリセット・画面切り替えを廃止（.NET の入力欄だけを表示）",
+            "C/C++・Python・カスタムコマンドのプリセットと、詳細設定の追加コマンド欄を削除",
+            "配置する CI スクリプトから FPGA / カスタムコマンドの分岐と ci-fpga.ps1 を削除",
+            ".NET 以外の設定を開いたとき・CI で読み込んだときは、対応アプリを案内して止める",
+        ),
+    ),
     (
         "1.6.1",
         "2026-09-15",

@@ -158,7 +158,7 @@ def test_pipeline_job_is_trusted_for_console_log_access():
 
 
 def test_stage_scripts_write_native_output_to_logs():
-    # dotnet / 合成ツールの出力はヘルパー経由でログへ流す（素の呼び出しに戻っていないこと）。
+    # dotnet の出力はヘルパー経由でログへ流す（素の呼び出しに戻っていないこと）。
     build = _script("ci-build.ps1")
     assert "Get-CiLogPath -Root $ci.Root -Name 'build-output.log'" in build
     assert "Invoke-CiLogged -LogPath $buildLog" in build
@@ -172,19 +172,12 @@ def test_stage_scripts_write_native_output_to_logs():
     assert "publish-output.log" in publish
     assert "\ndotnet @publishArgs" not in publish
 
-    fpga = _script("ci-fpga.ps1")
-    assert "fpga-output.log" in fpga
-    assert "Invoke-CiLogged" in fpga
-    assert "Copy-CiFpgaReports" in fpga
-
 
 def test_logs_deploy_copies_every_log_file():
     deploy = _script("ci-deploy-fileserver.ps1")
     logs_branch = deploy.split("if ($Type -eq 'Logs')", 1)[1].split("if ($Type -eq 'Analysis')", 1)[0]
     # build.log 1 本だけでなく logs フォルダ全体 + テスト/解析の生ログを配置する。
     assert "Get-ChildItem -Path $logsLocal -File -Recurse" in logs_branch
-    assert "fpga-reports" in _script("ci-config.ps1")
-    assert "Copy-CiFpgaReports" in _script("ci-fpga.ps1")
     assert "test-output.log" in logs_branch
     assert "analysis-build.log" in logs_branch
     assert "logDir" in logs_branch
@@ -240,21 +233,16 @@ def test_invoke_cilogged_captures_stdout_stderr_and_exit_code(tmp_path: Path):
 
 
 @pytest.mark.skipif(_pwsh() is None, reason="PowerShell が無い")
-def test_ci_build_custom_command_output_lands_in_logs(tmp_path: Path):
+def test_ci_build_rejects_fpga_config(tmp_path: Path):
     exe = _pwsh()
     deploy_ci_files(tmp_path)
     config = {
-        "project": {"name": "LogSample"},
-        "build": {
-            "profile": "custom",
-            "buildCommand": f"& '{exe}' -NoProfile -Command \"Write-Output 'MARKER_FROM_BUILD'\"",
-        },
+        "project": {"name": "Blink", "solutionFile": "a.sln", "publishProject": "a.csproj", "artifactPrefix": "Blink"},
+        "build": {"preset": "fpga-quartus"},
         "storage": {"basePaths": []},
         "jenkins": {"ciFileServers": []},
     }
-    (tmp_path / "CISetup" / "cisetup.config.json").write_text(
-        json.dumps(config), encoding="utf-8"
-    )
+    (tmp_path / "CISetup" / "cisetup.config.json").write_text(json.dumps(config), encoding="utf-8")
 
     proc = subprocess.run(
         [exe, "-NoProfile", "-File", str(tmp_path / "CISetup" / "scripts" / "ci-build.ps1")],
@@ -266,55 +254,5 @@ def test_ci_build_custom_command_output_lands_in_logs(tmp_path: Path):
         timeout=120,
     )
     out = (proc.stdout or "") + (proc.stderr or "")
-    assert proc.returncode == 0, out
-    assert "MARKER_FROM_BUILD" in out  # コンソール（Jenkins の Console Output 相当）にも出る
-    log_text = (tmp_path / "artifacts" / "logs" / "build-output.log").read_text(encoding="utf-8")
-    assert "MARKER_FROM_BUILD" in log_text  # 同じ内容が logs にも残る
-
-
-@pytest.mark.skipif(_pwsh() is None, reason="PowerShell が無い")
-def test_copy_fpga_reports_collects_tool_files_and_skips_junk(tmp_path: Path):
-    exe = _pwsh()
-    scripts = tmp_path / "CISetup" / "scripts"
-    scripts.mkdir(parents=True)
-    shutil.copy(
-        template_store.bundled_template_dir() / "scripts" / "ci-config.ps1",
-        scripts / "ci-config.ps1",
-    )
-    proj = tmp_path / "hw" / "quartus"
-    out = proj / "output_files"
-    junk = proj / "incremental_db"
-    out.mkdir(parents=True)
-    junk.mkdir()
-    (out / "top.sta.rpt").write_text("timing fail", encoding="utf-8")
-    (proj / "vivado.log").write_text("ERROR: synth", encoding="utf-8")
-    (junk / "stale.rpt").write_text("should skip", encoding="utf-8")
-    (proj / "huge.rpt").write_bytes(b"x" * 100)
-    (tmp_path / "artifacts" / "old").mkdir(parents=True)
-    (tmp_path / "artifacts" / "old" / "old.rpt").write_text("skip artifacts", encoding="utf-8")
-
-    runner = tmp_path / "run.ps1"
-    runner.write_text(
-        "$ErrorActionPreference = 'Stop'\n"
-        ". (Join-Path $args[0] 'CISetup/scripts/ci-config.ps1')\n"
-        "Copy-CiFpgaReports -Root $args[0] -SearchRoot (Join-Path $args[0] 'hw/quartus') -MaxBytes 50\n",
-        encoding="utf-8",
-    )
-    proc = subprocess.run(
-        [exe, "-NoProfile", "-File", str(runner), str(tmp_path)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=60,
-    )
-    out_text = (proc.stdout or "") + (proc.stderr or "")
-    assert proc.returncode == 0, out_text
-    dest = tmp_path / "artifacts" / "logs" / "fpga-reports"
-    names = {p.name for p in dest.iterdir()} if dest.is_dir() else set()
-    assert "output_files__top.sta.rpt" in names
-    assert "vivado.log" in names
-    assert "stale.rpt" not in names
-    assert "huge.rpt" not in names  # MaxBytes 50 で除外
-    assert "old.rpt" not in names
-    assert "timing fail" in (dest / "output_files__top.sta.rpt").read_text(encoding="utf-8")
+    assert proc.returncode != 0
+    assert "CISetup-FPGA" in out

@@ -3,18 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import paths
+from ..models import foreign_preset_message, is_foreign_preset
 from ..project_setup import (
     apply_auto_detection,
-    apply_fpga_auto_detection,
     count_projects,
     deploy_ci_files,
     has_solution_file,
 )
+from . import deps
 
 
 class RepositoryMixin:
     def _initial_load(self, initial: str | None) -> None:
-        if initial and Path(initial).is_dir():
+        if initial and paths.is_existing_dir(initial):
             self._open_project(Path(initial))
             return
         recent = self._recent.get_last_project_root()
@@ -45,19 +46,7 @@ class RepositoryMixin:
         self._set_status(f"CI ファイルを配置: {len(written)} 件")
 
     def _project_check_message(self, repository_root: Path) -> tuple[str, str]:
-        """選んだフォルダが今のモードの対象になっているかを一言で伝える。"""
-        mode = self._current_mode()
-        if mode == "fpga":
-            tool = self._current_fpga_tool()
-            found = self._fpga_candidates(tool, rescan=True)
-            if found:
-                return (f"CI ファイルを配置しました。{tool} の合成対象: " + "、".join(found), "#2a2")
-            wanted = "build.tcl / *.xpr" if tool == "Vivado" else "*.qpf"
-            return (
-                f"警告: {wanted} が見つかりません。{tool} のプロジェクトがあるリポジトリルートか確認してください。",
-                "#c33",
-            )
-        if mode == "dotnet" and not has_solution_file(repository_root):
+        if not has_solution_file(repository_root):
             return (
                 "警告: *.sln が見つかりません。.sln があるリポジトリルートか確認してください。",
                 "#c33",
@@ -70,9 +59,6 @@ class RepositoryMixin:
     def _redetect_project(self) -> None:
         """.sln から再検出して補完・修正する（実在しないパスも探し直す。有効な入力は保持）。"""
         root = self._ensure_repo()
-        if self._current_mode() == "fpga":
-            self._redetect_fpga_project(root)
-            return
         self._form_to_config()
         before = (
             self._config.project.name,
@@ -102,14 +88,6 @@ class RepositoryMixin:
             )
         else:
             self._set_status("再検出: 変更点はありませんでした（既に有効な値です）。")
-    def _redetect_fpga_project(self, root: Path) -> None:
-        """FPGA モードの再検出（合成対象の探し直しとプロジェクト名の補完）。"""
-        self._detect_fpga_projects()
-        self._form_to_config()
-        self._config = apply_fpga_auto_detection(root, self._config, self._current_fpga_tool())
-        self._config_to_form()
-        self._update_preview()
-        self._set_status("再検出: 合成対象とプロジェクト名を探し直しました。")
 
     def _load_repository(self, repository_root: Path) -> None:
         self._loading = True
@@ -134,7 +112,6 @@ class RepositoryMixin:
             )
         finally:
             self._loading = False
-        # 設定済みのプロジェクトは種類が決まっているので、選択画面を出さずフォームへ。
-        if has_config:
-            self._show_form()
+        if is_foreign_preset(self._config.build.preset):
+            deps.messagebox.showwarning("CISetup", foreign_preset_message(self._config.build.preset))
         self._update_preview()

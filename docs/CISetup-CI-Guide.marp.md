@@ -56,7 +56,7 @@ Jenkins 導入 → Teams 通知 → アプリ設定まで
 | ビルド **失敗** | Teams 通知（ログ格納先フォルダのリンク付き） |
 | ビルド後（毎回） | Console Output 本文を `jenkins-console.log`、ツールの全出力を個別ログとして `logs/` へ保存 |
 
-対象: **.NET デスクトップアプリ**（WPF / WinForms 等）
+対象: **.NET デスクトップアプリ**（WPF / WinForms 等）。FPGA（Vivado / Quartus）は別アプリ **CISetup-FPGA**
 
 ---
 
@@ -662,13 +662,13 @@ java -jar agent.jar -url "http://jenkins:8086/" `
 | 手動ビルド | Jenkins → Build Now |
 | 別 PJ 追加 | 設定アプリ ③〜⑨ を新 PJ で繰り返す |
 | Webhook 変更 | 設定アプリ ⑦ 更新 → ⑨ 反映 |
-| FPGA と .NET を同じ Jenkins で | アプリは分けない。合成が長い・ライセンス機が別なら **エージェント PC だけ** 分ける |
+| FPGA と .NET を同じ Jenkins で | アプリは別（.NET は CISetup、FPGA は **CISetup-FPGA**）。Jenkins 基盤は共用し、合成が長い・ライセンス機が別なら **エージェント PC だけ** 分ける |
 
 ### エージェントを分けるか
 
-- **分けない:** CISetup アプリ、ファイルサーバー、Jenkins サーバー
-- **分ける:** プロジェクトの Git（別リポジトリ・別ジョブ）。Jenkins のワークスペースはジョブごとに自動
-- **必要なときだけ分ける:** エージェント PC。FPGA 専用機にするならジョブの **エージェントラベル**（例: `fpga`）をノードの Labels と一致させる。1 台ならラベルは空欄（`agent any`）
+- **共用できる:** Jenkins サーバー、ファイルサーバー、Teams
+- **分ける:** 設定アプリ（.NET は CISetup、FPGA は CISetup-FPGA）、プロジェクトの Git（別リポジトリ・別ジョブ）。Jenkins のワークスペースはジョブごとに自動
+- **必要なときだけ分ける:** エージェント PC。FPGA 専用機にするなら各ジョブの **エージェントラベル**（例: FPGA は `fpga`、.NET は `windows`）をノードの Labels と一致させる。1 台ならラベルは空欄（`agent any`）
 
 詳細は [CI-GUIDE.md 12. 日常運用](CI-GUIDE.md#12-日常運用) を参照。
 

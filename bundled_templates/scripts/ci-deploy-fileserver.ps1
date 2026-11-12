@@ -135,7 +135,7 @@ if ($categoryEnabled.ContainsKey($Type) -and (-not $categoryEnabled[$Type])) {
 if ($Type -eq 'Logs') {
     # artifacts/logs に集めたログを全部まとめて 1 ビルド 1 フォルダで配置する。
     #   build.log              … 各ステージのコンソール出力（Transcript）
-    #   *-output.log           … dotnet / vivado / quartus_sh などの生出力（全文）
+    #   *-output.log           … dotnet の生出力（全文）
     #   jenkins-console.log    … Jenkins Console Output の本文
     #   jenkins-build-info.log … Jenkins 側の結果とビルド情報
     # テスト・解析の生ログも同じフォルダへ入れ、「まず logs を見れば原因が分かる」状態にする。

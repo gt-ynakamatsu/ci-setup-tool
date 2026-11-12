@@ -19,10 +19,10 @@ from cisetup import (
     jenkins_client,
     teams_service,
 )
-from cisetup.ci_preset_catalog import PRESETS, find_preset
 from cisetup.models import (
     config_from_dict,
     config_to_dict,
+    is_foreign_preset,
     secrets_from_dict,
     secrets_to_dict,
 )
@@ -59,9 +59,9 @@ sec = secrets_from_dict(secrets_example)
 sec_round = secrets_to_dict(sec)
 check("secrets camelCase キー保持", all(k in sec_round for k in secrets_example))
 
-# 2. preset
-check("preset 検索", find_preset("python").id == "python")
-check("preset 件数", len(PRESETS) == 6)
+# 2. 他アプリの設定（FPGA 等）を見分ける
+check(".NET 設定は扱える", not is_foreign_preset(cfg.build.preset))
+check("FPGA 設定は扱わない", is_foreign_preset("fpga-vivado"))
 
 # 3. test project naming (C# と同じく endswith のみ)
 check("Foo.Tests はテスト", looks_like_test_project("Foo.Tests"))
@@ -92,7 +92,7 @@ with tempfile.TemporaryDirectory() as tmp:
     jf = (root / "CISetup" / "Jenkinsfile").read_text(encoding="utf-8")
     check("Jenkinsfile にラベル反映", "label 'windows'" in jf)
     check("Jenkinsfile が CISetup/scripts 参照", "./CISetup/scripts/" in jf)
-    check("Jenkinsfile に cron あり（poll と同居。実行後の XML 上書き対策）", "cron(spec:" in jf)
+    check("Jenkinsfile に cron あり（poll と同居。実行後の XML 上書き対策）", "cron('TZ=" in jf)
     check("Jenkinsfile に Checkout retry", "retry(3)" in jf)
     check("Jenkinsfile に BOM なし", not jf.startswith("\ufeff"))
     logs, releases, tests = repo.build_preview_paths(cfg)

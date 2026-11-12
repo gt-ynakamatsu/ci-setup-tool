@@ -29,7 +29,6 @@ COLOR_BEGINNER_BG = "#FFFDF5"
 COLOR_BEGINNER_BORDER = "#E0B000"
 COLOR_BEGINNER_TITLE = "#9A7A00"
 COLOR_ENV_BG = "#F3F8FF"
-COLOR_PRESET_BG = "#EEF6FF"
 COLOR_RUN_BG = "#F0FFF4"
 COLOR_RUN_BORDER = "#107C10"
 COLOR_RUN_TITLE = "#107C10"
@@ -284,14 +283,6 @@ def card(
     )
     holder.pack(fill=tk.X, pady=pady)
     return holder.body
-
-
-def card_frame(body: tk.Misc) -> tk.Misc:
-    """`card()` が返した body から、親に pack されている外枠を得る。
-
-    カードごと表示・非表示を切り替えるときは、body ではなく外枠を pack し直す。
-    """
-    return body.master
 
 
 def step_title(parent: tk.Misc, text: str) -> tk.Label:

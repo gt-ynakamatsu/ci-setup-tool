@@ -86,6 +86,20 @@ def test_update_preview(app):
     assert r"\\srv\ci\Demo" in app._preview_logs.get()
 
 
+def test_update_preview_survives_unreachable_share(app, monkeypatch):
+    def raise_net(*_args, **_kwargs):
+        error = OSError(22, "The specified network name is no longer available")
+        error.winerror = 64
+        raise error
+
+    monkeypatch.setattr(Path, "is_dir", raise_net)
+    app._multi_fields["jenkins.ci_file_servers"].set_values([r"\\fileserver\ci"])
+    app._multi_fields["storage.base_paths"].set_values([])
+    app._fields["project.name"].set("Demo")
+    app._update_preview()
+    assert r"\\fileserver\ci\Demo" in app._preview_logs.get()
+
+
 def test_multi_field_add_remove(app):
     # ＋ で行追加、− で行削除。get_values は空行を無視する。
     mf = app._multi_fields["jenkins.ci_file_servers"]
@@ -296,19 +310,6 @@ def test_retry_wrapper_toggle_shows_hides_options(app):
 
 def test_normalize_rel(app):
     assert app._normalize_rel("a\\b\\c.sln") == "a/b/c.sln"
-
-
-def test_apply_preset_python(app):
-    app._preset_var.set("Python")
-    app._apply_preset()
-    assert app._fields["build.lint_command"].get() == "ruff check ."
-    assert app._profile_var.get().startswith("カスタム")
-
-
-def test_preset_selected_updates_description(app):
-    app._preset_var.set("Python")
-    app._on_preset_selected()
-    assert "ruff" in app._preset_desc.cget("text").lower() or app._preset_desc.cget("text")
 
 
 def test_set_text(app):

@@ -93,8 +93,7 @@ LOGS_DIR = (
     "【③ 保存フォルダ】実行ログ（logs）\n"
     "【何を】CI のコンソール出力（Jenkins の Console Output 相当）を置くフォルダ名\n"
     "【何が入る】<ジョブ>-<ビルド番号>-<時刻> フォルダに build.log（各ステージ）と"
-    " build-output.log / fpga-output.log など（dotnet・合成ツールの全出力）。FPGA では fpga-reports に"
-    " vivado.log や *.rpt も入ります。成功・失敗どちらでも保存\n"
+    " build-output.log など（dotnet の全出力）。成功・失敗どちらでも保存\n"
     "【なぜ】失敗時にどこを見ればよいか Teams 通知と保存先を一致させるため\n"
     "【④ 対応】同じカテゴリの Teams ボタン URL 欄（logs）\n"
     "【デフォルト】logs\n"
@@ -442,73 +441,6 @@ STEP_JENKINS = (
 STEP_BUILD = (
     "【何を】Jenkins でテストビルドを起動します\n"
     "【なぜ】本番と同じ経路でビルド・テスト・通知・成果物配置が動くか最終確認するため"
-)
-
-BUILD_PROFILE = (
-    "【何を】CI のビルド方式（.NET 自動 / カスタムコマンド）\n"
-    "【なぜ】.NET 以外（FPGA・C/C++・Python 等）でも同じ CI 基盤を使えるようにするため\n"
-    "【.NET】dotnet build / test / publish を自動実行\n"
-    "【FPGA】上のプリセットを適用（カスタム扱い）。エージェントに Vivado/Quartus が必要\n"
-    "【カスタム】各ステージのコマンドを自分で指定"
-)
-
-BUILD_COMMAND = (
-    "【何を】CI のビルドステージで実行するコマンド\n"
-    "【FPGA プリセット】空で OK。ci-fpga.ps1 が Vivado / Quartus を探して実行します。"
-    "サブフォルダの .qpf / .xpr / build.tcl も対象。複数あるときだけ「-Project 相対パス」や「-Tcl 相対パス」を書きます\n"
-    "【その他カスタム】必須。例: cmake --build build\n"
-    "【なぜ】プロジェクト固有のビルド手順を CI に組み込むため"
-)
-
-LINT_COMMAND = (
-    "【何を】Lint / 静的チェック用コマンド（任意）\n"
-    "【なぜ】ビルド前にコーディング規約違反や明らかな問題を検出するため"
-)
-
-TEST_COMMAND = (
-    "【何を】テストステージで実行するコマンド（任意）\n"
-    "【なぜ】自動テストで回帰を検出し、壊れたビルドを早く気づくため\n"
-    "【例】pytest -q / dotnet test"
-)
-
-ANALYZE_COMMAND = (
-    "【何を】解析・レポート生成コマンド（任意）\n"
-    "【なぜ】タイミング・使用率レポート等を CI で毎回残すため"
-)
-
-PUBLISH_COMMAND = (
-    "【何を】成果物を生成するコマンド（任意・カスタム時）\n"
-    "【なぜ】ビットストリーム生成など、ビルド後の成果物作成手順を CI に含めるため\n"
-    "【注意】zip に含めるファイルは下の glob で指定します"
-)
-
-ARTIFACT_GLOB = (
-    "【何を】成果物 zip に含めるファイルの glob パターン（; 区切り）\n"
-    "【なぜ】カスタムビルドでできたファイルのうち、配布・保存したいものだけを選ぶため\n"
-    "【例】**/*.bit;**/*.bin;reports/*.rpt"
-)
-
-FPGA_TOOL = (
-    "【何を】合成に使う FPGA ツール（Vivado / Quartus）\n"
-    "【なぜ】ci-fpga.ps1 がエージェント上のどちらのツールを探すか決めるため\n"
-    "【変え方】画面上部のプリセット（FPGA — Vivado / Quartus）で切り替わります\n"
-    "【保存先】cisetup.config.json → build.preset"
-)
-
-FPGA_PROJECT = (
-    "【何を】合成するプロジェクトファイル（Vivado: .xpr / Quartus: .qpf）\n"
-    "【なぜ】リポジトリに複数ある場合、どれを CI で合成するか決めるため\n"
-    "【空欄】リポジトリ内（サブフォルダ可）を自動検出。1 つだけならそれを使います\n"
-    "【例】hw/quartus/blink.qpf、fpga/top.xpr\n"
-    "【保存先】cisetup.config.json → build.buildCommand（-Project として書き出し）"
-)
-
-FPGA_TCL = (
-    "【何を】Vivado の合成スクリプト（build.tcl）\n"
-    "【なぜ】プロジェクト（.xpr）ではなく Tcl で合成手順を管理している場合に指定するため\n"
-    "【空欄】リポジトリ内の build.tcl を自動検出。無ければ .xpr の impl_1 を実行します\n"
-    "【例】fpga/build.tcl\n"
-    "【保存先】cisetup.config.json → build.buildCommand（-Tcl として書き出し）"
 )
 
 BUILD_TIMEOUT = (

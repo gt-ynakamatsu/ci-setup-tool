@@ -153,7 +153,7 @@ CI は、設計者の判断や実機評価を置き換えるものではあり�
 | Jenkins | 変更を見つけ、決めた処理を自動実行する CI サーバー |
 | ビルドエージェント | 実際にビルド・合成・テストを行う専用 PC |
 | Teams | 結果をチームへ知らせる場所 |
-| CISetup | Jenkins の設定をプロジェクトへ導入する社内ツール |
+| CISetup | Jenkins の設定をプロジェクトへ導入する社内ツール（.NET 用。FPGA は CISetup-FPGA） |
 
 Jenkins が司令役、ビルドエージェントが作業者、CISetup が設定を標準化します。
 
@@ -233,17 +233,15 @@ Teams 通知
 
 ## 対応範囲
 
-- .NET デスクトップアプリ
+- .NET デスクトップアプリ（**CISetup**）
   - restore / build / test / static analysis / publish
-- FPGA
+- FPGA（別アプリ **CISetup-FPGA**）
   - Vivado / Quartus の合成
   - bitstream・レポート・ツールログの回収
-- カスタムコマンド
-  - C / C++ / Python などへの拡張
 - Windows / Linux エージェント
   - 対象プロジェクトとツールチェインに応じて選択
 
-共通部分を再利用し、プロジェクト固有なのは主にビルド手順です。
+設定アプリは分かれていますが、Jenkins・ファイルサーバー・Teams は共用できます。
 
 ---
 

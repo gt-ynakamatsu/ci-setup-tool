@@ -7,18 +7,28 @@ from typing import Any
 
 @dataclass
 class BuildConfig:
+    # CI の種類。CISetup は .NET 専用で、FPGA（fpga-*）は CISetup-FPGA が扱う。
+    # 他アプリで作った設定を開いたときに気付けるよう保存しておく。
     preset: str = "dotnet"
-    profile: str = "dotnet"
-    build_command: str = ""
-    lint_command: str = ""
-    analyze_command: str = ""
-    publish_command: str = ""
-    test_command: str = ""
-    artifact_glob: str = ""
     # dotnet publish の RuntimeIdentifier。空ならエージェント OS から自動（win-x64 / linux-x64）。
     runtime_identifier: str = ""
     # 静的解析の対象から外すパス（";" 区切り。前方一致 or * ? ** のグロブ）。
     analysis_exclude_paths: str = ""
+
+
+def is_foreign_preset(preset: str | None) -> bool:
+    """CISetup（.NET 専用）では扱えない種類の設定か。"""
+    return (preset or "").strip().lower() not in ("", "dotnet")
+
+
+def foreign_preset_message(preset: str | None) -> str:
+    kind = (preset or "").strip()
+    if kind.lower().startswith("fpga-"):
+        return f"この設定は FPGA 用（{kind}）です。CISetup-FPGA で開いてください。"
+    return (
+        f"この設定は .NET 以外の CI（{kind}）です。CISetup は .NET 専用になりました。"
+        "C/C++・Python・カスタムコマンドの CI は扱えません。"
+    )
 
 
 @dataclass

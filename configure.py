@@ -77,8 +77,12 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _resolve_folder(value: str) -> Path:
-    folder = Path(value).expanduser().resolve()
-    if not folder.is_dir():
+    folder = Path(value).expanduser()
+    try:
+        folder = folder.resolve()
+    except OSError:
+        pass
+    if not paths.is_existing_dir(folder):
         print(f"エラー: フォルダが見つかりません: {folder}", file=sys.stderr)
         raise SystemExit(1)
     return folder

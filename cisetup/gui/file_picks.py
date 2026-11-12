@@ -9,21 +9,12 @@ from .. import paths
 # 「参照...」ボタンのファイル種別。_add_field の browse に渡す値がキー。
 FILE_BROWSE_KINDS: dict[str, list[tuple[str, str]]] = {
     "file": [("Project", "*.sln *.csproj"), ("All", "*.*")],
-    "fpga-project": [("FPGA プロジェクト", "*.xpr *.qpf"), ("All", "*.*")],
-    "fpga-tcl": [("Tcl スクリプト", "*.tcl"), ("All", "*.*")],
 }
 
 
 class FilePickMixin:
     def _pick_folder(self) -> None:
-        hints = {
-            "dotnet": ".sln があるリポジトリルート",
-            "fpga": "FPGA プロジェクトのリポジトリルート",
-            "custom": "リポジトリルート",
-        }
-        path = filedialog.askdirectory(
-            title=f"プロジェクトフォルダを選択（{hints[self._current_mode()]}）"
-        )
+        path = filedialog.askdirectory(title="プロジェクトフォルダを選択（.sln があるリポジトリルート）")
         if path:
             self._open_project(Path(path))
 
@@ -45,7 +36,7 @@ class FilePickMixin:
 
     def _load_from_text(self) -> None:
         text = self._path_var.get().strip()
-        if not text or not Path(text).is_dir():
+        if not text or not paths.is_existing_dir(text):
             messagebox.showwarning("CISetup", "有効なフォルダパスを入力してください。")
             return
         self._open_project(Path(text))

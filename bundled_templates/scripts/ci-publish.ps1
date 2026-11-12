@@ -3,7 +3,7 @@
     [string]$Version = ""
 )
 
-# Jenkins publish ステージ — dotnet publish / custom publishCommand。PUBLISH_RELEASE=false ならスキップ。
+# Jenkins publish ステージ — dotnet publish。PUBLISH_RELEASE=false ならスキップ。
 $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet build -c` の引数が欠落し MSB4126 になるため既定値で補う。
@@ -19,65 +19,6 @@ $publishLog = Get-CiLogPath -Root $ci.Root -Name 'publish-output.log'
 
 Write-Host "==> Project: $($ci.ProjectName)"
 Write-Host "==> Publish ログ: $publishLog"
-
-if ($ci.Profile -eq 'custom') {
-    $releaseDir = Join-PathMulti $ci.Root @('artifacts', 'release')
-    if (Test-Path $releaseDir) { Remove-Item -Recurse -Force $releaseDir }
-    New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-
-    if (-not [string]::IsNullOrWhiteSpace($ci.PublishCommand)) {
-        Write-Host "==> Custom publish: $($ci.PublishCommand)"
-        $code = Invoke-CiLoggedCommandLine -LogPath $publishLog -CommandLine $ci.PublishCommand -Label "Custom publish: $($ci.PublishCommand)"
-        if ($code -ne 0) { throw "Publish command failed (exit code $code). 詳細ログ: $publishLog" }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($ci.ArtifactGlob)) {
-        Write-Warning "build.artifactGlob is empty. Nothing collected for release."
-        return
-    }
-
-    # Convert glob (* ? **) to regex. '**' spans directory levels.
-    function Convert-GlobToRegex {
-        param([string]$Glob)
-        $g = ($Glob -replace '\\', '/').TrimStart('/')
-        $p = [regex]::Escape($g)
-        $p = $p -replace '\\\*\\\*/', '(?:.*/)?'   # '**/' => zero or more dirs
-        $p = $p -replace '\\\*\\\*', '.*'          # '**'  => anything
-        $p = $p -replace '\\\*', '[^/]*'           # '*'   => non-slash
-        $p = $p -replace '\\\?', '.'               # '?'   => one char
-        return "^$p$"
-    }
-
-    $patterns = $ci.ArtifactGlob -split '[;,]' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-    $regexes = $patterns | ForEach-Object { Convert-GlobToRegex $_ }
-
-    $allFiles = Get-ChildItem -Path $ci.Root -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '[\\/]artifacts[\\/]release[\\/]' }
-
-    $matched = @()
-    foreach ($file in $allFiles) {
-        $rel = $file.FullName.Substring($ci.Root.Length).TrimStart('\', '/') -replace '\\', '/'
-        foreach ($rx in $regexes) {
-            if ($rel -imatch $rx) {
-                $matched += $file
-                break
-            }
-        }
-    }
-    $matched = @($matched | Sort-Object FullName -Unique)
-
-    if ($matched.Count -eq 0) {
-        Write-Warning "artifactGlob '$($ci.ArtifactGlob)' matched no files."
-        return
-    }
-
-    $prefix = $ci.ArtifactPrefix
-    $zipName = if ($Version) { "$prefix-$Version.zip" } else { "$prefix.zip" }
-    $zipPath = Join-Path $releaseDir $zipName
-    Compress-Archive -Path $matched.FullName -DestinationPath $zipPath -Force
-    Write-Host "Archived $($matched.Count) file(s) to $zipPath"
-    return
-}
 
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"

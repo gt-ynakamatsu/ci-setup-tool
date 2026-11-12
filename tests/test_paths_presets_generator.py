@@ -4,13 +4,12 @@ import json
 from pathlib import Path
 
 from cisetup import paths
-from cisetup.ci_preset_catalog import PRESETS, CiPreset, find_preset
 from cisetup.jenkinsfile_generator import (
     build_agent_declaration,
     build_triggers_block,
     generate_jenkinsfile,
 )
-from cisetup.models import CISetupConfig, BuildConfig
+from cisetup.models import CISetupConfig
 from cisetup.template_store import read_template
 
 
@@ -36,6 +35,28 @@ def test_read_scripts_dir_falls_back_to_legacy(tmp_path: Path):
 
 def test_read_scripts_dir_defaults_to_new_when_absent(tmp_path: Path):
     assert paths.read_scripts_dir(tmp_path) == tmp_path / paths.CI_FOLDER / "scripts"
+
+
+def test_is_existing_dir_and_file(tmp_path: Path):
+    assert paths.is_existing_dir(tmp_path)
+    assert not paths.is_existing_dir(tmp_path / "missing")
+    file_path = tmp_path / "a.txt"
+    file_path.write_text("x", encoding="utf-8")
+    assert paths.is_existing_file(file_path)
+    assert not paths.is_existing_file(tmp_path / "missing.txt")
+    assert not paths.is_existing_file(tmp_path)
+
+
+def test_is_existing_dir_treats_unreachable_share_as_missing(monkeypatch):
+    def raise_net(*_args, **_kwargs):
+        error = OSError(22, "The specified network name is no longer available")
+        error.winerror = 64
+        raise error
+
+    monkeypatch.setattr(Path, "is_dir", raise_net)
+    monkeypatch.setattr(Path, "is_file", raise_net)
+    assert paths.is_existing_dir(r"\\fileserver\ci") is False
+    assert paths.is_existing_file(r"\\fileserver\ci\a.txt") is False
 
 
 def test_is_url():
@@ -229,43 +250,6 @@ def test_find_repository_root_none(tmp_path: Path):
     assert result is None or isinstance(result, Path)
 
 
-def test_find_preset():
-    assert find_preset("python").id == "python"
-    assert find_preset("PYTHON").id == "python"
-    assert find_preset("") is None
-    assert find_preset(None) is None
-    assert find_preset("does-not-exist") is None
-
-
-def test_preset_count_and_ids():
-    ids = {p.id for p in PRESETS}
-    assert {"dotnet", "fpga-vivado", "fpga-quartus", "cmake-cpp", "python", "custom-empty"} <= ids
-
-
-def test_preset_descriptions_match_csharp():
-    # .NET / CMake / Python は従来どおり。FPGA は実行ヘルパー導入に合わせて更新。
-    by_id = {p.id: p.description for p in PRESETS}
-    assert by_id["dotnet"] == (
-        "dotnet build / format / publish を自動実行。テスト csproj 選択時のみ dotnet test。"
-        "Roslyn 静的解析つき（既定）。"
-    )
-    assert "Vivado" in by_id["fpga-vivado"]
-    assert "build.tcl" in by_id["fpga-vivado"]
-    assert "Quartus" in by_id["fpga-quartus"]
-    assert ".qpf" in by_id["fpga-quartus"]
-    assert by_id["cmake-cpp"] == "CMake で構成・ビルド。バイナリを成果物として保存します。"
-    assert by_id["python"] == "依存インストール → Lint(ruff) → ビルド(wheel)。dist の成果物を保存します。"
-
-
-def test_preset_apply_to():
-    preset = CiPreset(id="x", name="X", description="d", profile="custom", build_command="b")
-    build = BuildConfig()
-    preset.apply_to(build)
-    assert build.preset == "x"
-    assert build.profile == "custom"
-    assert build.build_command == "b"
-
-
 def test_build_agent_declaration():
     assert build_agent_declaration("") == "any"
     assert build_agent_declaration(None) == "any"
@@ -297,7 +281,7 @@ def test_generate_jenkinsfile(tmp_path: Path):
     generate_jenkinsfile(template, out, cfg)
     text = out.read_text(encoding="utf-8")
     assert "label 'windows'" in text
-    assert "cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')" in text
+    assert r"cron('TZ=Asia/Tokyo\n0 0 * * *')" in text
     # cron と poll を両方 Jenkinsfile に書く。実行後に XML の Timer だけだと消える。
     assert "pollSCM" in text
     assert "H/5 * * * *" in text
@@ -320,7 +304,7 @@ def test_generate_jenkinsfile_includes_cron_trigger_line(tmp_path: Path):
     cfg.jenkins.timezone = "Asia/Tokyo"
     out = tmp_path / "Jenkinsfile"
     generate_jenkinsfile("{{CRON_TRIGGER_LINE}}", out, cfg)
-    assert out.read_text(encoding="utf-8") == "        cron(spec: '0 0 * * *', timezone: 'Asia/Tokyo')"
+    assert out.read_text(encoding="utf-8") == r"        cron('TZ=Asia/Tokyo\n0 0 * * *')"
 
 
 def test_generate_jenkinsfile_cron_trigger_line_empty_when_retry_wrapper_enabled(tmp_path: Path):
@@ -398,7 +382,7 @@ def test_generated_jenkinsfile_has_no_empty_triggers_block(tmp_path: Path):
     text = out.read_text(encoding="utf-8")
     assert "triggers {" in text
     assert "pollSCM" in text
-    assert "cron(spec: '0 0 * * *'" in text
+    assert "cron('TZ=Asia/Tokyo" in text
     assert "checkout scm" not in text
     assert "GitSCM" in text
     assert "cisetup-pack.zip" in text

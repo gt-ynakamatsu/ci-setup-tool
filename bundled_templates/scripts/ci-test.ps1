@@ -2,7 +2,7 @@
     [string]$Configuration = "Release"
 )
 
-# Jenkins test ステージ — dotnet test（TRX 出力）または custom testCommand を実行する。
+# Jenkins test ステージ — dotnet test（TRX 出力）を実行する。
 $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet test -c` の引数が欠落し MSB4126 になるため既定値で補う。
@@ -14,18 +14,6 @@ Set-Location $ci.Root
 $env:CI = "true"
 
 Write-Host "==> Project: $($ci.ProjectName)"
-
-if ($ci.Profile -eq 'custom') {
-    if ([string]::IsNullOrWhiteSpace($ci.TestCommand)) {
-        Write-Host "No custom test command set. Skipping tests."
-        exit 0
-    }
-    Write-Host "==> Custom test: $($ci.TestCommand)"
-    Invoke-Expression $ci.TestCommand
-    if ($LASTEXITCODE -ne 0) { throw "Test command failed (exit code $LASTEXITCODE)." }
-    Write-Host "Tests passed."
-    return
-}
 
 if ([string]::IsNullOrWhiteSpace($ci.TestProject)) {
     Write-Host "No test project selected (project.testProject is empty). Skipping unit tests."

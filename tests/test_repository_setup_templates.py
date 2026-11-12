@@ -311,12 +311,11 @@ def test_notify_teams_uses_toarray_for_actions_list():
     assert "$actions.ToArray()" in text, "actions は ToArray() で配列化すること"
 
 
-def test_notify_teams_log_text_names_output_source_by_preset():
+def test_notify_teams_log_text_mentions_only_dotnet():
     script = template_store.bundled_template_dir() / "scripts" / "ci-notify-teams.ps1"
     text = script.read_text(encoding="utf-8-sig")
-    assert "dotnet / 合成ツール" not in text, ".NET と FPGA の文言を混ぜないこと"
-    assert "$ci.Preset" in text and "StartsWith('fpga-')" in text
-    assert "'合成ツール'" in text and "'dotnet'" in text
+    assert "合成ツール" not in text
+    assert "（dotnet の全出力）" in text
 
 
 def test_bundled_ps1_no_array_op_on_generic_lists():
@@ -704,6 +703,22 @@ def test_storage_folder_exists_respects_enable_and_path(tmp_path: Path):
     assert repo.storage_folder_exists(cfg, "analysis") is True
 
 
+def test_storage_folder_exists_ignores_unreachable_share(monkeypatch):
+    repo = ConfigRepository()
+    cfg = default_config()
+    cfg.project.name = "MyApp"
+    cfg.jenkins.ci_file_servers = [r"\\fileserver\ci"]
+    cfg.storage.base_paths = []
+
+    def raise_net(*_args, **_kwargs):
+        error = OSError(22, "The specified network name is no longer available")
+        error.winerror = 64
+        raise error
+
+    monkeypatch.setattr(Path, "is_dir", raise_net)
+    assert repo.storage_folder_exists(cfg, "logs") is False
+
+
 def test_create_storage_folders_respects_disabled_categories(tmp_path: Path):
     # 無効化したカテゴリはフォルダを作らない
     repo = ConfigRepository()
@@ -1042,13 +1057,19 @@ def test_validate_requires_name(sln_repo: Path):
         repo.validate(cfg, sln_repo)
 
 
-def test_validate_custom_requires_build_command(sln_repo: Path):
+def test_validate_rejects_fpga_config(sln_repo: Path):
     repo = ConfigRepository()
-    cfg = default_config()
-    cfg.project.name = "X"
-    cfg.build.profile = "custom"
-    cfg.build.build_command = ""
-    with pytest.raises(ValueError, match="ビルド コマンド"):
+    cfg = _valid_config(sln_repo)
+    cfg.build.preset = "fpga-vivado"
+    with pytest.raises(ValueError, match="CISetup-FPGA"):
+        repo.validate(cfg, sln_repo)
+
+
+def test_validate_rejects_dropped_custom_presets(sln_repo: Path):
+    repo = ConfigRepository()
+    cfg = _valid_config(sln_repo)
+    cfg.build.preset = "python"
+    with pytest.raises(ValueError, match=".NET 専用"):
         repo.validate(cfg, sln_repo)
 
 
@@ -1069,16 +1090,6 @@ def test_validate_missing_solution(tmp_path: Path):
     cfg.project.artifact_prefix = "X"
     with pytest.raises(ValueError, match="ソリューションファイルが見つかりません"):
         repo.validate(cfg, tmp_path)
-
-
-def test_validate_custom_skips_file_checks(tmp_path: Path):
-    repo = ConfigRepository()
-    cfg = default_config()
-    cfg.project.name = "X"
-    cfg.build.profile = "custom"
-    cfg.build.build_command = "make"
-    # custom はファイル存在チェックをスキップするので例外なし
-    repo.validate(cfg, tmp_path)
 
 
 def test_load_legacy_flat(tmp_path: Path):

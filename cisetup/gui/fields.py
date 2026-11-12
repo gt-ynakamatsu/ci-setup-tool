@@ -116,14 +116,6 @@ class FieldMixin:
             status.pack(side=tk.LEFT, padx=(8, 0))
             self._path_status[key] = status
 
-    def _on_profile_changed(self) -> None:
-        is_custom = self._profile_var.get().startswith("カスタム")
-        if is_custom:
-            self._custom_build_panel.pack(fill=tk.X, pady=(12, 0))
-        else:
-            self._custom_build_panel.pack_forget()
-        self._on_field_changed()
-
     def _open_link(self, url: str) -> None:
         webbrowser.open(url)
 

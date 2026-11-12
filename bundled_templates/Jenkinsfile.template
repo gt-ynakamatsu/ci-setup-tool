@@ -19,7 +19,7 @@ def runPsRaw(String script) {
 // artifacts/logs/build.log へ 1 本にまとめて残すため、ステップごとに Transcript を開き直す。
 // （Jenkins は powershell / pwsh ステップごとに別プロセスを起こすので、1 回 Start-Transcript
 //   しても次のステージには引き継がれない。以前はここで取りこぼしていた。）
-// native コマンド（dotnet / vivado / quartus_sh）の出力は Transcript では欠けることがあるため、
+// native コマンド（dotnet）の出力は Transcript では欠けることがあるため、
 // ci-*.ps1 側で artifacts/logs/*-output.log にも 1 行ずつ書き出している。
 def runPs(String label, String script) {
     runPsRaw("""\$ErrorActionPreference = 'Stop'

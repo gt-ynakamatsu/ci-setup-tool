@@ -51,13 +51,6 @@
   },
   "build": {
     "preset": "dotnet",
-    "profile": "dotnet",
-    "buildCommand": "",
-    "lintCommand": "",
-    "analyzeCommand": "",
-    "publishCommand": "",
-    "testCommand": "",
-    "artifactGlob": "",
     "runtimeIdentifier": "",
     "analysisExcludePaths": ""
   }

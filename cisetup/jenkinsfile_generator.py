@@ -103,8 +103,10 @@ def render_jenkinsfile(template: str, config) -> str:
     if not config.jenkins.retry_wrapper_enabled:
         cron = (config.jenkins.cron_schedule or "").strip()
         if cron:
+            # Jenkins の declarative cron は timezone 引数を受け付けないため、
+            # cron 仕様の先頭行に "TZ=<zone>" を付けて基準タイムゾーンを指定する。
             cron_trigger_line = (
-                f"        cron(spec: '{_escape_groovy(cron)}', timezone: '{_escape_groovy(timezone)}')"
+                f"        cron('TZ={_escape_groovy(timezone)}\\n{_escape_groovy(cron)}')"
             )
     poll = (config.jenkins.poll_schedule or "").strip()
     poll_trigger = ""

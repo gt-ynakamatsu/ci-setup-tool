@@ -288,54 +288,22 @@ java -jar "C:\Jenkins\agent.jar" -url "JENKINS_URL/" -secret <記録シートの
 | ビルド後（毎回） | **ユニットテスト結果（TRX / サマリ / 失敗ログ）をプロジェクト配下の `tests/` へ保存（releases/logs と同じ入れ子）** |
 | ビルド後（毎回・ON 時） | **開発環境一式（チェックアウト済みソース）を zip 化して `source/` へ保存（任意・既定 OFF）** |
 | ビルド成功時 | zip 成果物をファイルサーバーへ保存、Teams に成功通知 |
-| ビルド後（毎回） | **Console Output の内容（各ステージのログと dotnet / 合成ツールの全出力）を `logs/` へ保存** |
+| ビルド後（毎回） | **Console Output の内容（各ステージのログと dotnet の全出力）を `logs/` へ保存** |
 | ビルド失敗時 | Teams に失敗通知（ログ格納先フォルダのリンク付き） |
 
 > ビルドの実行方法（定期 / マージ / 手動）の詳細は [12. 日常運用](#12-日常運用) を参照。  
 > 静的解析の仕組み・出力・危険度の基準は [12-1. 静的解析（バグ自動検出）](#12-1-静的解析バグ自動検出) を参照。  
-> .NET 以外（FPGA / C・C++ / Python など）で使う方法は [1-1. ビルド種別（.NET / カスタムコマンド）](#1-1-ビルド種別net--カスタムコマンド) を参照。
+> 対象は .NET デスクトップアプリだけです（FPGA は別アプリ CISetup-FPGA）。詳しくは [1-1. 対象は .NET 専用](#1-1-対象は-net-専用) を参照。
 
-### 1-1. ビルド種別（.NET / カスタムコマンド）
+### 1-1. 対象は .NET 専用
 
-CISetup の土台（Git pull → ビルド → 解析 → Teams 通知 → ファイルサーバー保存、定期/マージ/手動トリガー）は言語非依存です。ビルド手順だけを切り替えて、.NET 以外のプロジェクトにも使えます。
+CISetup（2.0.0 以降）は **.NET デスクトップアプリ（`.sln`）専用**です。起動するとそのまま .NET 用の入力フォームが出ます（CI の種類を選ぶ画面はありません）。各ステージでは `dotnet restore/build/format/test/publish` を自動実行し、Roslyn 静的解析も行います。ビルドコマンドを手で書く欄はありません。
 
-種類は起動時の選択画面、または画面上部の「CI の種類（プリセット）」で選びます。詳細設定には同じ選択は出ません。カスタムの各コマンドは詳細設定の「追加コマンド」にあります。
-
-| 種別 | 用途 | 各ステップの実行内容 |
-|------|------|----------------------|
-| **.NET**（既定） | .NET ソリューション | `dotnet restore/build/format/publish` を自動実行。Roslyn 静的解析つき |
-| **カスタムコマンド** | FPGA（Vivado 等）・組み込み C/C++・Python など | 各ステップで入力した任意コマンドを PowerShell として実行 |
+> **FPGA（Vivado / Quartus）の CI** は別アプリ **CISetup-FPGA** で作ります。C/C++・Python・カスタムコマンドの CI はどちらのアプリでも扱いません。
+> FPGA 用（`build.preset` が `fpga-*`）など .NET 以外の `cisetup.config.json` を CISetup で開くと警告が出ます。そのままパイプラインを動かしても `ci-config.ps1` がエラーで止めます（CISetup-FPGA を使うよう案内が出ます）。
+> CISetup-FPGA と同じ Jenkins サーバー・ファイルサーバー・Teams を共用できます。エージェント PC を分けるかどうかは [12. 日常運用（エージェントを分けるか）](#エージェントを分けるか) を参照。
 
 > **.NET の Release 成果物について**: publish は **framework-dependent 単一ファイル**（`*-win-x64.exe`、`.NET` ランタイム非同梱・アプリ依存は exe に取り込み）です。**実行 PC 側に対応する .NET ランタイムがインストールされている前提**の運用です（self-contained にするとランタイム込みで肥大化するため採用していません）。後方互換で同内容の `*-win-x64.zip` も出力します。`publishProject` に指定する csproj は実行アプリ（`OutputType` が `Exe`/`WinExe`）である必要があります。ライブラリが指定されている場合は単一ファイル化を行わず zip のみ出力します（実行アプリが別リポジトリにある構成向け）。フォルダ名に `sample` や `mockup` が含まれていても、未設定時の自動検出では WinExe として採用します。RID は既定でエージェントの OS から決まりますが、`build.runtimeIdentifier`（GUI の「実行環境 (RID)」）で `win-arm64` などを指定できます。
-
-カスタムコマンドで設定する項目（`cisetup.config.json` の `build` セクション）:
-
-- `buildCommand`（必須）: ビルド。例 `vivado -mode batch -source build.tcl`
-- `lintCommand`（任意）: 構文チェック等。例 `verilator --lint-only -Wall src/top.v`。空ならスキップ
-- `analyzeCommand`（任意）: 解析。`artifacts/analysis` に出力すればレポート配置・Teams 連携に乗ります。空ならスキップ
-- `publishCommand`（任意）: 成果物生成（ビットストリーム等）
-- `artifactGlob`: 成果物として zip にまとめるファイル（`;` 区切り）。例 `**/*.bit;reports/*.rpt`
-
-> 各コマンドはエージェントの作業ディレクトリ（リポジトリ直下）で実行され、終了コードが 0 以外だとそのステージは失敗（Teams に失敗通知）になります。Vivado / Quartus などの CLI がエージェント PC の PATH に通っている必要があります。
-
-#### FPGA（Vivado / Quartus）を使う
-
-.NET と同様、GUI の起動直後に **CI の種類として FPGA（Vivado / Quartus）を選ぶ**だけです。選ぶと画面が FPGA 用に切り替わり（`.sln` / csproj の欄は隠れ、「FPGA ビルドの設定」カードが出ます）、あとはフォルダ / Git / Jenkins を埋めて「セットアップを実行」です。ビルドコマンドを手で書く必要はありません。
-
-| プリセット | エージェントで必要なもの | リポジトリ内に置くもの（サブフォルダ可） | 成果物 |
-|------------|--------------------------|------------------------------------------|--------|
-| **FPGA — AMD/Xilinx Vivado** | Vivado（`vivado` が PATH、または `XILINX_VIVADO`） | `build.tcl`、または `.xpr`（標準ラン `impl_1`）。1 つだけなら自動検出 | `.bit` / `.bin` / タイミング・使用率レポート |
-| **FPGA — Intel/Altera Quartus** | Quartus（`quartus_sh` が PATH、または `QUARTUS_ROOTDIR`） | `.qpf`（1 つなら自動検出。複数なら「合成するプロジェクト」で選ぶ） | `.sof` / `.pof` / `.rpt` |
-
-- 合成対象が複数あるときは「FPGA ビルドの設定 → 合成するプロジェクト」で 1 つ選びます（`build.buildCommand` に `-Project 相対パス` として保存されます）。Vivado で Tcl を使う場合は「ビルド Tcl」に指定します（`-Tcl`）。
-- 「環境をスキャン」は FPGA では .NET SDK ではなく **Vivado / Quartus の有無**を確認します（設定 PC に無くても、エージェント PC にあれば CI は動きます）。
-- 合成は時間がかかるため、種類を選んだ時点で **ビルドタイムアウトを 180 分** に上げます（既定 30 分のままなら上書き）。
-- Lint / ユニットテスト / Roslyn 解析は FPGA では空なのでスキップされます（任意コマンドを足せます）。
-- ライセンスサーバーや `settings64.bat` の複雑な読み込みは、ツールの `bin` を PATH に通す運用を前提にしています。専用 FPGA 機にする場合のラベルの付け方は [12. 日常運用（エージェントを分けるか）](#エージェントを分けるかnet--fpga) です。
-- ローカルの「ビルド＆テスト」も同じ `ci-fpga.ps1` を呼びます（その PC にツールが必要です）。
-- `.qpf` / `.xpr` / `build.tcl` はサブフォルダにあっても探します（`.git` / `bin` / `obj` / `artifacts` などは除外）。Quartus は `.qpf` のあるフォルダを作業ディレクトリにして実行します。複数ヒットした場合は `-Project` / `-Tcl` で指定してください。
-
-> Quartus の古いひな型 `quartus_sh --flow compile PROJECT` は使わなくなりました。`.qpf` のファイル名がプロジェクト名になります。
 
 ### システム構成
 
@@ -394,7 +362,7 @@ flowchart TB
 
 - ビルドは CPU・メモリ・ディスクを大量に使います。サーバー本体でビルドすると Jenkins の画面操作が重くなったり、他のジョブと干渉します。
 - .NET SDK や Git、社内ドライバなど **ビルドに必要なソフトはエージェント PC に入れます**。Jenkins サーバーには Java だけで足ります。
-- 複数プロジェクトを運用するとき、ラベルで「Windows 用」「FPGA 用」など **ビルド先 PC を振り分け** できます。
+- 複数プロジェクトを運用するとき、ラベルで「Windows 用」「Linux 用」（CISetup-FPGA と Jenkins を共用するなら「FPGA 用」も）など **ビルド先 PC を振り分け** できます。
 
 **CISetup の既定の動き**
 
@@ -475,14 +443,12 @@ flowchart TB
     ├── analysis\20260615\analysis-report.html
     ├── logs\20260615\MyApp-42-103000\     # そのビルドのログ一式（成功・失敗いずれも保存）
     │   ├── build.log                      # 各ステージのコンソール出力（Console Output 相当）
-    │   ├── build-output.log               # dotnet build / 独自ビルドコマンドの全出力
-    │   ├── fpga-output.log                # Vivado / Quartus の全出力（FPGA のとき）
+    │   ├── build-output.log               # dotnet restore / build の全出力
     │   ├── lint-output.log
     │   ├── publish-output.log
     │   ├── test-output.log                # dotnet test の全出力
     │   ├── jenkins-console.log            # Jenkins Console Output の本文
-    │   ├── jenkins-build-info.log         # 結果・所要時間などのビルド情報
-    │   └── fpga-reports\                  # FPGA のとき: vivado.log / *.rpt など（失敗時も）
+    │   └── jenkins-build-info.log         # 結果・所要時間などのビルド情報
     ├── source\20260615\MyApp-42-src.zip   # 「開発環境一式を zip 保存」ON 時のみ（毎回）
     └── tests\20260615\MyApp-42-103000\    # ユニットテスト結果（毎回保存・他カテゴリと同じ入れ子）
         ├── test-results.trx
@@ -959,7 +925,7 @@ CISetup は **パターン A または B** を想定しています（設定ア�
 | Java 11+ | `java -version` | 起動コマンド `java -jar agent.jar` に必要 |
 | .NET SDK 8 | `dotnet --version` | ビルド・静的解析に必要 |
 | Git for Windows | `git --version` | ソース取得に必要 |
-| （任意）社内ドライバ / Vivado 等 | — | プロジェクトが依存するもの |
+| （任意）社内ドライバ等 | — | プロジェクトが依存するもの |
 
 ```powershell
 # 作業フォルダを作成（設定アプリの既定値と同じ）
@@ -1114,7 +1080,7 @@ pause
 | `Access is denied`（workDir） | フォルダの権限 | 別パス（例: `C:\Users\自分\jenkins-workspace`）に変更し、設定アプリのエージェント作業フォルダも合わせて再登録 |
 | 一瞬で PowerShell が終了する | `java` 実行前にエラー | **2 行に分けて** ① ダウンロード ② 接続 のどちらで落ちたか確認 |
 | 接続直後に切れる | ファイアウォール / VPN | エージェント PC → Jenkins サーバー方向の通信を許可 |
-| Jenkins 画面は Online だがすぐ Offline | PowerShell を閉じた / PC スリープ | 窓を開いたままにする or [8.7](#87-常時稼働させる運用のヒント) |
+| Jenkins 画面は Online だがすぐ Offline | PowerShell を閉じた / PC スリープ | 窓を開いたままにする or [8.7](#87-常時稼働の選択肢概要) |
 
 **`localhost` の落とし穴**
 
@@ -1743,26 +1709,27 @@ curl -X POST "http://<jenkins>:8086/job/CISetup-CI/buildWithParameters" \
 | マージで自動ビルド | ② ブランチを対象に設定 + 詳細設定 pollSCM を有効に |
 | Webhook だけ確認 | 設定アプリ ④「テスト送信」 |
 | LDAP 追加後 | 設定アプリの API Token が有効か **接続テスト** で確認 |
-| FPGA と .NET を同じ Jenkins で回す | アプリは 1 本のまま。必要なときだけエージェント PC を分ける（下の「エージェントを分けるか」） |
+| FPGA（CISetup-FPGA）と .NET を同じ Jenkins で回す | アプリは別（.NET は CISetup、FPGA は CISetup-FPGA）。Jenkins 基盤は共用し、必要なときだけエージェント PC を分ける（下の「エージェントを分けるか」） |
 
-### エージェントを分けるか（.NET / FPGA）
+### エージェントを分けるか
 
-CISetup のアプリ・保存先・Jenkins サーバーは **分けません**。起動時に CI の種類を選ぶだけで、同じ基盤のまま .NET と FPGA の両方を扱えます。
+CISetup は .NET 専用で、FPGA（Vivado / Quartus）の CI は別アプリ **CISetup-FPGA** で作ります。アプリは別ですが、**Jenkins サーバー・ファイルサーバー・Teams は共用できます**。分けるのは必要に応じてエージェント PC（とラベル）だけです。
 
 | 対象 | 分ける？ | 理由 |
 |------|----------|------|
-| CISetup アプリ | しない | Git / 保存先 / Teams / Jenkins 登録は共通 |
+| 設定アプリ | **する** | .NET は CISetup、FPGA は CISetup-FPGA。どちらも同じ Jenkins にジョブを登録できる |
+| Jenkins サーバー / Teams | しない | 同じサーバー・同じチャンネル（Webhook）を共用できる |
 | ファイルサーバー（③ の書き込み先） | しない（既定） | プロジェクト名フォルダで既に分かれる |
 | プロジェクトの Git リポジトリ | **する** | FPGA と .NET は別リポジトリ・別ジョブ（フォルダを選ぶと `プロジェクト名-CI`） |
 | Jenkins のジョブワークスペース | 自動 | ジョブごとに `...\workspace\<ジョブ名>` ができる。ツール側で二重化しない |
-| **エージェント PC（ノード）** | **必要なときだけ** | 合成は数時間・ライセンス・専用ツールが要る。同じ PC だと .NET のジョブが待たされる |
+| **エージェント PC（ノード）** | **必要なときだけ** | FPGA の合成は数時間・ライセンス・専用ツールが要る。同じ PC だと .NET のジョブが待たされる |
 
 **エージェント PC を分ける目安**
 
 | 状況 | 構成 | 詳細設定のエージェントラベル |
 |------|------|------------------------------|
-| 検証・ノードが 1 台 | 同じ PC で .NET も FPGA も可（その PC に SDK と Vivado/Quartus の両方が要る） | **空欄**（`agent any`） |
-| 本番で FPGA 合成が長い / ライセンス機が別 | FPGA 専用機と .NET 用機を分ける | FPGA ジョブは `fpga`、.NET ジョブは `windows` など。**ノードの Labels と一致させる** |
+| 検証・ノードが 1 台 | 同じ PC で .NET も FPGA も可（その PC に .NET SDK と Vivado / Quartus の両方が要る） | **空欄**（`agent any`） |
+| 本番で FPGA 合成が長い / ライセンス機が別 | FPGA 専用機と .NET 用機を分ける | CISetup-FPGA のジョブは `fpga`、CISetup（.NET）のジョブは `windows` など。**ノードの Labels と一致させる** |
 | 同じ種類のジョブが複数 | ノードは増やしてよい。ラベルは種類で揃える | 例: .NET 機はどれも `windows` |
 
 ラベルを付ける手順は構築時と同じです（[8.5 ラベルの考え方](#85-ラベルlabelの考え方--jenkinsfile-との対応)）。GUI では次の欄です。
@@ -1774,7 +1741,7 @@ CISetup のアプリ・保存先・Jenkins サーバーは **分けません**�
 | 同一 PC のエージェントへ書き込み先を届ける | ③ → **Jenkins エージェントのワークスペースパス** |
 | 別 PC・共有不可のエージェントへ書き込み先を届ける | ③ → **CI_FILE_SERVER をグローバル環境変数として登録** |
 
-> エージェントラベルを空のまま FPGA ジョブを登録すると、Vivado の入っていない .NET 機に載って失敗することがあります。専用機にしたら **必ずラベルで振り分け** てください。
+> エージェントラベルを空のまま登録すると、CISetup-FPGA のジョブが Vivado の入っていない .NET 機に載ったり、.NET のジョブが .NET SDK の無い FPGA 機に載ったりして失敗することがあります。専用機にしたら **両方のジョブをラベルで振り分け** てください。
 
 ---
 
@@ -1825,7 +1792,7 @@ CISetup のアプリ・保存先・Jenkins サーバーは **分けません**�
 
 Phase 6（exe ①〜⑥）だけ繰り返す。ジョブ名はフォルダを選ぶと「プロジェクト名-CI」で自動設定されます。
 
-.NET と FPGA を両方回す場合も **Jenkins 基盤（Phase 1〜5）は共通**です。アプリを分けず、起動時に CI の種類を選びます。エージェント PC を分けるかどうかは [12. 日常運用](#エージェントを分けるかnet--fpga) です。
+.NET と FPGA を両方回す場合も **Jenkins 基盤（Phase 1〜5）は共通**です。.NET のプロジェクトは CISetup、FPGA のプロジェクトは別アプリ CISetup-FPGA で設定し、同じ Jenkins に登録します。エージェント PC を分けるかどうかは [12. 日常運用（エージェントを分けるか）](#エージェントを分けるか) です。
 
 ---
 
@@ -1887,16 +1854,14 @@ CI は Jenkins の **Console Output に出た内容をそのまま** ファイ�
 |--------------|--------------------|
 | `build.log` | 各ステージのコンソール出力を 1 本にまとめたもの。`===== Build : start ... =====` の見出しでステージが区切られる。**まずこれの末尾** を見る |
 | ↑ 失敗時 | 失敗したステージに `!!!!! Build : FAILED !!!!!` と **理由・発生位置・呼び出し履歴** が書かれる。`FAILED` で検索すれば失敗箇所に飛べる |
-| `build-output.log` | `dotnet restore` / `dotnet build`、または独自ビルドコマンドの**全出力**（stderr も含む）。コンパイルエラーの本文はここ |
-| `fpga-output.log` | Vivado / Quartus のコンソール全出力（FPGA プリセット）。合成エラー・タイミングエラーの手がかり |
-| `fpga-reports\` | ツール自身が作業フォルダへ書いた `vivado.log` / `*.rpt` 等。失敗時も回収。詳細なフィット／タイミングの本文はここ |
+| `build-output.log` | `dotnet restore` / `dotnet build` の**全出力**（stderr も含む）。コンパイルエラーの本文はここ |
 | `lint-output.log` / `publish-output.log` | format・アナライザー / publish の全出力 |
 | `test-output.log` / `test-failures.log` | `dotnet test` の全出力と失敗テストの詳細 |
 | `analysis-build.log` | 静的解析ビルドの生ログ |
 | `jenkins-console.log` | Jenkins が保持している **Console Output の本文**。外部から Jenkins を開けなくても確認できる |
 | `jenkins-build-info.log` | 結果・所要時間・ブランチ・コミットなどのビルド情報 |
 
-`*-output.log` は `dotnet` や合成ツールが出した行を 1 行ずつそのまま書き出したものです（`Start-Transcript` だけでは取りこぼす出力があるため、別ファイルで確実に残しています）。失敗時の例外メッセージにも `詳細ログ: ...` としてファイルパスが出ます。
+`*-output.log` は `dotnet` が出した行を 1 行ずつそのまま書き出したものです（`Start-Transcript` だけでは取りこぼす出力があるため、別ファイルで確実に残しています）。失敗時の例外メッセージにも `詳細ログ: ...` としてファイルパスが出ます。
 
 `jenkins-console.log` はビルド終了処理の途中で回収するため、回収後に実行されるログ配置処理と Jenkins 最終行（`Finished: ...`）は含まれません。
 

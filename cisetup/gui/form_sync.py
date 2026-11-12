@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..ci_preset_catalog import find_preset, find_preset_by_name, is_fpga_preset
-from ..fpga_build import compose_fpga_build_command, parse_fpga_build_command
+from .. import paths
 from .layout import COLOR_DESC, COLOR_TEXT
 from .util import safe_int
 
@@ -11,12 +10,6 @@ from .util import safe_int
 class FormSyncMixin:
     def _config_to_form(self) -> None:
         c = self._config
-        # FPGA プリセットのビルドコマンド欄は ci-fpga.ps1 のオプション。画面では
-        # 「合成するプロジェクト」「ビルド Tcl」に分解して見せる。欄を埋める前に
-        # 読み取っておく（欄の変更で _form_to_config が走り、元の値が消えるため）。
-        fpga = parse_fpga_build_command(c.build.build_command)
-        self._fpga_raw_command = fpga.raw
-
         mapping = {
             "project.name": c.project.name,
             "project.solution_file": c.project.solution_file,
@@ -43,12 +36,6 @@ class FormSyncMixin:
             "git.repository_url": c.git.repository_url,
             "git.branch": c.git.branch,
             "git.credential_id": c.git.credential_id,
-            "build.build_command": c.build.build_command,
-            "build.lint_command": c.build.lint_command,
-            "build.analyze_command": c.build.analyze_command,
-            "build.publish_command": c.build.publish_command,
-            "build.test_command": c.build.test_command,
-            "build.artifact_glob": c.build.artifact_glob,
             "build.runtime_identifier": c.build.runtime_identifier,
             "build.analysis_exclude_paths": c.build.analysis_exclude_paths,
             "secrets.jenkins_url": self._secrets.jenkins_url,
@@ -85,23 +72,7 @@ class FormSyncMixin:
         self._checkout_submodules_var.set(bool(c.git.checkout_submodules))
         self._retry_wrapper_var.set(c.jenkins.retry_wrapper_enabled)
         self._on_retry_wrapper_changed()
-        is_custom = c.build.profile.lower() == "custom"
-        self._profile_var.set(
-            "カスタムコマンド（FPGA・C/C++・Python など任意）"
-            if is_custom
-            else ".NET（dotnet build / format / publish を自動実行）"
-        )
-        self._on_profile_changed()
 
-        self._fields["fpga.project"].set(fpga.project)
-        self._fields["fpga.tcl"].set(fpga.tcl)
-
-        preset = find_preset(c.build.preset)
-        if preset:
-            self._preset_var.set(preset.name)
-            self._preset_desc.configure(text=preset.description)
-            self._applied_preset_name = preset.name
-        self._refresh_mode_ui()
     def _form_to_config(self) -> None:
         def get(key: str) -> str:
             return self._fields[key].get().strip()
@@ -157,23 +128,8 @@ class FormSyncMixin:
         c.git.credential_id = get("git.credential_id")
         c.git.checkout_submodules = bool(self._checkout_submodules_var.get())
 
-        is_custom = self._profile_var.get().startswith("カスタム")
-        c.build.profile = "custom" if is_custom else "dotnet"
-        c.build.build_command = get("build.build_command")
-        c.build.lint_command = get("build.lint_command")
-        c.build.analyze_command = get("build.analyze_command")
-        c.build.publish_command = get("build.publish_command")
-        c.build.test_command = get("build.test_command")
-        c.build.artifact_glob = get("build.artifact_glob")
         c.build.runtime_identifier = get("build.runtime_identifier")
         c.build.analysis_exclude_paths = get("build.analysis_exclude_paths")
-        preset = find_preset_by_name(self._preset_var.get())
-        c.build.preset = preset.id if preset else ("custom-empty" if is_custom else "dotnet")
-        if is_fpga_preset(c.build.preset):
-            # 合成対象の欄からビルドコマンド欄（ci-fpga.ps1 のオプション）を組み立てる。
-            c.build.build_command = compose_fpga_build_command(
-                get("fpga.project"), get("fpga.tcl"), self._fpga_raw_command
-            )
 
         self._secrets.jenkins_url = get("secrets.jenkins_url")
         self._secrets.jenkins_user = get("secrets.jenkins_user")
@@ -217,7 +173,6 @@ class FormSyncMixin:
             pass
         self._update_teams_url_states()
         self._update_path_statuses()
-        self._refresh_fpga_panel()
     def _update_teams_url_states(self) -> None:
         """Teams 通知 URL 欄を、カテゴリ有効フラグと格納フォルダの有無に連動させる。"""
         categories = getattr(self, "_teams_url_categories", None)
@@ -256,6 +211,6 @@ class FormSyncMixin:
         if root is None:
             return ("", COLOR_DESC)
         target = root / Path(raw.replace("\\", "/"))
-        if target.is_file():
+        if paths.is_existing_file(target):
             return ("", COLOR_DESC)
         return ("ファイルなし", "#B45309")

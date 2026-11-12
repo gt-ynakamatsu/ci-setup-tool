@@ -24,25 +24,19 @@ python configure.py --help
 
 ## 操作の流れ
 
-1. **CI の種類を選ぶ**（起動直後の選択画面。.NET / FPGA — Vivado / FPGA — Quartus / C・C++ / Python / カスタム）
-2. プロジェクトフォルダを指定
-3. ①〜⑤ を入力（Git → **保存先** → Teams → Jenkins）
-4. **セットアップを実行** — 最新を取り込む（git pull）→ 保存 → ローカルビルド＆テスト → Jenkins 反映 → テストビルド を順番に実行
+CISetup は **.NET デスクトップアプリ専用**です。起動するとそのまま入力フォームが出ます。
 
-保存済みの設定があるプロジェクトを開いたときは、選択画面を飛ばして保存された種類のフォームが出ます。
+1. プロジェクトフォルダ（`.sln` があるリポジトリルート）を指定
+2. ①〜⑤ を入力（Git → **保存先** → Teams → Jenkins）
+3. **セットアップを実行** — 最新を取り込む（git pull）→ 保存 → ローカルビルド＆テスト → Jenkins 反映 → テストビルド を順番に実行
 
-### CI の種類で画面が変わる
+| 項目 | 内容 |
+|---|---|
+| ビルド対象の指定 | 詳細設定の `.sln` / Publish csproj / テスト csproj / RID |
+| 環境チェック | Git / .NET SDK 8 / Java / Jenkins |
+| ビルド手順 | `dotnet restore` → `build` → `test` → `publish` |
 
-選んだ種類は画面上部の「CI の種類（プリセット）」に出ており、選び直すとその場で切り替わります（「種類の選択に戻る」で選択画面にも戻れます）。種類によって変わるのは次の点です。
-
-| | .NET | FPGA（Vivado / Quartus） |
-|---|---|---|
-| ① で選ぶフォルダ | `.sln` があるリポジトリルート | FPGA プロジェクトのリポジトリルート（`.xpr` / `.qpf` / `build.tcl` はサブフォルダ可） |
-| ビルド対象の指定 | 詳細設定の `.sln` / Publish csproj / テスト csproj / RID | **FPGA ビルドの設定**カード（合成するプロジェクト・ビルド Tcl・合成タイムアウト。詳細設定には同じタイムアウト欄を出さない） |
-| 環境チェック | Git / .NET SDK 8 / Java / Jenkins | Git / **Vivado または Quartus** / Java / Jenkins |
-| ビルド手順 | `dotnet restore` → `build` → `test` → `publish` | `ci-fpga.ps1`（ツールと合成対象を自動検出） |
-
-**FPGA** はビルドコマンドを手で書く必要はありません。合成対象は空欄なら自動検出（候補が 1 つのとき）で、複数ある場合だけ「合成するプロジェクト」で選びます（「候補を再検出」でリポジトリ内を探し直します）。合成は時間がかかるため、種類を選んだ時点でビルドタイムアウトを 180 分に上げます。詳細は [CI-GUIDE.md の 1-1](CI-GUIDE.md) です。
+> **FPGA（Vivado / Quartus）の CI** は別アプリ **CISetup-FPGA** で作ります。FPGA 用（`build.preset` が `fpga-*`）など .NET 以外の設定を開くと、警告を出して CISetup-FPGA を使うよう案内します。C/C++・Python・カスタムコマンドの CI はどちらのアプリでも扱いません。
 
 ウィンドウタイトルと画面右上に **バージョン（と git リビジョン）** が出ます。正本は `cisetup/version.py` の `VERSION` です。
 

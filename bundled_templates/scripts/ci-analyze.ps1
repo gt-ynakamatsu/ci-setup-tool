@@ -31,22 +31,6 @@ if (Test-Path $analysisDir) {
 }
 New-Item -ItemType Directory -Force -Path $analysisDir | Out-Null
 
-if ($ci.Profile -eq 'custom') {
-    if ([string]::IsNullOrWhiteSpace($ci.AnalyzeCommand)) {
-        Write-Host "No custom analyze command set. Skipping static analysis."
-        return
-    }
-    Write-Host "==> Custom analyze: $($ci.AnalyzeCommand)"
-    Invoke-Expression $ci.AnalyzeCommand
-    $analyzeExit = $LASTEXITCODE
-    # 解析ツールが artifacts\analysis に出力したものはそのまま配置・通知に使われる。
-    if ($FailOn -ne 'None' -and $analyzeExit -ne 0) {
-        throw "Analyze command failed (exit code $analyzeExit)."
-    }
-    Write-Host "Static analysis (custom) completed."
-    return
-}
-
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"
 

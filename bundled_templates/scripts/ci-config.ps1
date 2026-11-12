@@ -87,9 +87,9 @@ function Join-StorageChild {
 
 # ---- 実行ログ（コンソールに出た内容をそのままファイルへ残す）----
 # Jenkins の Console Output には出ているのに artifacts/logs に残らない、という取りこぼしを防ぐための仕組み。
-# Start-Transcript は native コマンド（dotnet / vivado / quartus_sh 等）の出力をコンソールバッファ経由で
+# Start-Transcript は native コマンド（dotnet 等）の出力をコンソールバッファ経由で
 # 記録するため、出力が多いと欠落する（PowerShell の既知の制約）。CI 失敗の原因はまさにその出力に
-# 書かれているので、native コマンドは Invoke-CiLogged / Invoke-CiLoggedCommandLine 経由で呼び、
+# 書かれているので、native コマンドは Invoke-CiLogged 経由で呼び、
 # 1 行ずつコンソールとログファイルの両方へ書き出す。
 # ログは <Root>/artifacts/logs に集約し、ci-deploy-fileserver.ps1 -Type Logs が格納先の logs へ配置する。
 
@@ -157,102 +157,6 @@ function Invoke-CiLogged {
         $header = if ($Label) { $Label } else { (@($FilePath) + $Arguments) -join ' ' }
         Write-CiLogHeader -Text $header -Writer $writer
         & $FilePath @Arguments 2>&1 | ForEach-Object { Write-CiLogLine -Value $_ -Writer $writer }
-        $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
-        Write-CiLogLine -Value "<== exit code $code" -Writer $writer
-        return $code
-    }
-    finally {
-        $writer.Flush()
-        $writer.Dispose()
-    }
-}
-
-function Copy-CiFpgaReports {
-    <#
-      Vivado / Quartus が作業フォルダへ書き出すレポートを artifacts/logs/fpga-reports へ集める。
-      コンソール出力だけではタイミング違反やフィット失敗の本文が足りないことがあるため、
-      ツール自身の .rpt / vivado.log 等をログ配置と同じフォルダへ残す。
-      呼び出しは成功・失敗どちらでも（throw の finally から）行う想定。
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$SearchRoot,
-        [int]$MaxFiles = 80,
-        [long]$MaxBytes = 20971520
-    )
-    if ([string]::IsNullOrWhiteSpace($SearchRoot) -or -not (Test-Path -LiteralPath $SearchRoot)) {
-        return
-    }
-    $destDir = Join-Path (Get-CiLogDir -Root $Root) 'fpga-reports'
-    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-
-    $skip = @(
-        '.git', '.vs', '.idea', 'bin', 'obj', 'artifacts', 'dist',
-        'node_modules', '__pycache__', 'incremental_db', 'db', '.xil'
-    )
-    $keepNames = @('vivado.log', 'vivado.jou', 'runme.log')
-    $keepExt = @('.rpt', '.summary', '.smsg', '.pin', '.jou')
-
-    $searchFull = (Get-Item -LiteralPath $SearchRoot).FullName
-    $candidates = @(Get-ChildItem -LiteralPath $searchFull -Recurse -File -ErrorAction SilentlyContinue)
-    $picked = New-Object System.Collections.Generic.List[object]
-    foreach ($file in $candidates) {
-        if ($file.Length -gt $MaxBytes) { continue }
-        $rel = $file.FullName.Substring($searchFull.Length).TrimStart('\', '/')
-        $skipHit = $false
-        foreach ($part in ($rel -split '[\\/]')) {
-            if ($skip -contains $part.ToLowerInvariant()) { $skipHit = $true; break }
-        }
-        if ($skipHit) { continue }
-        $nameLower = $file.Name.ToLowerInvariant()
-        $extLower = $file.Extension.ToLowerInvariant()
-        if (($keepNames -contains $nameLower) -or ($keepExt -contains $extLower)) {
-            $picked.Add($file) | Out-Null
-        }
-    }
-
-    $truncated = $false
-    if ($picked.Count -gt $MaxFiles) {
-        $picked = @($picked | Sort-Object FullName | Select-Object -First $MaxFiles)
-        $truncated = $true
-    }
-    else {
-        $picked = @($picked | Sort-Object FullName)
-    }
-
-    $copied = 0
-    foreach ($file in $picked) {
-        $rel = $file.FullName.Substring($searchFull.Length).TrimStart('\', '/')
-        $safe = ($rel -replace '[\\/]', '__')
-        if ([string]::IsNullOrWhiteSpace($safe)) { $safe = $file.Name }
-        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $destDir $safe) -Force
-        $copied++
-    }
-    if ($truncated) {
-        Write-Warning "FPGA レポートが $MaxFiles 件を超えたため先頭 $MaxFiles 件だけ logs へコピーしました。"
-    }
-    Write-Host "==> FPGA レポートを logs/fpga-reports へ $copied 件コピーしました（検索: $searchFull）"
-}
-
-function Invoke-CiLoggedCommandLine {
-    <#
-      GUI で設定した独自コマンド（buildCommand / lintCommand / publishCommand 等）を
-      Invoke-CiLogged と同じようにコンソールとログへ流して実行し、終了コードを返す。
-
-      NOTE: native の stderr で誤って止まらないよう ErrorActionPreference は Continue にする。
-      独自コマンド内の「非終了エラー」はログに残るがビルドは止めない（終了コードと throw で判定する）。
-    #>
-    param(
-        [Parameter(Mandatory = $true)][string]$LogPath,
-        [Parameter(Mandatory = $true)][string]$CommandLine,
-        [string]$Label = ''
-    )
-    $ErrorActionPreference = 'Continue'
-    $writer = New-CiLogWriter -LogPath $LogPath
-    try {
-        $header = if ($Label) { $Label } else { $CommandLine }
-        Write-CiLogHeader -Text $header -Writer $writer
-        Invoke-Expression $CommandLine 2>&1 | ForEach-Object { Write-CiLogLine -Value $_ -Writer $writer }
         $code = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
         Write-CiLogLine -Value "<== exit code $code" -Writer $writer
         return $code
@@ -356,19 +260,12 @@ function Get-CiSettings {
         throw "cisetup.config.json not found under CISetup/. Run Configure.ps1 (GUI) to create settings."
     }
 
-    # ---- ビルドプロファイル（dotnet / custom）----
     $build = $config.build
-    $buildProfile = if ($build -and $build.profile) { ([string]$build.profile).Trim().ToLower() } else { 'dotnet' }
-    if ($buildProfile -ne 'custom') { $buildProfile = 'dotnet' }
-    $presetId = if ($build -and $build.preset) { ([string]$build.preset).Trim().ToLower() } else { '' }
-    $isFpga = $presetId.StartsWith('fpga-')
-
-    $buildCommand = if ($build) { [string]$build.buildCommand } else { '' }
-    $lintCommand = if ($build) { [string]$build.lintCommand } else { '' }
-    $analyzeCommand = if ($build) { [string]$build.analyzeCommand } else { '' }
-    $publishCommand = if ($build) { [string]$build.publishCommand } else { '' }
-    $testCommand = if ($build) { [string]$build.testCommand } else { '' }
-    $artifactGlob = if ($build) { [string]$build.artifactGlob } else { '' }
+    # この CI スクリプトは .NET 専用。FPGA 等の設定に .NET の手順を当てると意味のない失敗になるため止める。
+    $presetId = if ($build -and $build.preset) { ([string]$build.preset).Trim().ToLower() } else { 'dotnet' }
+    if ($presetId -ne 'dotnet') {
+        throw "cisetup.config.json: build.preset '$presetId' は .NET 用の CISetup では扱えません（FPGA は CISetup-FPGA で設定してください）。"
+    }
     # 未設定なら publish 側でエージェント OS から補う。
     $runtimeIdentifier = if ($build) { ([string]$build.runtimeIdentifier).Trim() } else { '' }
     $analysisExcludePaths = if ($build) { ([string]$build.analysisExcludePaths).Trim() } else { '' }
@@ -378,15 +275,10 @@ function Get-CiSettings {
         throw "cisetup.config.json: project.name is required."
     }
 
-    if ($buildProfile -eq 'dotnet') {
-        foreach ($key in @('solutionFile', 'publishProject', 'artifactPrefix')) {
-            if ([string]::IsNullOrWhiteSpace($config.project.$key)) {
-                throw "cisetup.config.json: project.$key is required for the dotnet profile."
-            }
+    foreach ($key in @('solutionFile', 'publishProject', 'artifactPrefix')) {
+        if ([string]::IsNullOrWhiteSpace($config.project.$key)) {
+            throw "cisetup.config.json: project.$key is required."
         }
-    }
-    elseif (-not $isFpga -and [string]::IsNullOrWhiteSpace($buildCommand)) {
-        throw "cisetup.config.json: build.buildCommand is required for the custom profile."
     }
 
     $storage = $config.storage
@@ -481,14 +373,6 @@ function Get-CiSettings {
         PublishProject = (ConvertTo-PlatformPath $config.project.publishProject)
         TestProject = $testProject
         ArtifactPrefix = if ([string]::IsNullOrWhiteSpace($config.project.artifactPrefix)) { $config.project.name } else { $config.project.artifactPrefix }
-        Profile = $buildProfile
-        Preset = $presetId
-        BuildCommand = $buildCommand
-        LintCommand = $lintCommand
-        AnalyzeCommand = $analyzeCommand
-        PublishCommand = $publishCommand
-        TestCommand = $testCommand
-        ArtifactGlob = $artifactGlob
         RuntimeIdentifier = $runtimeIdentifier
         AnalysisExcludePaths = $analysisExcludePaths
         StorageBasePaths = $basePaths

@@ -2,7 +2,7 @@
     [string]$Configuration = "Release"
 )
 
-# Jenkins lint ステージ — dotnet format / custom lintCommand。custom で未設定ならスキップ。
+# Jenkins lint ステージ — dotnet format とアナライザー付きビルド。
 $ErrorActionPreference = "Stop"
 # Jenkins の自動トリガー等で CONFIGURATION が空のまま渡されると
 # `dotnet build -c` の引数が欠落し MSB4126 になるため既定値で補う。
@@ -18,18 +18,6 @@ $lintLog = Get-CiLogPath -Root $ci.Root -Name 'lint-output.log'
 
 Write-Host "==> Project: $($ci.ProjectName)"
 Write-Host "==> Lint ログ: $lintLog"
-
-if ($ci.Profile -eq 'custom') {
-    if ([string]::IsNullOrWhiteSpace($ci.LintCommand)) {
-        Write-Host "No custom lint command set. Skipping lint."
-        return
-    }
-    Write-Host "==> Custom lint: $($ci.LintCommand)"
-    $code = Invoke-CiLoggedCommandLine -LogPath $lintLog -CommandLine $ci.LintCommand -Label "Custom lint: $($ci.LintCommand)"
-    if ($code -ne 0) { throw "Lint command failed (exit code $code). 詳細ログ: $lintLog" }
-    Write-Host "Lint passed."
-    return
-}
 
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"

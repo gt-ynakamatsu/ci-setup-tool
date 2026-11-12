@@ -24,6 +24,27 @@ def is_url(value: str) -> bool:
     return v.startswith("http://") or v.startswith("https://")
 
 
+def is_existing_dir(path: Path | str) -> bool:
+    """ディレクトリとして存在するか。到達できない共有は存在しないものとして扱う。
+
+    pathlib の is_dir() は無いパスを False にするが、共有が切れたときの
+    WinError 64（ERROR_NETNAME_DELETED）などは例外のまま出す。プレビュー更新の
+    たびに \\\\fileserver\\ci を見るため、ここで受け止めないと画面操作が落ちる。
+    """
+    try:
+        return Path(path).is_dir()
+    except OSError:
+        return False
+
+
+def is_existing_file(path: Path | str) -> bool:
+    """ファイルとして存在するか。到達できない共有は存在しないものとして扱う。"""
+    try:
+        return Path(path).is_file()
+    except OSError:
+        return False
+
+
 def join_location(base: str, *parts: str) -> str:
     """格納先（UNC/ローカルパス または URL）にサブパスを連結する。
 
