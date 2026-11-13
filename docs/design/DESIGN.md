@@ -5,9 +5,9 @@
 基づいて、構成・データモデル・各処理フロー・CI パイプライン挙動・ビルド/配布までを記述する。
 
 - 対象バージョンの正本: `cisetup/`（Python パッケージ）と `bundled_templates/`（CI テンプレート）。
-- 既存ドキュメント（`README.md` / `docs/CI-GUIDE.md` / `docs/GUI.md` / `docs/README-dist.md` /
-  `bundled_templates/scripts/TEAMS-WORKFLOW.md`）と内容が重複する箇所は、本書では設計観点に絞り、
-  詳細手順はそれらを参照する。
+- 既存ドキュメント（`README.md` / `docs/guides/CI-GUIDE.md` / `docs/guides/GUI.md` /
+  `docs/guides/README-dist.md` / `bundled_templates/scripts/TEAMS-WORKFLOW.md`）と内容が重複する箇所は、
+  本書では設計観点に絞り、詳細手順はそれらを参照する。
 
 > 表記について: クラス名・関数名・JSON キー・既定値は実装どおりに記載している。
 > パス区切りは Windows を基本とし、リポジトリ相対パスは `cisetup\...` のように表記する。
@@ -196,7 +196,7 @@ flowchart TB
 | Jenkins 認証 | ユーザー名 + API Token（Basic 認証）+ CSRF Crumb |
 
 前提となる外部要素: 起動済みの Jenkins、アクセス可能な Git リモート、書き込み可能な共有フォルダ、
-Teams の受信 Webhook。これらの構築自体は [docs/CI-GUIDE.md](CI-GUIDE.md) を参照。
+Teams の受信 Webhook。これらの構築自体は [docs/guides/CI-GUIDE.md](../guides/CI-GUIDE.md) を参照。
 
 ### 4.1 CI パイプラインの Linux 対応
 
@@ -225,7 +225,7 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 
 ## 5. ディレクトリ構成と各モジュールの責務
 
-リポジトリ全体構成は [README.md](../README.md) の「2. ディレクトリ構成」を参照。本章は
+リポジトリ全体構成は [README.md](../../README.md) の「2. ディレクトリ構成」を参照。本章は
 アプリ本体パッケージ `cisetup\*.py` の責務と主要関数を表にまとめる。
 
 ### 5.1 アプリ本体（`cisetup\`）
@@ -1221,7 +1221,7 @@ Source は `archiveSource`）で個別に無効化できる。無効カテゴリ
 CISetup-<Version>/
 ├── CISetup.exe
 ├── Setup-Project.bat
-├── README.md              … docs/README-dist.md をリネーム同梱
+├── README.md              … docs/guides/README-dist.md をリネーム同梱
 └── docs/                  … CI-GUIDE.md / GUI.md / CISetup-CI-Guide.marp.md
 ```
 
@@ -1325,7 +1325,7 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 
 | 変更内容 | 更新する章・図 |
 |----------|----------------|
-| GUI 画面順・ステップ番号 | [8.1](#81-画面構成)、[8.8 画面フロー図](#87-ソース構成mixin-分割)、[15.1](#151-設定値--json-早見表)、[docs/GUI.md](GUI.md) / [CI-GUIDE.md](CI-GUIDE.md) 9 章 |
+| GUI 画面順・ステップ番号 | [8.1](#81-画面構成)、[8.8 画面フロー図](#87-ソース構成mixin-分割)、[15.1](#151-設定値--json-早見表)、[docs/guides/GUI.md](../guides/GUI.md) / [CI-GUIDE.md](../guides/CI-GUIDE.md) 9 章 |
 | Mixin / モジュール追加・分割 | [5.2](#52-gui-サブパッケージcisetupgui)、[5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[3.1](#31-コンポーネント図)、[8.7](#87-ソース構成mixin-分割) |
 | 外部 API 呼び出し経路 | [5.2.1](#521-gui-アーキテクチャ図mixin--deps)、[9.2](#92-セットアップを実行フロー⑥)〜[9.5](#95-gitアプリのリポジトリの-checkout-のみ)、[13](#13-テスト戦略)（`deps` patch） |
 | 保存先ルール・local.json | [7.4](#74-save_all-の処理順)、[7.5](#75-書き込み先の実効ルートと後勝ち) |
@@ -1346,9 +1346,9 @@ Windows 上か `rebuild_exe.py --windows`（Wine）で exe を作り直す。** 
 
 | ドキュメント | 内容 |
 |--------------|------|
-| [README.md](../README.md) | リポジトリ構成・開発フロー・exe ビルド・配布手順 |
-| [docs/README-dist.md](README-dist.md) | 配布 exe 利用者向け |
-| [docs/GUI.md](GUI.md) | GUI 操作・CLI 引数 |
-| [docs/CI-GUIDE.md](CI-GUIDE.md) | CI 構築の完全手順書・設定値↔JSON 対応・トラブルシューティング |
-| [docs/CISetup-CI-Guide.marp.md](CISetup-CI-Guide.marp.md) | CI-GUIDE のスライド版 |
-| [bundled_templates/scripts/TEAMS-WORKFLOW.md](../bundled_templates/scripts/TEAMS-WORKFLOW.md) | Teams 通知（Power Automate）の設定とカード形式 |
+| [README.md](../../README.md) | リポジトリ構成・開発フロー・exe ビルド・配布手順 |
+| [docs/guides/README-dist.md](../guides/README-dist.md) | 配布 exe 利用者向け |
+| [docs/guides/GUI.md](../guides/GUI.md) | GUI 操作・CLI 引数 |
+| [docs/guides/CI-GUIDE.md](../guides/CI-GUIDE.md) | CI 構築の完全手順書・設定値↔JSON 対応・トラブルシューティング |
+| [docs/guides/CISetup-CI-Guide.marp.md](../guides/CISetup-CI-Guide.marp.md) | CI-GUIDE のスライド版 |
+| [bundled_templates/scripts/TEAMS-WORKFLOW.md](../../bundled_templates/scripts/TEAMS-WORKFLOW.md) | Teams 通知（Power Automate）の設定とカード形式 |

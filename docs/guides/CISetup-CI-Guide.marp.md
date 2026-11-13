@@ -761,7 +761,7 @@ Windows サービスユーザー `.\jenkins` とは無関係
 ### 資料の PDF / HTML 出力
 
 VS Code + **Marp for VS Code** 拡張機能  
-または CLI: `marp docs/CISetup-CI-Guide.marp.md --pdf`
+または CLI: `marp docs/guides/CISetup-CI-Guide.marp.md --pdf`
 
 ---
 

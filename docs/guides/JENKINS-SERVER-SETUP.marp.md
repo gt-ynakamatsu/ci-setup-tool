@@ -7,11 +7,11 @@ title: Jenkins サーバー セットアップ手順
 description: 未導入の Windows サーバーを、CISetup から接続できる状態にする手順
 footer: "©2026 GENETEC CORPORATION All Rights Reserved."
 style: |
-  section.cover { background: linear-gradient(#003894, #003894) top / 100% 14px no-repeat, url("./images/genetec-logo.png") right 64px bottom 56px / 210px auto no-repeat, #fff; }
+  section.cover { background: linear-gradient(#003894, #003894) top / 100% 14px no-repeat, url("../images/genetec-logo.png") right 64px bottom 56px / 210px auto no-repeat, #fff; }
   section:not(.cover) {
     background:
       linear-gradient(#003894, #003894) top / 100% 14px no-repeat,
-      url("./images/genetec-logo-h.png") right 32px bottom 16px / 168px auto no-repeat,
+      url("../images/genetec-logo-h.png") right 32px bottom 16px / 168px auto no-repeat,
       #fff;
   }
   footer {
@@ -104,7 +104,7 @@ MSI 版 Jenkins を使う場合、または別 PC をエージェントにする
 
 ## この手順で行うこと
 
-![全体の流れ](./images/jenkins-setup-flow.svg)
+![全体の流れ](../images/jenkins-setup-flow.svg)
 
 ---
 
@@ -300,7 +300,7 @@ CISetup の「.NET SDK」欄にも同じ値を入力します。
 
 ## 完了表示
 
-![完了表示の画面イメージ](./images/jenkins-setup-completion.svg)
+![完了表示の画面イメージ](../images/jenkins-setup-completion.svg)
 
 画面イメージです。パスワードと API Token は伏せています。
 
@@ -332,7 +332,7 @@ CISetup の「.NET SDK」欄にも同じ値を入力します。
 
 ## CISetup へ入力して接続を確認する
 
-![CISetup の入力画面と接続成功の画面イメージ](./images/jenkins-setup-cisetup.svg)
+![CISetup の入力画面と接続成功の画面イメージ](../images/jenkins-setup-cisetup.svg)
 
 画面イメージです。完了表示の URL、ユーザー名、API Token を使います。
 
@@ -430,7 +430,7 @@ CISetup の接続テストで
 
 ## 構成
 
-![Jenkins サーバーの構成](./images/jenkins-setup-architecture.svg)
+![Jenkins サーバーの構成](../images/jenkins-setup-architecture.svg)
 
 .NET SDK は `-DotNetSdk` でチャネルまたは版を指定します。既定は 8.0 です。
 

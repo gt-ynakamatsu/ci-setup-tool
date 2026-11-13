@@ -12,10 +12,10 @@ Visual Studio は **開発 PC にだけ** 必要で、CI サーバー・エー�
 > **初めてセットアップする人は [0-6 完全再現手順](#0-6-完全再現手順ゲート付き--この順番で進めれば再現できます) を上から順に実行してください。**  
 > 各ステップに「成功の見え方（ゲート）」があります。**ゲートを通過するまで次に進まない** と、どこで詰まったか特定しやすくなります。
 
-📊 **プレゼン資料（Marp）:** [`docs/CISetup-CI-Guide.marp.md`](CISetup-CI-Guide.marp.md)  
+📊 **プレゼン資料（Marp）:** [`docs/guides/CISetup-CI-Guide.marp.md`](CISetup-CI-Guide.marp.md)  
 Jenkins 導入・Teams Webhook・アプリ操作をスライド形式で網羅しています。
 
-📖 **GUI 操作:** [`docs/GUI.md`](GUI.md)
+📖 **GUI 操作:** [`docs/guides/GUI.md`](GUI.md)
 
 ---
 
@@ -916,7 +916,7 @@ CISetup は **パターン A または B** を想定しています（設定ア�
 > `isUnix()` でエージェント OS を判定し、Windows は `powershell`、Linux は `pwsh` を自動選択）。
 > Linux エージェントには Java 11+ / Git / 対象プロジェクトのビルドツール（.NET SDK 等）に加えて
 > **PowerShell 7 (`pwsh`)** のインストールが必要です。詳細は
-> [DESIGN.md 4.1 章](DESIGN.md#41-ci-パイプラインの-linux-対応) を参照してください。
+> [DESIGN.md 4.1 章](../design/DESIGN.md#41-ci-パイプラインの-linux-対応) を参照してください。
 
 ### 8.3 エージェント PC に入れるソフト
 
@@ -2023,7 +2023,7 @@ cisetup/
 │   ├── rebuild_exe.py        … exe ビルド（Python）
 │   ├── Package-Distribution.ps1 … 社内配布 zip 生成
 │   └── smoke_test.py         … スモークテスト
-└── docs/                     … 手順書（本書・Marp・GUI）
+└── docs/                     … 手順書（同梱時。リポジトリでは docs/guides/）
 ```
 
 ### 16.4 初回セットアップ（取得後）

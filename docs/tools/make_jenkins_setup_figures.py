@@ -1,4 +1,4 @@
-"""JENKINS-SERVER-SETUP.marp.md の図（SVG）を docs/images へ書き出す。
+"""docs/guides/JENKINS-SERVER-SETUP.marp.md 用の図（SVG）を docs/images へ書き出す。
 
 python docs/tools/make_jenkins_setup_figures.py
 """

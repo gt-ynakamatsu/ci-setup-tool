@@ -7,11 +7,11 @@ title: Jenkins サーバー 手動セットアップ手順
 description: MSI 版 Jenkins を、CISetup から接続できる状態にする手順
 footer: "©2026 GENETEC CORPORATION All Rights Reserved."
 style: |
-  section.cover { background: linear-gradient(#003894, #003894) top / 100% 14px no-repeat, url("./images/genetec-logo.png") right 64px bottom 56px / 210px auto no-repeat, #fff; }
+  section.cover { background: linear-gradient(#003894, #003894) top / 100% 14px no-repeat, url("../images/genetec-logo.png") right 64px bottom 56px / 210px auto no-repeat, #fff; }
   section:not(.cover) {
     background:
       linear-gradient(#003894, #003894) top / 100% 14px no-repeat,
-      url("./images/genetec-logo-h.png") right 32px bottom 16px / 168px auto no-repeat,
+      url("../images/genetec-logo-h.png") right 32px bottom 16px / 168px auto no-repeat,
       #fff;
   }
   footer {

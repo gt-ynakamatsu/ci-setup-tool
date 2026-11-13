@@ -5,7 +5,7 @@ Python 製で、配布は **単一 exe**（利用者は Python 不要）。
 
 対象は **.NET デスクトップアプリ専用**です（2.0.0 から）。FPGA（Vivado / Quartus）の CI は別アプリ **CISetup-FPGA** が扱います。C/C++・Python・カスタムコマンドの CI はどちらのアプリでも扱いません。
 
-> 配布された exe を使うだけの方は、zip 内の `README.md`（= [docs/README-dist.md](docs/README-dist.md)）を参照してください。
+> 配布された exe を使うだけの方は、zip 内の `README.md`（= [docs/guides/README-dist.md](docs/guides/README-dist.md)）を参照してください。
 
 ---
 
@@ -88,7 +88,7 @@ cisetup/
 │   ├── teams_service.py     … Teams 通知カードの生成・送信
 │   ├── git_service.py       … リモート最新の取り込み（fetch + ff-only merge。サブモジュール取得がオンなら再帰 update。push はしない）
 │   ├── local_ci.py          … ローカルでビルド＆テスト（ci-build/ci-test を実行）
-│   ├── environment_scan.py  … 開発環境スキャン（Git / .NET SDK 8 / Java / Jenkins サービス）
+│   ├── environment_scan.py  … 開発環境スキャン（Git / .NET SDK 8 / Java / Jenkins）
 │   ├── recent_project.py    … 直近プロジェクトの記憶
 │   ├── help_texts.py        … GUI ヘルプ文言
 │   ├── version.py           … アプリの VERSION / リビジョン（正本）
@@ -116,12 +116,19 @@ cisetup/
 │
 ├── tests/                   … pytest 一式（conftest.py + test_*.py）
 ├── docs/                    … ドキュメント
-│   ├── README-dist.md       … 配布 zip に同梱する利用者向け README
-│   ├── CI-GUIDE.md          … CI 構築手順書
-│   ├── CI-USERS-GUIDE.md    … リポジトリ利用者向け（push すると何が起きるか）
-│   ├── DESIGN.md            … 設計仕様書（アーキテクチャ・Mermaid 図）
-│   ├── GUI.md               … GUI 操作
-│   └── CISetup-CI-Guide.marp.md … Marp プレゼン資料
+│   ├── guides/              … 手順書・利用者向けガイド
+│   │   ├── README-dist.md   … 配布 zip に同梱する利用者向け README
+│   │   ├── CI-GUIDE.md      … CI 構築手順書
+│   │   ├── CI-USERS-GUIDE.md … リポジトリ利用者向け（push すると何が起きるか）
+│   │   ├── GUI.md           … GUI 操作
+│   │   ├── CISetup-CI-Guide.marp.md … Marp プレゼン資料
+│   │   └── JENKINS-SERVER-SETUP*.marp.md … Jenkins サーバー手順（スクリプト版 / 手動版）
+│   ├── design/              … 設計書・技術資料
+│   │   ├── DESIGN.md        … 設計仕様書（アーキテクチャ・Mermaid 図）
+│   │   └── StaticAnalysis-*.marp.md / CI-Technical-Report-Draft.marp.md
+│   ├── images/              … 手順書・スライド共用の画像
+│   ├── archive/             … 旧版 HTML/PDF など
+│   └── tools/               … 図生成スクリプト
 └── dist/                    … 【生成物・Git 非追跡】Windows では CISetup.exe、Linux では CISetup + 配布 zip
 ```
 
@@ -207,8 +214,8 @@ zip の中身（利用者が受け取るもの）:
 CISetup-<Version>/
 ├── CISetup.exe   ← これだけで GUI 起動（Python 不要）
 ├── Setup-Project.bat          ← CI 配置 + GUI 起動（任意）
-├── README.md                  ← 利用者向け（docs/README-dist.md）
-└── docs/                      ← 手順書
+├── README.md                  ← 利用者向け（docs/guides/README-dist.md）
+└── docs/                      ← 手順書（リポジトリの docs/guides/ から同梱）
 ```
 
 `bundled_templates/` は exe に埋め込まれるため、zip には個別同梱しません。
@@ -234,12 +241,14 @@ configure.py --help
 | ファイル | 対象読者 | 主な内容 | こんなときに見る |
 |----------|----------|----------|------------------|
 | [README.md](README.md)（本ファイル） | 開発者 | リポジトリ構成・開発フロー・exe ビルド・配布手順・このドキュメント索引 | コードを直す/exe を作る/zip を配る |
-| [docs/DESIGN.md](docs/DESIGN.md) | 開発者 | **設計仕様書**。全体像・データモデル・各処理フロー（Mermaid）・CI パイプライン挙動・ビルド/配布を網羅 | 設計を把握する/同等品を再実装する |
-| [docs/README-dist.md](docs/README-dist.md) | 利用者（exe を使う人） | exe の起動方法・同梱物・初回セットアップ・困ったとき | 配布された exe をとりあえず動かしたい |
-| [docs/GUI.md](docs/GUI.md) | 利用者・開発者 | 設定 GUI の起動方法・操作の流れ・CLI 引数 | GUI の使い方をざっと知りたい |
-| [docs/CI-GUIDE.md](docs/CI-GUIDE.md) | 構築担当者 | **CI 構築の完全手順書**。ファイルサーバー/Teams/Jenkins/エージェント/プロジェクト設定、GATE A〜D、トラブルシューティング、設定値↔JSON 対応 | CI を一から構築する/エラーで詰まった |
-| [docs/CI-USERS-GUIDE.md](docs/CI-USERS-GUIDE.md) | リポジトリ利用者 | push すると何が起きるか・Teams 通知・成果物の見方（CISetup 開発者向けではない） | CI が入ったリポジトリで開発するだけの人 |
-| [docs/CISetup-CI-Guide.marp.md](docs/CISetup-CI-Guide.marp.md) | 構築担当者・説明者 | CI-GUIDE.md をスライド化した Marp プレゼン資料（全体像の説明・勉強会向け） | 全体像を俯瞰したい/人に説明する |
+| [docs/design/DESIGN.md](docs/design/DESIGN.md) | 開発者 | **設計仕様書**。全体像・データモデル・各処理フロー（Mermaid）・CI パイプライン挙動・ビルド/配布を網羅 | 設計を把握する/同等品を再実装する |
+| [docs/guides/README-dist.md](docs/guides/README-dist.md) | 利用者（exe を使う人） | exe の起動方法・同梱物・初回セットアップ・困ったとき | 配布された exe をとりあえず動かしたい |
+| [docs/guides/GUI.md](docs/guides/GUI.md) | 利用者・開発者 | 設定 GUI の起動方法・操作の流れ・CLI 引数 | GUI の使い方をざっと知りたい |
+| [docs/guides/CI-GUIDE.md](docs/guides/CI-GUIDE.md) | 構築担当者 | **CI 構築の完全手順書**。ファイルサーバー/Teams/Jenkins/エージェント/プロジェクト設定、GATE A〜D、トラブルシューティング、設定値↔JSON 対応 | CI を一から構築する/エラーで詰まった |
+| [docs/guides/CI-USERS-GUIDE.md](docs/guides/CI-USERS-GUIDE.md) | リポジトリ利用者 | push すると何が起きるか・Teams 通知・成果物の見方（CISetup 開発者向けではない） | CI が入ったリポジトリで開発するだけの人 |
+| [docs/guides/CISetup-CI-Guide.marp.md](docs/guides/CISetup-CI-Guide.marp.md) | 構築担当者・説明者 | CI-GUIDE.md をスライド化した Marp プレゼン資料（全体像の説明・勉強会向け） | 全体像を俯瞰したい/人に説明する |
+| [docs/guides/JENKINS-SERVER-SETUP.marp.md](docs/guides/JENKINS-SERVER-SETUP.marp.md) | 構築担当者 | Jenkins サーバー手順（`Setup-JenkinsServer.ps1`） | スクリプトでサーバーを用意する |
+| [docs/guides/JENKINS-SERVER-SETUP-MANUAL.marp.md](docs/guides/JENKINS-SERVER-SETUP-MANUAL.marp.md) | 構築担当者 | Jenkins サーバー手順（MSI / 別 PC エージェント） | MSI や別 PC エージェントで用意する |
 | [bundled_templates/scripts/TEAMS-WORKFLOW.md](bundled_templates/scripts/TEAMS-WORKFLOW.md) | 構築担当者 | Teams 通知（Power Automate ワークフロー）の設定とカードの形式 | Teams 通知を設定/カスタムしたい |
 
 > exe 本体や各設定項目の意味は、GUI 内の各項目「?」ヘルプ（吹き出し）にも記載しています。
@@ -264,5 +273,5 @@ configure.py --help
 | 書き込み先設定がワークスペースのワイプで消える対策（同一 PC でエージェント運用時） | GUI ③「Jenkins エージェントのワークスペースパス」を設定 → 保存時に兄弟パスへ自動配置（CI-GUIDE.md「③ 保存先」の注記） |
 | 別 PC・共有アクセス不可のエージェントへ書き込み先を届ける | GUI ④「書き込み先を Jenkins のグローバル環境変数 (CI_FILE_SERVER) として登録する」を ON →「Jenkinsに反映」で Jenkins 本体に自動登録（単一値・管理者権限要） |
 | エラー・トラブルの対処 | CI-GUIDE.md「15. トラブルシューティング」 |
-| 配布された exe の使い方（利用者向け） | docs/README-dist.md |
+| 配布された exe の使い方（利用者向け） | docs/guides/README-dist.md |
 | コードを直してから exe を再ビルド | README.md「3. 開発フロー」 |

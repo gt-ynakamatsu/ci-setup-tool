@@ -46,11 +46,11 @@ Copy-Item $builtExe (Join-Path $stage $exeName) -Force
 Copy-Item (Join-Path $root "Setup-Project.bat") $stage -Force
 
 # 利用者向け README を README.md として同梱（開発者向けルート README ではない）
-Copy-Item (Join-Path $root "docs\README-dist.md") (Join-Path $stage "README.md") -Force
+Copy-Item (Join-Path $root "docs\guides\README-dist.md") (Join-Path $stage "README.md") -Force
 
 # 利用者向けガイドのみ docs\ へ（開発者向け資料は同梱しない）
 foreach ($doc in @("CI-GUIDE.md", "GUI.md", "CISetup-CI-Guide.marp.md")) {
-    $src = Join-Path $root "docs\$doc"
+    $src = Join-Path $root "docs\guides\$doc"
     if (Test-Path $src) { Copy-Item $src (Join-Path $stage "docs") -Force }
 }
 
