@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -20,6 +22,10 @@ from .process_util import no_window_kwargs
 
 class LocalCIError(RuntimeError):
     """ローカル CI 実行でスクリプトが見つからない / 失敗したときに送出する。"""
+
+
+# GUI はこれを状態欄の更新とみなし、実行ログには残さない。
+ACTIVITY_PREFIX = "\x1e"
 
 
 def _powershell_candidates() -> list[str]:
@@ -78,6 +84,17 @@ def _run_script(
         _powershell_command(script, configuration),
     ]
 
+    stop = threading.Event()
+    started = time.monotonic()
+
+    def heartbeat() -> None:
+        while not stop.wait(2.0):
+            if on_output is None:
+                continue
+            elapsed = int(time.monotonic() - started)
+            on_output(f"{ACTIVITY_PREFIX}{label}を実行中です（{elapsed}秒経過）")
+
+    beater = threading.Thread(target=heartbeat, daemon=True)
     proc = None
     last_exc: OSError | None = None
     for exe in _powershell_candidates():
@@ -102,11 +119,15 @@ def _run_script(
             "PowerShell を起動できません（powershell / pwsh が見つかりません）。"
         ) from last_exc
 
-    if proc.stdout is not None:
-        for line in proc.stdout:
-            if on_output is not None:
-                on_output(line.rstrip("\n"))
-    proc.wait()
+    beater.start()
+    try:
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                if on_output is not None:
+                    on_output(line.rstrip("\n"))
+        proc.wait()
+    finally:
+        stop.set()
 
     if proc.returncode != 0:
         raise LocalCIError(

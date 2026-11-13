@@ -5,6 +5,7 @@ import webbrowser
 from pathlib import Path
 
 from ... import paths
+from ...local_ci import ACTIVITY_PREFIX
 from ...project_setup import find_test_project
 from .. import deps
 
@@ -240,6 +241,9 @@ class ActionsMixin:
             self.after(0, lambda: self._set_text(self._run_log_text, ""))
 
         def emit(line: str) -> None:
+            if line.startswith(ACTIVITY_PREFIX):
+                self.after(0, lambda value=line[len(ACTIVITY_PREFIX):]: self._status.configure(text=value))
+                return
             self.after(0, lambda value=line: self._append_text(self._run_log_text, value))
 
         deps.run_local_ci(
