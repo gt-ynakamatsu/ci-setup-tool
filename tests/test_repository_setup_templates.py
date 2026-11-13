@@ -393,6 +393,8 @@ def test_ci_config_exposes_runtime_identifier_and_analysis_excludes():
     text = script.read_text(encoding="utf-8-sig")
     assert "RuntimeIdentifier = $runtimeIdentifier" in text
     assert "AnalysisExcludePaths = $analysisExcludePaths" in text
+    assert "DotNetSdk = $dotnetSdk" in text
+    assert "function Enable-CiDotNetSdk" in text
 
 
 def test_ci_publish_uses_configured_runtime_identifier():

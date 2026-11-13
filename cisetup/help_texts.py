@@ -34,6 +34,17 @@ PUBLISH_PROJECT = (
     "【保存先】cisetup.config.json → project.publishProject"
 )
 
+DOTNET_SDK = (
+    "【何を】この PC の環境チェックと、CI のビルドで使う .NET SDK\n"
+    "【チャネル】8.0、9.0、10.0 は、その系列の SDK が入っていればよい\n"
+    "【版の固定】8.0.428 のように 3 つの数字で書くと、その版だけを使う\n"
+    "【既定】8.0\n"
+    "【CI】リポジトリ直下に global.json が無いとき、実行中だけ一時的に作って指定の SDK を使う。"
+    "既にある global.json は変更しない\n"
+    "【Jenkins サーバー】Setup-JenkinsServer.ps1 の -DotNetSdk に同じ値を渡す\n"
+    "【保存先】cisetup.config.json → build.dotnetSdk"
+)
+
 RUNTIME_IDENTIFIER = (
     "【何を】dotnet publish の実行環境識別子（RID）\n"
     "【なぜ】単一ファイル公開には RID が必要で、配布先の OS / CPU に合わせるため\n"

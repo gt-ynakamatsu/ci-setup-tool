@@ -12,6 +12,8 @@ class BuildConfig:
     preset: str = "dotnet"
     # dotnet publish の RuntimeIdentifier。空ならエージェント OS から自動（win-x64 / linux-x64）。
     runtime_identifier: str = ""
+    # 環境チェックと CI が使う .NET SDK。8.0 はチャネル、8.0.428 は版の固定。
+    dotnet_sdk: str = "8.0"
     # 静的解析の対象から外すパス（";" 区切り。前方一致 or * ? ** のグロブ）。
     analysis_exclude_paths: str = ""
 

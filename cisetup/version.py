@@ -8,10 +8,19 @@ from pathlib import Path
 # これまでの main 履歴から逆算したセマンティックバージョン。
 # 1.0 初期 → 1.1 Linux/cron → 1.2 ウィザード/保存先 → 1.3 配布 exe → 1.4 Jenkins 内蔵 CI
 # → 1.5 FPGA → 1.6 CI の種類ごとに画面を切り替え → 2.0 .NET 専用（FPGA は CISetup-FPGA へ分離）
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 # (version, date, notes) 新しい順。VERSION は先頭と一致させる。
 RELEASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "2.1.0",
+        "2026-11-13",
+        (
+            ".NET SDK を 8.0 以外も指定できる（8.0 や 9.0 はチャネル、8.0.428 は版の固定）",
+            "環境チェック、CI のビルド、Jenkins サーバー用スクリプトの -DotNetSdk で同じ指定を使う",
+            "リポジトリに global.json が無いとき、CI の実行中だけ指定した SDK を使う",
+        ),
+    ),
     (
         "2.0.0",
         "2026-11-10",

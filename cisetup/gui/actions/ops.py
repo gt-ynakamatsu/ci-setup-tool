@@ -288,7 +288,8 @@ class ActionsMixin:
         self._set_status("エージェント起動コマンドをコピーしました。")
     def _scan_env(self) -> None:
         self._set_status("環境をスキャンしています...")
-        results = deps.env_scan.scan()
+        spec = self._fields["build.dotnet_sdk"].get().strip() if "build.dotnet_sdk" in self._fields else ""
+        results = deps.env_scan.scan(dotnet_sdk=spec)
         lines = []
         for r in results:
             lines.append(("[OK] " if r.found else "[未検出] ") + r.name + " : " + r.detail)

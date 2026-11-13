@@ -101,8 +101,10 @@ function Test-PathExcluded {
 }
 
 Write-Host "==> Project: $($ci.ProjectName)"
+$dotnetSdkPin = $null
 Add-CiPreviewLangVersionOverride -Root $ci.Root
 try {
+    $dotnetSdkPin = Enable-CiDotNetSdk -Root $ci.Root -Spec $ci.DotNetSdk
     Write-Host "==> Restore"
     dotnet restore $ci.SolutionFile | Out-Host
 
@@ -121,6 +123,7 @@ try {
     $buildExit = $LASTEXITCODE
 }
 finally {
+    Disable-CiDotNetSdk -Path $dotnetSdkPin
     Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 $buildOutput | Out-String | Set-Content -Path $rawPath -Encoding UTF8

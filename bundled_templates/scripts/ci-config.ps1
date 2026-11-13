@@ -269,6 +269,8 @@ function Get-CiSettings {
     # 未設定なら publish 側でエージェント OS から補う。
     $runtimeIdentifier = if ($build) { ([string]$build.runtimeIdentifier).Trim() } else { '' }
     $analysisExcludePaths = if ($build) { ([string]$build.analysisExcludePaths).Trim() } else { '' }
+    $dotnetSdk = if ($build -and $build.PSObject.Properties['dotnetSdk']) { ([string]$build.dotnetSdk).Trim() } else { '' }
+    if ([string]::IsNullOrWhiteSpace($dotnetSdk)) { $dotnetSdk = '8.0' }
     $testProject = if ($config.project.testProject) { (ConvertTo-PlatformPath $config.project.testProject).Trim() } else { '' }
 
     if ([string]::IsNullOrWhiteSpace($config.project.name)) {
@@ -375,6 +377,7 @@ function Get-CiSettings {
         ArtifactPrefix = if ([string]::IsNullOrWhiteSpace($config.project.artifactPrefix)) { $config.project.name } else { $config.project.artifactPrefix }
         RuntimeIdentifier = $runtimeIdentifier
         AnalysisExcludePaths = $analysisExcludePaths
+        DotNetSdk = $dotnetSdk
         StorageBasePaths = $basePaths
         StorageBasePath = if ($basePaths.Count -gt 0) { $basePaths[0] } else { '' }
         LogsDir = (ConvertTo-PlatformPath $logsDir)
@@ -432,6 +435,80 @@ function Remove-CiPreviewLangVersionOverride {
     $path = Get-CiPreviewLangVersionTargetsPath -Root $Root
     if (Test-CiOwnedPreviewFile -Path $path) {
         Remove-Item -LiteralPath $path -Force
+    }
+}
+
+function Get-CiDotNetSdkSpec {
+    param([string]$Spec)
+    $text = if ([string]::IsNullOrWhiteSpace($Spec)) { '8.0' } else { $Spec.Trim() }
+    if ($text -match '^\d+\.0$') {
+        return [pscustomobject]@{ Kind = 'channel'; Spec = $text; Major = $text.Split('.')[0] }
+    }
+    if ($text -match '^\d+\.\d+\.\d+$') {
+        return [pscustomobject]@{ Kind = 'version'; Spec = $text; Major = $text.Split('.')[0] }
+    }
+    throw "build.dotnetSdk は 8.0 のようなチャネルか、8.0.428 のような版にしてください: $text"
+}
+
+function Test-CiSdkListMatches {
+    param([string]$Listed, $Requirement)
+    foreach ($line in ($Listed -split "`r?`n")) {
+        $version = ($line.Trim() -split '\s+', 2)[0]
+        if (-not $version) { continue }
+        if ($Requirement.Kind -eq 'version') {
+            if ($version -eq $Requirement.Spec) { return $true }
+        }
+        elseif ($version.StartsWith($Requirement.Major + '.')) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Enable-CiDotNetSdk {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [string]$Spec
+    )
+    $requirement = Get-CiDotNetSdkSpec $Spec
+    $listed = ''
+    try {
+        $listed = & dotnet --list-sdks 2>&1 | Out-String
+    }
+    catch {
+        throw ".NET SDK $($requirement.Spec) が見つかりません。dotnet コマンドを検出できません。"
+    }
+    if (-not (Test-CiSdkListMatches -Listed $listed -Requirement $requirement)) {
+        throw ".NET SDK $($requirement.Spec) が見つかりません。`n$listed"
+    }
+    $globalJson = Join-Path $Root 'global.json'
+    $marker = Join-Path $Root 'global.json.cisetup'
+    $owned = Test-Path -LiteralPath $marker
+    if ((Test-Path -LiteralPath $globalJson) -and -not $owned) {
+        Write-Host "==> 既存の global.json があるため、SDK の選択はそちらに従います。$($requirement.Spec) が入っていることだけ確認しました。"
+        return ''
+    }
+    if ($requirement.Kind -eq 'version') {
+        $body = '{"sdk":{"version":"' + $requirement.Spec + '","rollForward":"disable"}}'
+    }
+    else {
+        $body = '{"sdk":{"version":"' + $requirement.Major + '.0.100","rollForward":"latestFeature"}}'
+    }
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($marker, "cisetup`r`n", $utf8)
+    [System.IO.File]::WriteAllText($globalJson, ($body + "`r`n"), $utf8)
+    Write-Host "==> .NET SDK $($requirement.Spec) を使う global.json を作りました。"
+    return $globalJson
+}
+
+function Disable-CiDotNetSdk {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    $marker = Join-Path (Split-Path -Parent $Path) 'global.json.cisetup'
+    if (-not (Test-Path -LiteralPath $marker)) { return }
+    Remove-Item -LiteralPath $marker -Force
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Force
     }
 }
 

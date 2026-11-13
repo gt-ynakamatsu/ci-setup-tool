@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from ... import help_texts
+from ...environment_scan import dotnet_download_url
 from ..constants import ENV_LINKS
 from ..layout import (
     COLOR_BEGINNER_BG,
@@ -55,6 +57,13 @@ class IntroStepsMixin:
             anchor="w",
             wraplength=self._px(860),
         ).pack(anchor="w", pady=(0, 10))
+        self._add_field(
+            frame,
+            "build.dotnet_sdk",
+            ".NET SDK",
+            help_texts.DOTNET_SDK,
+            label_width=16,
+        )
         button(
             frame,
             "環境をスキャン",
@@ -76,10 +85,11 @@ class IntroStepsMixin:
         links = tk.Frame(frame, bg=COLOR_ENV_BG)
         links.pack(anchor="w")
         for label, url in ENV_LINKS:
+            command = self._open_dotnet_download if url == "dotnet" else (lambda u=url: self._open_link(u))
             button(
                 links,
                 label,
-                lambda u=url: self._open_link(u),
+                command,
             ).pack(side=tk.LEFT, padx=(0, 8), pady=(0, 8))
 
         prep = Expander(frame, "アプリで自動化できない準備（手順とリンク）")
@@ -88,6 +98,18 @@ class IntroStepsMixin:
         prep.content.configure(bg=COLOR_ENV_BG)
         prep.pack(fill=tk.X, pady=(6, 0))
         self._build_manual_prep(prep.content, COLOR_ENV_BG)
+
+    def _open_dotnet_download(self) -> None:
+        spec = ""
+        field = self._fields.get("build.dotnet_sdk")
+        if field is not None:
+            spec = field.get()
+        try:
+            url = dotnet_download_url(spec)
+        except ValueError:
+            url = "https://dotnet.microsoft.com/download/dotnet/8.0"
+        self._open_link(url)
+
     def _build_manual_prep(self, parent: tk.Frame, bg: str) -> None:
         blocks = [
             (
@@ -111,7 +133,7 @@ class IntroStepsMixin:
             ),
             (
                 "④ エージェント PC の起動",
-                "エージェント PC に Java と .NET SDK 8 と Git を入れ、"
+                "エージェント PC に Java と、上で指定した .NET SDK と Git を入れ、"
                 "「詳細設定 → Jenkins サーバー初回設定」で表示される起動コマンドを実行します。"
                 "Jenkins の Nodes で Online になれば準備完了です。",
                 None,

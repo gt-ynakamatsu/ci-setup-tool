@@ -424,7 +424,7 @@ class JenkinsClient:
         )
         self._post_xml(path, xml)
 
-    def _build_agent_launch_command(self, agent_name: str, remote_root: str) -> str:
+    def _build_agent_launch_command(self, agent_name: str, remote_root: str, dotnet_sdk: str = "8.0") -> str:
         encoded = urllib.parse.quote(agent_name, safe="")
         jnlp = self._request("GET", f"computer/{encoded}/jenkins-agent.jnlp")
         secret = extract_agent_secret(jnlp if isinstance(jnlp, str) else json.dumps(jnlp))
@@ -432,7 +432,7 @@ class JenkinsClient:
         agent_jar_url = f"{base_url}/jnlpJars/agent.jar"
         return (
             "# Windows エージェント PC で実行（Java 11+ 必要）\n"
-            "# 事前: .NET SDK 8 + Git をインストール\n"
+            f"# 事前: .NET SDK {dotnet_sdk or '8.0'} + Git をインストール\n"
             f'Invoke-WebRequest -Uri "{agent_jar_url}" -OutFile agent.jar\n'
             f'java -jar agent.jar -url "{base_url}/" -secret {secret} '
             f'-name "{agent_name}" -workDir "{remote_root}"'
@@ -472,7 +472,11 @@ class JenkinsClient:
         result.log.append(f"エージェント '{agent_name}' を登録しました（ラベル: {label_display}）")
 
         result.log.append("==> エージェント起動コマンド取得")
-        result.agent_launch_command = self._build_agent_launch_command(agent_name, agent_remote_root)
+        result.agent_launch_command = self._build_agent_launch_command(
+            agent_name,
+            agent_remote_root,
+            (config.build.dotnet_sdk or "8.0").strip() or "8.0",
+        )
         result.log.append("エージェント PC で以下のコマンドを実行してください。")
 
         return result

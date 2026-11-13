@@ -52,6 +52,7 @@
   "build": {
     "preset": "dotnet",
     "runtimeIdentifier": "",
-    "analysisExcludePaths": ""
+    "analysisExcludePaths": "",
+    "dotnetSdk": "8.0"
   }
 }

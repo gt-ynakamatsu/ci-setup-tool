@@ -22,8 +22,10 @@ Write-Host "==> Lint ログ: $lintLog"
 $env:DOTNET_NOLOGO = "true"
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "true"
 
+$dotnetSdkPin = $null
 Add-CiPreviewLangVersionOverride -Root $ci.Root
 try {
+    $dotnetSdkPin = Enable-CiDotNetSdk -Root $ci.Root -Spec $ci.DotNetSdk
     Write-Host "==> Restore"
     $code = Invoke-CiLogged -LogPath $lintLog -FilePath 'dotnet' -Arguments @('restore', $ci.SolutionFile) -Label 'dotnet restore'
     if ($code -ne 0) {
@@ -44,6 +46,7 @@ try {
     }
 }
 finally {
+    Disable-CiDotNetSdk -Path $dotnetSdkPin
     Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 

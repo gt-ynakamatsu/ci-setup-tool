@@ -38,6 +38,7 @@ class FormSyncMixin:
             "git.credential_id": c.git.credential_id,
             "build.runtime_identifier": c.build.runtime_identifier,
             "build.analysis_exclude_paths": c.build.analysis_exclude_paths,
+            "build.dotnet_sdk": c.build.dotnet_sdk,
             "secrets.jenkins_url": self._secrets.jenkins_url,
             "secrets.jenkins_user": self._secrets.jenkins_user,
             "secrets.jenkins_api_token": self._secrets.jenkins_api_token,
@@ -130,6 +131,7 @@ class FormSyncMixin:
 
         c.build.runtime_identifier = get("build.runtime_identifier")
         c.build.analysis_exclude_paths = get("build.analysis_exclude_paths")
+        c.build.dotnet_sdk = get("build.dotnet_sdk") or "8.0"
 
         self._secrets.jenkins_url = get("secrets.jenkins_url")
         self._secrets.jenkins_user = get("secrets.jenkins_user")

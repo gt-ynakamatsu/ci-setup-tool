@@ -153,10 +153,12 @@ Write-Host "==> dotnet test ($($ci.TestProject))"
 # （テストプロジェクトのビルドエラー等）に原因を示せるようにするため。
 # Windows PowerShell 5.1 は ErrorActionPreference=Stop のまま native コマンドを 2>&1 すると
 # stderr の1行目で NativeCommandError を投げて終了コードを拾えなくなるため、一時的に緩める。
+$dotnetSdkPin = $null
 Add-CiPreviewLangVersionOverride -Root $ci.Root
 $previousErrorAction = $ErrorActionPreference
 $ErrorActionPreference = 'Continue'
 try {
+    $dotnetSdkPin = Enable-CiDotNetSdk -Root $ci.Root -Spec $ci.DotNetSdk
     dotnet test $ci.TestProject -c $Configuration `
         --results-directory $testDir `
         --logger "trx;LogFileName=test-results.trx" `
@@ -166,6 +168,7 @@ try {
 }
 finally {
     $ErrorActionPreference = $previousErrorAction
+    Disable-CiDotNetSdk -Path $dotnetSdkPin
     Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 

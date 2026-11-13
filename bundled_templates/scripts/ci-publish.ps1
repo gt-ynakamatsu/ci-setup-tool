@@ -129,15 +129,18 @@ if ($Version) {
 }
 
 $mode = if ($singleFile) { 'framework-dependent single-file' } else { 'framework-dependent (library)' }
-Write-Host "==> Publish ($mode, $platformTag)"
+Write-Host "==> Publish ($mode, $platformTag)。初回はパッケージの取得に数分かかります。"
+$dotnetSdkPin = $null
 Add-CiPreviewLangVersionOverride -Root $ci.Root
 try {
+    $dotnetSdkPin = Enable-CiDotNetSdk -Root $ci.Root -Spec $ci.DotNetSdk
     $code = Invoke-CiLogged -LogPath $publishLog -FilePath 'dotnet' -Arguments $publishArgs -Label 'dotnet publish'
     if ($code -ne 0) {
         throw "dotnet publish failed (exit code $code). 詳細ログ: $publishLog"
     }
 }
 finally {
+    Disable-CiDotNetSdk -Path $dotnetSdkPin
     Remove-CiPreviewLangVersionOverride -Root $ci.Root
 }
 

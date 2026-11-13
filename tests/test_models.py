@@ -38,6 +38,16 @@ def test_build_runtime_identifier_and_analysis_excludes_roundtrip():
     assert config_from_dict(data).build == cfg.build
 
 
+def test_build_dotnet_sdk_roundtrip_and_default():
+    cfg = default_config()
+    assert cfg.build.dotnet_sdk == "8.0"
+    cfg.build.dotnet_sdk = "8.0.428"
+    data = config_to_dict(cfg)
+    assert data["build"]["dotnetSdk"] == "8.0.428"
+    assert config_from_dict(data).build.dotnet_sdk == "8.0.428"
+    assert config_from_dict({"build": {}}).build.dotnet_sdk == "8.0"
+
+
 def test_build_new_keys_default_to_empty_when_absent():
     # 旧 cisetup.config.json（キーが無い）でも読める。
     cfg = config_from_dict({"build": {"profile": "dotnet"}})
