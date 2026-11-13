@@ -23,6 +23,8 @@ REQUIRED_PLUGINS = [
     "plain-credentials",
     "parameterized-trigger",
     "naginator",
+    # Jenkinsfile の timestamps() に必要。無いとテストビルドが Invalid option type で失敗する。
+    "timestamper",
 ]
 
 TRIGGER_JOB_SUFFIX = "-trigger"

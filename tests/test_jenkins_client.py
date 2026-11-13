@@ -67,6 +67,8 @@ def test_extract_agent_secret_missing():
 def test_install_plugins_script():
     script = jenkins_client._install_plugins_script()
     assert "workflow-aggregator" in script
+    assert "timestamper" in script
+    assert "timestamper" in jenkins_client.REQUIRED_PLUGINS
     assert "isRestartRequiredForCompletion" in script
 
 
