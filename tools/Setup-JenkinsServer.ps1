@@ -3,6 +3,8 @@
 #   powershell -ExecutionPolicy Bypass -File .\tools\Setup-JenkinsServer.ps1 -JenkinsUrl http://ci-server:8080/ -AdminPassword <password>
 # -AdminPassword を省略し、パスワードファイルがなければ、パスワードを生成して保存する。
 # 対象は、Jenkins、Git、JDK、.NET が入っていないサーバー。別 PC のエージェントは -SkipAgent。
+# 既に入っているものは二度入れない。Git は git.exe、.NET は -DotNetSdk、JDK は 21 または 25、
+# Jenkins は MSI の登録を見る。MSI 版の Jenkins があるときは、WAR の配置から先は行わない。
 param(
     [string]$AdminUser = "admin",
     [string]$AdminPassword = "",
@@ -14,7 +16,9 @@ param(
     [string]$FileShare = "",
     [string]$ProjectPath = "",
     [string]$CISetupExe = "",
-    [switch]$SkipAgent
+    [switch]$SkipAgent,
+    # 8.0 のようなチャネルか、8.0.428 のような版。既定は 8.0 チャネル。
+    [string]$DotNetSdk = "8.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,6 +94,125 @@ function New-RandomPassword([int]$Length) {
     return -join ($bytes | ForEach-Object { $chars[$_ % $chars.Length] })
 }
 
+function Test-SamePath([string]$Left, [string]$Right) {
+    if (-not $Left -or -not $Right) { return $false }
+    return $Left.TrimEnd("\").Equals($Right.TrimEnd("\"), [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Test-UnderPath([string]$Path, [string]$Root) {
+    if (-not $Path -or -not $Root) { return $false }
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $rootFull = [System.IO.Path]::GetFullPath($Root)
+    if (-not $rootFull.EndsWith("\")) { $rootFull += "\" }
+    return $full.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase) -or (Test-SamePath $full $rootFull.TrimEnd("\"))
+}
+
+function Get-JavaMajorVersion([string]$JavaExe) {
+    if (-not (Test-Path -LiteralPath $JavaExe)) { return 0 }
+    $output = & cmd.exe /c "`"$JavaExe`" -version 2>&1" | Out-String
+    if ($output -match 'version "1\.(?<old>[0-9]+)') { return [int]$Matches.old }
+    if ($output -match 'version "(?<major>[0-9]+)') { return [int]$Matches.major }
+    return 0
+}
+
+function Find-Java21Or25 {
+    # C:\ 全体は探さない。スクリプトが置いた JDK と、通常のインストール先、PATH 上の java だけを見る。
+    $candidates = @()
+    if (Test-Path -LiteralPath "C:\jdk21") {
+        $candidates += @(Get-ChildItem -LiteralPath "C:\jdk21" -Filter java.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\bin\\java\.exe$' })
+    }
+    Refresh-Path
+    $command = Get-Command java -ErrorAction SilentlyContinue
+    if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source)) {
+        $candidates += Get-Item -LiteralPath $command.Source
+    }
+    foreach ($pattern in @(
+        "C:\Program Files\Eclipse Adoptium\jdk-2*\bin\java.exe",
+        "C:\Program Files\Java\jdk-2*\bin\java.exe",
+        "C:\Program Files\Microsoft\jdk-2*\bin\java.exe",
+        "C:\Program Files\Zulu\zulu-2*\bin\java.exe"
+    )) {
+        $candidates += @(Get-Item -Path $pattern -ErrorAction SilentlyContinue)
+    }
+    $seen = @{}
+    foreach ($item in $candidates) {
+        if (-not $item) { continue }
+        $path = $item.FullName
+        if ($seen.ContainsKey($path.ToLowerInvariant())) { continue }
+        $seen[$path.ToLowerInvariant()] = $true
+        $major = Get-JavaMajorVersion $path
+        if ($major -eq 21 -or $major -eq 25) {
+            return [pscustomobject]@{ Path = $path; Major = $major }
+        }
+    }
+    return $null
+}
+
+function Get-DotNetSdkRequirement([string]$Spec) {
+    $text = if ([string]::IsNullOrWhiteSpace($Spec)) { "8.0" } else { $Spec.Trim() }
+    if ($text -match '^\d+\.0$') {
+        return [pscustomobject]@{ Kind = "channel"; Spec = $text; Major = $text.Split(".")[0] }
+    }
+    if ($text -match '^\d+\.\d+\.\d+$') {
+        return [pscustomobject]@{ Kind = "version"; Spec = $text; Major = $text.Split(".")[0] }
+    }
+    throw ".NET SDK の指定は 8.0 のようなチャネルか、8.0.428 のような版にしてください: $text"
+}
+
+function Test-SdkListMatches([string]$Listed, $Requirement) {
+    foreach ($line in ($Listed -split "`r?`n")) {
+        $version = ($line.Trim() -split '\s+', 2)[0]
+        if (-not $version) { continue }
+        if ($Requirement.Kind -eq "version") {
+            if ($version -eq $Requirement.Spec) { return $true }
+        }
+        elseif ($version.StartsWith($Requirement.Major + ".")) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-DotNetSdk([string]$Exe, $Requirement) {
+    if (-not (Test-Path -LiteralPath $Exe)) { return $false }
+    $sdks = & $Exe --list-sdks 2>&1 | Out-String
+    return Test-SdkListMatches $sdks $Requirement
+}
+
+function Find-DotNetSdk($Requirement) {
+    Refresh-Path
+    $candidates = @()
+    $command = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($command -and $command.Source) { $candidates += $command.Source }
+    $candidates += @("C:\Program Files\dotnet\dotnet.exe", "C:\dotnet\dotnet.exe")
+    $seen = @{}
+    foreach ($exe in $candidates) {
+        if (-not $exe) { continue }
+        $key = $exe.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        if (Test-DotNetSdk $exe $Requirement) { return $exe }
+    }
+    return $null
+}
+
+function Get-InstalledMsiJenkins {
+    $roots = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    )
+    foreach ($root in $roots) {
+        foreach ($item in @(Get-ItemProperty -Path $root -ErrorAction SilentlyContinue)) {
+            $name = [string]$item.DisplayName
+            if ($name -match '^Jenkins( \d|$)' -and $item.WindowsInstaller -eq 1) {
+                return $item
+            }
+        }
+    }
+    return $null
+}
+
 function Add-MachinePathFront([string]$Entry) {
     if (-not (Test-Path $Entry)) {
         throw "PATH に追加する場所がありません: $Entry"
@@ -127,6 +250,36 @@ function Test-FileSignature([string]$Path, [string]$Kind) {
     return $true
 }
 
+function Get-ProgressColumns {
+    # 行をウィンドウ幅いっぱいにすると折り返し、\r が前の行を消せずに積み重なる。
+    # 日本語は表示幅が文字数より広いので、文字数ではなく表示幅で収める。
+    $width = 78
+    try {
+        $window = [Console]::WindowWidth
+        if ($window -gt 8) { $width = $window - 1 }
+    } catch {
+    }
+    return $width
+}
+
+function Fit-ConsoleLine([string]$Text) {
+    $max = Get-ProgressColumns
+    $builder = New-Object System.Text.StringBuilder
+    $width = 0
+    foreach ($ch in $Text.ToCharArray()) {
+        $charWidth = 1
+        if ([int]$ch -gt 255) { $charWidth = 2 }
+        if (($width + $charWidth) -gt $max) { break }
+        [void]$builder.Append($ch)
+        $width += $charWidth
+    }
+    while ($width -lt $max) {
+        [void]$builder.Append(" ")
+        $width++
+    }
+    return $builder.ToString()
+}
+
 function Write-ProgressLine([string]$Label, [int]$Percent, [string]$Detail) {
     if ($Percent -lt 0) { $Percent = 0 }
     if ($Percent -gt 100) { $Percent = 100 }
@@ -134,8 +287,7 @@ function Write-ProgressLine([string]$Label, [int]$Percent, [string]$Detail) {
     $filled = [int](($width * $Percent) / 100)
     $bar = ("#" * $filled).PadRight($width, "-")
     $text = "{0} [{1}] {2,3}%  {3}" -f $Label, $bar, $Percent, $Detail
-    if ($text.Length -gt 78) { $text = $text.Substring(0, 78) }
-    [Console]::Write("`r" + $text.PadRight(78))
+    [Console]::Write("`r" + (Fit-ConsoleLine $text))
 }
 
 function Write-ActivityLine([string]$Label, [int]$ElapsedSeconds, [int]$Frame) {
@@ -143,7 +295,7 @@ function Write-ActivityLine([string]$Label, [int]$ElapsedSeconds, [int]$Frame) {
     $spin = "|/-*"
     $mark = $spin[$Frame % 4]
     $text = "{0} {1}  {2}秒経過" -f $Label, $mark, $ElapsedSeconds
-    [Console]::Write("`r" + $text.PadRight(78))
+    [Console]::Write("`r" + (Fit-ConsoleLine $text))
 }
 
 function Complete-ProgressLine {
@@ -432,14 +584,28 @@ function Invoke-WithStartupTasksSuspended([scriptblock]$Action, [string[]]$TaskN
     }
 }
 
-function Wait-Jenkins([string]$LoginUrl, [int]$Minutes = 8) {
+function Wait-Jenkins([string]$LoginUrl, [int]$Minutes = 8, [string]$Label = "Jenkins の起動を待つ") {
     $deadline = (Get-Date).AddMinutes($Minutes)
+    $startedAt = Get-Date
+    $frame = 0
+    $shown = $false
+    $lastCheck = [datetime]::MinValue
     while ((Get-Date) -lt $deadline) {
-        if (Test-JenkinsUp $LoginUrl) {
-            return
+        $now = Get-Date
+        if (($now - $lastCheck).TotalSeconds -ge 5) {
+            $lastCheck = $now
+            if (Test-JenkinsUp $LoginUrl) {
+                if ($shown) { Complete-ProgressLine }
+                return
+            }
         }
-        Start-Sleep -Seconds 5
+        $elapsed = [int]($now - $startedAt).TotalSeconds
+        Write-ActivityLine $Label $elapsed $frame
+        $frame++
+        $shown = $true
+        Start-Sleep -Milliseconds 400
     }
+    if ($shown) { Complete-ProgressLine }
     throw "Jenkins が $Minutes 分以内に $LoginUrl で応答しませんでした。$(Join-Path $JenkinsHome 'jenkins.log') を確認してください。画面で追うときは、管理者 PowerShell で start-jenkins.bat window を実行します。"
 }
 
@@ -633,9 +799,21 @@ if ($AdminPassword -notmatch '^[\x21-\x7E]+$') {
     throw "管理者パスワードは、空白を含まない ASCII の表示文字で指定してください。保存済みの値が使えない場合は、$passwordFile を削除してから再実行してください。"
 }
 
+$script:OwnJdk = $false
+$script:OwnDotnet = $false
+
 Write-Step "Git を確認"
+Refresh-Path
 $git = "C:\Program Files\Git\cmd\git.exe"
 if (-not (Test-Path -LiteralPath $git)) {
+    $gitCommand = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCommand -and $gitCommand.Source -and (Test-Path -LiteralPath $gitCommand.Source)) {
+        $git = $gitCommand.Source
+    }
+}
+if (Test-Path -LiteralPath $git) {
+    Write-Host "入っている Git を使います: $git"
+} else {
     $installer = "C:\git-setup.exe"
     Download-File "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.2/Git-2.47.1.2-64-bit.exe" $installer "exe" "5f2350757f9781125cd660478b31c37698d9662aed25b4b02e92da393289564c"
     $gitInstall = Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/NORESTART" -PassThru
@@ -644,6 +822,7 @@ if (-not (Test-Path -LiteralPath $git)) {
         throw "Git のインストーラーが終了コード $gitCode で終了しました。"
     }
     Refresh-Path
+    $git = "C:\Program Files\Git\cmd\git.exe"
 }
 if (-not (Test-Path -LiteralPath $git)) {
     throw "Git のインストール後も $git が見つかりません。C:\git-setup.exe を削除して再実行してください。"
@@ -651,23 +830,30 @@ if (-not (Test-Path -LiteralPath $git)) {
 & $git --version
 
 if (-not $SkipAgent) {
-    Write-Step ".NET SDK 8 を確認"
-    $dotnet = "C:\dotnet\dotnet.exe"
-    # 以前の実行でファイルの権限が空になっている場合は、起動確認より先に継承し直す。
-    if (Test-Path -LiteralPath "C:\dotnet") {
-        Restrict-Acl "C:\dotnet"
-    }
-    $needDotnet = -not (Test-Path -LiteralPath $dotnet)
-    if (-not $needDotnet) {
-        $sdks = & $dotnet --list-sdks 2>&1 | Out-String
-        if ($sdks -notmatch '(?m)^8\.') {
-            $needDotnet = $true
+    $dotnetRequirement = Get-DotNetSdkRequirement $DotNetSdk
+    Write-Step ".NET SDK $($dotnetRequirement.Spec) を確認"
+    $dotnet = Find-DotNetSdk $dotnetRequirement
+    if ($dotnet) {
+        Write-Host "入っている .NET SDK $($dotnetRequirement.Spec) を使います: $dotnet"
+    } else {
+        $dotnet = "C:\dotnet\dotnet.exe"
+        # 以前の実行でファイルの権限が空になっている場合は、起動確認より先に継承し直す。
+        if (Test-Path -LiteralPath "C:\dotnet") {
+            Restrict-Acl "C:\dotnet"
         }
-    }
-    if ($needDotnet) {
         $installerScript = "C:\dotnet-install.ps1"
         Download-File "https://dot.net/v1/dotnet-install.ps1" $installerScript "text"
-        & powershell -NoProfile -ExecutionPolicy Bypass -File $installerScript -Channel 8.0 -InstallDir "C:\dotnet"
+        $installArgs = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", $installerScript,
+            "-InstallDir", "C:\dotnet"
+        )
+        if ($dotnetRequirement.Kind -eq "version") {
+            $installArgs += @("-Version", $dotnetRequirement.Spec)
+        } else {
+            $installArgs += @("-Channel", $dotnetRequirement.Spec)
+        }
+        & powershell @installArgs
         if ($LASTEXITCODE -ne 0) {
             throw ".NET SDK のインストーラーが終了コード $LASTEXITCODE で終了しました。C:\dotnet-install.ps1 を削除して再実行してください。"
         }
@@ -676,23 +862,28 @@ if (-not $SkipAgent) {
         throw ".NET SDK の展開後も $dotnet が見つかりません。C:\dotnet-install.ps1 と C:\dotnet を削除して再実行してください。"
     }
     $sdks = & $dotnet --list-sdks 2>&1 | Out-String
-    if ($sdks -notmatch '(?m)^8\.') {
-        throw ".NET SDK 8 が見つかりません。C:\dotnet を削除して再実行してください。`n$sdks"
+    if (-not (Test-SdkListMatches $sdks $dotnetRequirement)) {
+        throw ".NET SDK $($dotnetRequirement.Spec) が見つかりません。C:\dotnet を削除して再実行してください。`n$sdks"
     }
-    Restrict-Acl "C:\dotnet"
-    Add-MachinePathFront "C:\dotnet"
+    if (Test-UnderPath $dotnet "C:\dotnet") {
+        $script:OwnDotnet = $true
+        Restrict-Acl "C:\dotnet"
+        Add-MachinePathFront "C:\dotnet"
+    }
     & $dotnet --version
 }
 
 Write-Step "JDK 21 を確認"
-# Windows PowerShell 5.1 は、存在しないパスに -Recurse を付けると C:\ 全体から同名を探すため、先に有無を見る。
-$javaCmd = $null
-if (Test-Path -LiteralPath "C:\jdk21") {
-    $javaCmd = Get-ChildItem -LiteralPath "C:\jdk21" -Filter java.exe -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -match '\\bin\\java\.exe$' } |
-        Select-Object -First 1
-}
-if (-not $javaCmd) {
+$existingJava = Find-Java21Or25
+if ($existingJava) {
+    $java = $existingJava.Path
+    Write-Host "入っている Java $($existingJava.Major) を使います: $java"
+    if (Test-UnderPath $java "C:\jdk21") {
+        $script:OwnJdk = $true
+        Restrict-Acl "C:\jdk21"
+        Add-MachinePathFront (Split-Path -Parent $java)
+    }
+} else {
     $zip = "C:\jdk21.zip"
     Download-File "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jdk_x64_windows_hotspot_21.0.13_9.zip" $zip "zip" "a4dbaa05fca4bd89d84584e58c459bd732efebb1722af80ab13c6516832004f9"
     if (Test-Path "C:\jdk21") {
@@ -707,14 +898,26 @@ if (-not $javaCmd) {
     $javaCmd = Get-ChildItem -LiteralPath "C:\jdk21" -Filter java.exe -Recurse -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -match '\\bin\\java\.exe$' } |
         Select-Object -First 1
+    if (-not $javaCmd) {
+        throw "JDK 21 の展開後も java.exe が見つかりません。C:\jdk21.zip を削除して再実行してください。現在の Jenkins LTS は Java 21 または 25 が必要です。"
+    }
+    $script:OwnJdk = $true
+    Restrict-Acl "C:\jdk21"
+    $java = $javaCmd.FullName
+    Add-MachinePathFront (Split-Path -Parent $java)
 }
-if (-not $javaCmd) {
-    throw "JDK 21 の展開後も java.exe が見つかりません。C:\jdk21.zip を削除して再実行してください。現在の Jenkins LTS は Java 21 または 25 が必要です。"
-}
-Restrict-Acl "C:\jdk21"
-$java = $javaCmd.FullName
-Add-MachinePathFront (Split-Path -Parent $java)
 cmd.exe /c "`"$java`" -version 2>&1" | ForEach-Object { Write-Host $_ }
+
+$msiJenkins = Get-InstalledMsiJenkins
+if ($msiJenkins) {
+    Write-Step "Jenkins を確認"
+    Write-Host "MSI 版の Jenkins が入っているため、WAR の配置、起動、プラグイン導入は行いません。"
+    Write-Host "表示名: $($msiJenkins.DisplayName)"
+    if ($msiJenkins.DisplayVersion) { Write-Host "バージョン: $($msiJenkins.DisplayVersion)" }
+    if ($msiJenkins.InstallLocation) { Write-Host "インストール先: $($msiJenkins.InstallLocation)" }
+    Write-Host "既存の Jenkins はそのままです。このスクリプトの Jenkins を使う場合は、MSI 版をアンインストールしてから再実行してください。"
+    exit 0
+}
 
 Write-Step "Jenkins を配置"
 $war = "C:\jenkins.war"
@@ -890,7 +1093,7 @@ if ($pluginResult -match "RESTART required") {
         Start-Sleep -Seconds 5
         Start-BackgroundBat $startBatPath
     }
-    Wait-Jenkins ($localBase + "login")
+    Wait-Jenkins -LoginUrl ($localBase + "login") -Label "Jenkins の再起動を待つ"
     $headers = Get-BasicHeaders -BaseUrl $localBase -User $AdminUser -Password $AdminPassword
 }
 $pluginCheck = Invoke-PluginCheck -BaseUrl $localBase -Headers $headers -Script $pluginCheckScript
@@ -902,7 +1105,7 @@ if (Test-GroovyFailure $pluginCheck) {
         Start-Sleep -Seconds 5
         Start-BackgroundBat $startBatPath
     }
-    Wait-Jenkins ($localBase + "login")
+    Wait-Jenkins -LoginUrl ($localBase + "login") -Label "Jenkins の再起動を待つ"
     $headers = Get-BasicHeaders -BaseUrl $localBase -User $AdminUser -Password $AdminPassword
     $pluginCheck = Invoke-PluginCheck -BaseUrl $localBase -Headers $headers -Script $pluginCheckScript
     Write-Host $pluginCheck
@@ -941,11 +1144,12 @@ if (computer == null) {
 return "SECRET=" + computer.getJnlpMac()
 "@
     $agentResult = Invoke-JenkinsGroovy -BaseUrl $localBase -Headers $headers -Script $agentScript
-    Write-Host $agentResult
     if ($agentResult -notmatch "SECRET=(\S+)") {
-        throw "エージェントの secret を取得できませんでした。結果: $agentResult"
+        $safe = $agentResult -replace 'SECRET=\S+', 'SECRET=(非表示)'
+        throw "エージェントの secret を取得できませんでした。結果: $safe"
     }
     $secret = $Matches[1].Trim()
+    Write-Host "エージェントを登録しました。secret は start-agent.bat にだけ保存します。"
 
     $agentJar = Join-Path $AgentWorkDir "agent.jar"
     if (-not (Test-FileSignature $agentJar "zip")) {
@@ -1081,11 +1285,9 @@ if ($ProjectPath) {
 
 Restrict-Acl $JenkinsHome
 Restrict-Acl $AgentWorkDir
-Restrict-Acl "C:\jdk21"
+if ($script:OwnJdk) { Restrict-Acl "C:\jdk21" }
 Restrict-Acl $war
-if (-not $SkipAgent) {
-    Restrict-Acl "C:\dotnet"
-}
+if ($script:OwnDotnet) { Restrict-Acl "C:\dotnet" }
 
 Write-Step "完了"
 Write-Host "Jenkins URL : $JenkinsUrl"

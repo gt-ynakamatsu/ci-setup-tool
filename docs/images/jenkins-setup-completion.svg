@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="634" viewBox="0 0 1600 634" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#003894"/></marker></defs>
+<rect width="1600" height="634" fill="#ffffff"/>
+<rect x="0" y="0" width="1600" height="604" rx="0" fill="#012456" stroke="none" stroke-width="2"/>
+<rect x="0" y="0" width="1600" height="44" rx="0" fill="#f3f3f3" stroke="none" stroke-width="2"/>
+<text x="20" y="29" font-size="17" fill="#231815" font-weight="400" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">管理者: Windows PowerShell</text>
+<text x="24" y="106" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">==&gt; 完了</text>
+<text x="24" y="142" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">Jenkins URL : http://ci-server:8080/</text>
+<rect x="14" y="120" width="372.39999999999986" height="32" rx="0" fill="none" stroke="#ffd200" stroke-width="3"/>
+<circle cx="416.39999999999986" cy="136" r="18" fill="#ffd200"/>
+<text x="416.39999999999986" y="144" font-size="22" fill="#231815" font-weight="700" text-anchor="middle" xml:space="preserve">1</text>
+<text x="24" y="178" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">ユーザー    : admin</text>
+<rect x="14" y="156" width="196.90000000000006" height="32" rx="0" fill="none" stroke="#ffd200" stroke-width="3"/>
+<circle cx="240.90000000000006" cy="172" r="18" fill="#ffd200"/>
+<text x="240.90000000000006" y="180" font-size="22" fill="#231815" font-weight="700" text-anchor="middle" xml:space="preserve">2</text>
+<text x="24" y="214" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">パスワード  : </text>
+<text x="153.60000000000002" y="214" font-size="18" fill="#9aa7b8" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">●●●●●●●●（表示された値）</text>
+<text x="24" y="250" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">API Token   : </text>
+<text x="162.60000000000002" y="250" font-size="18" fill="#9aa7b8" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">●●●●●●●●（表示された値）</text>
+<rect x="14" y="228" width="442.6" height="32" rx="0" fill="none" stroke="#ffd200" stroke-width="3"/>
+<circle cx="486.6" cy="244" r="18" fill="#ffd200"/>
+<text x="486.6" y="252" font-size="22" fill="#231815" font-weight="700" text-anchor="middle" xml:space="preserve">3</text>
+<text x="24" y="286" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">プラグイン  : OK: plugins active (workflow-aggregator, git, credentials-binding, plain-credentials, parameterized-trigger, naginator, timestamper)</text>
+<rect x="14" y="264" width="1452.4000000000021" height="32" rx="0" fill="none" stroke="#ffd200" stroke-width="3"/>
+<text x="24" y="322" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">エージェント: windows-agent</text>
+<rect x="14" y="300" width="272.50000000000006" height="32" rx="0" fill="none" stroke="#ffd200" stroke-width="3"/>
+<text x="24" y="358" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">作業フォルダ: C:\Jenkins\workspace</text>
+<text x="24" y="394" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">起動スクリプト: C:\jenkins\start-jenkins.bat</text>
+<text x="24" y="430" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">パスワードの保存先: C:\jenkins\cisetup-admin-password.txt</text>
+<text x="24" y="466" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">CISetup の「⑤ Jenkins への接続」に Jenkins URL、ユーザー名、API Token を入れ、接続テストが成功すれば使えます。</text>
+<text x="24" y="502" font-size="18" fill="#ffffff" font-weight="400" text-anchor="start" font-family="Consolas, 'BIZ UDGothic', 'MS Gothic', monospace" xml:space="preserve">エージェントラベルは空欄にしてください。組み込みノードの実行数は 0 です。</text>
+<text x="24" y="538" font-size="18" fill="#9aa7b8" font-weight="400" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">（このあと、再起動後の起動、ログの場所、SYSTEM での実行などの案内が4行続く）</text>
+<rect x="980" y="66" width="590" height="170" rx="0" fill="#ffffff" stroke="#ffd200" stroke-width="3"/>
+<text x="1000" y="104" font-size="23" fill="#231815" font-weight="700" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">CISetup「⑤ Jenkins への接続」へ入力</text>
+<text x="1020" y="144" font-size="22" fill="#231815" font-weight="400" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">1 → Jenkins URL</text>
+<text x="1020" y="176" font-size="22" fill="#231815" font-weight="400" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">2 → ユーザー名</text>
+<text x="1020" y="208" font-size="22" fill="#231815" font-weight="400" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">3 → API Token</text>
+<text x="360" y="322" font-size="21" fill="#ffd200" font-weight="700" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">← Nodes 画面で確認する名前</text>
+<text x="880" y="322" font-size="21" fill="#ffd200" font-weight="700" text-anchor="start" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif" xml:space="preserve">↑ プラグイン ID が7個あることを確認</text>
+</svg>

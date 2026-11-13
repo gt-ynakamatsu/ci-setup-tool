@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#003894"/></marker></defs>
+<rect width="1600" height="640" fill="#ffffff"/>
+<rect x="10" y="160" width="280" height="300" rx="0" fill="#eef2f9" stroke="#595757" stroke-width="2"/>
+<rect x="10" y="160" width="280" height="50" rx="0" fill="#595757" stroke="none" stroke-width="2"/>
+<text x="150" y="195" font-size="26" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">設定用 PC</text>
+<rect x="28" y="236" width="244" height="200" rx="0" fill="#ffffff" stroke="#003894" stroke-width="2"/>
+<text x="150" y="282" font-size="26" fill="#003894" font-weight="700" text-anchor="middle" xml:space="preserve">CISetup.exe</text>
+<text x="150" y="328" font-size="22" fill="#231815" font-weight="400" text-anchor="middle" xml:space="preserve">⑤ Jenkins への接続</text>
+<text x="150" y="368" font-size="21" fill="#3c3c3c" font-weight="400" text-anchor="middle" xml:space="preserve">URL・ユーザー名</text>
+<text x="150" y="398" font-size="21" fill="#3c3c3c" font-weight="400" text-anchor="middle" xml:space="preserve">API Token</text>
+<line x1="295" y1="330" x2="548" y2="330" stroke="#003894" stroke-width="4" marker-end="url(#arrow)"/>
+<text x="420" y="300" font-size="24" fill="#003894" font-weight="700" text-anchor="middle" xml:space="preserve">HTTP</text>
+<text x="420" y="368" font-size="21" fill="#231815" font-weight="400" text-anchor="middle" font-family="Consolas, 'Yu Gothic', sans-serif" xml:space="preserve">http://ci-server:8080/</text>
+<text x="420" y="398" font-size="21" fill="#3c3c3c" font-weight="400" text-anchor="middle" xml:space="preserve">ポートは -Port の値</text>
+<rect x="555" y="20" width="1025" height="600" rx="0" fill="#ffffff" stroke="#003894" stroke-width="3"/>
+<rect x="555" y="20" width="1025" height="52" rx="0" fill="#003894" stroke="none" stroke-width="2"/>
+<text x="1067" y="56" font-size="26" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">Jenkins サーバー（Windows）</text>
+<rect x="575" y="92" width="440" height="214" rx="0" fill="#eef2f9" stroke="#003894" stroke-width="2"/>
+<text x="595" y="132" font-size="26" fill="#003894" font-weight="700" text-anchor="start" xml:space="preserve">Jenkins LTS 2.580.2</text>
+<text x="595" y="172" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">WAR を java -jar で起動</text>
+<text x="595" y="206" font-size="22" fill="#231815" font-weight="400" text-anchor="start" font-family="Consolas, 'Yu Gothic', sans-serif" xml:space="preserve">ホーム: C:\jenkins</text>
+<text x="595" y="240" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">組み込みノードの実行数 0</text>
+<text x="595" y="284" font-size="21" fill="#3c3c3c" font-weight="400" text-anchor="start" xml:space="preserve">受信規則 CISetup Jenkins HTTP</text>
+<rect x="1125" y="92" width="435" height="214" rx="0" fill="#eef2f9" stroke="#003894" stroke-width="2"/>
+<text x="1145" y="132" font-size="26" fill="#003894" font-weight="700" text-anchor="start" xml:space="preserve">windows-agent</text>
+<text x="1145" y="172" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">インバウンド接続・ラベルなし</text>
+<text x="1145" y="206" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">作業フォルダ:</text>
+<text x="1145" y="240" font-size="22" fill="#231815" font-weight="400" text-anchor="start" font-family="Consolas, 'Yu Gothic', sans-serif" xml:space="preserve">C:\Jenkins\workspace</text>
+<text x="1145" y="284" font-size="21" fill="#3c3c3c" font-weight="400" text-anchor="start" xml:space="preserve">ビルドはここで実行される</text>
+<line x1="1121" y1="200" x2="1021" y2="200" stroke="#003894" stroke-width="4" marker-end="url(#arrow)"/>
+<text x="1070" y="180" font-size="18" fill="#003894" font-weight="700" text-anchor="middle" xml:space="preserve">TCP 50000</text>
+<text x="1070" y="232" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="middle" xml:space="preserve">127.0.0.1</text>
+<text x="575" y="346" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">導入または再利用するツール（ない場合だけ導入）</text>
+<rect x="575" y="362" width="320" height="84" rx="0" fill="#f4f4f4" stroke="#d9d9d9" stroke-width="1"/>
+<text x="593" y="396" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">Git for Windows</text>
+<text x="593" y="430" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="start" xml:space="preserve">新規導入時 2.47.1.2</text>
+<rect x="907" y="362" width="320" height="84" rx="0" fill="#f4f4f4" stroke="#d9d9d9" stroke-width="1"/>
+<text x="925" y="396" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">Java 21 または 25</text>
+<text x="925" y="430" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="start" xml:space="preserve">新規導入時 Temurin 21.0.13+9</text>
+<rect x="1240" y="362" width="320" height="84" rx="0" fill="#f4f4f4" stroke="#d9d9d9" stroke-width="1"/>
+<text x="1258" y="396" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">.NET SDK</text>
+<text x="1258" y="430" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="start" xml:space="preserve">-DotNetSdk で指定（既定 8.0）</text>
+<text x="575" y="488" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">タスク スケジューラ（サーバー起動時に SYSTEM で起動）</text>
+<rect x="575" y="504" width="485" height="92" rx="0" fill="#f4f4f4" stroke="#d9d9d9" stroke-width="1"/>
+<text x="593" y="540" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">CISetup Jenkins</text>
+<text x="593" y="576" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="start" font-family="Consolas, 'Yu Gothic', sans-serif" xml:space="preserve">C:\jenkins\start-jenkins.bat</text>
+<rect x="1075" y="504" width="485" height="92" rx="0" fill="#f4f4f4" stroke="#d9d9d9" stroke-width="1"/>
+<text x="1093" y="540" font-size="22" fill="#231815" font-weight="700" text-anchor="start" xml:space="preserve">CISetup Jenkins Agent</text>
+<text x="1093" y="576" font-size="20" fill="#3c3c3c" font-weight="400" text-anchor="start" font-family="Consolas, 'Yu Gothic', sans-serif" xml:space="preserve">C:\Jenkins\workspace\start-agent.bat</text>
+</svg>

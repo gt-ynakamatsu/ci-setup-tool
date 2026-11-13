@@ -244,7 +244,7 @@ Windows 専用フレームワークを使う .NET プロジェクト自体は Li
 | `teams_service.py` | Teams アダプティブカード（テスト送信）の生成と送信、URL 検証 | `send_test`、`build_test_card_payload`、`validate_url`、`normalize_url` |
 | `git_service.py` | リモート最新の取り込み（`fetch` → `merge --ff-only`）。`checkoutSubmodules` がオンなら `submodule update --init --recursive`。push はしない | `pull_latest`、`GitError`、`GitTimeout` |
 | `local_ci.py` | 配置済み `ci-build.ps1` → `ci-test.ps1`（→ `ci-publish.ps1`）をローカルで実行（このモジュール自体は git を呼ばない）。最初の失敗で停止、出力を 1 行ずつコールバック | `run_local_ci`、`LocalCIError` |
-| `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins サービスの有無チェック | `scan()`、`EnvironmentCheckResult` |
+| `environment_scan.py` | Git / .NET SDK 8 / Java / Jenkins（サービス、またはセットアップスクリプトのタスクと jenkins.war）の有無チェック | `scan()`、`EnvironmentCheckResult` |
 | `process_util.py` | 子プロセス起動時にコンソール窓を出さない引数を返す | `no_window_kwargs` |
 | `help_texts.py` | 各設定項目の GUI ツールチップ文言（保存先 JSON キーまで明記） | 文字列定数群 |
 | `version.py` | アプリのセマンティックバージョンと git リビジョン表示 | `VERSION` / `display_version` / `RELEASES` |

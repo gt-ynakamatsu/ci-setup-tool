@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600" font-family="'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#003894"/></marker></defs>
+<rect width="1600" height="600" fill="#ffffff"/>
+<rect x="10" y="10" width="1040" height="580" rx="0" fill="#ffffff" stroke="#c8c8c8" stroke-width="2"/>
+<rect x="10" y="10" width="1040" height="40" rx="0" fill="#f3f3f3" stroke="none" stroke-width="2"/>
+<text x="30" y="37" font-size="18" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">CISetup</text>
+<rect x="40" y="66" width="980" height="506" rx="0" fill="#f7f9fd" stroke="#9db4dc" stroke-width="2"/>
+<text x="64" y="110" font-size="28" fill="#1a73e8" font-weight="700" text-anchor="start" xml:space="preserve">⑤ Jenkins への接続</text>
+<text x="64" y="146" font-size="19" fill="#595757" font-weight="400" text-anchor="start" xml:space="preserve">設定を登録する Jenkins サーバーです。URL・ユーザー名・API Token を入れ、</text>
+<text x="64" y="172" font-size="19" fill="#595757" font-weight="400" text-anchor="start" xml:space="preserve">「接続テスト」で確認します。</text>
+<text x="64" y="227" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">Jenkins URL</text>
+<circle cx="232" cy="219" r="13" fill="#ffffff" stroke="#7aa0d8" stroke-width="2"/>
+<text x="232" y="226" font-size="17" fill="#1a73e8" font-weight="700" text-anchor="middle" xml:space="preserve">?</text>
+<rect x="260" y="196" width="700" height="46" rx="0" fill="#ffffff" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="276" y="227" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">http://ci-server:8080/</text>
+<circle cx="990" cy="219" r="20" fill="#003894"/>
+<text x="990" y="227" font-size="22" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">1</text>
+<text x="64" y="289" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">ユーザー名</text>
+<circle cx="232" cy="281" r="13" fill="#ffffff" stroke="#7aa0d8" stroke-width="2"/>
+<text x="232" y="288" font-size="17" fill="#1a73e8" font-weight="700" text-anchor="middle" xml:space="preserve">?</text>
+<rect x="260" y="258" width="700" height="46" rx="0" fill="#ffffff" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="276" y="289" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">admin</text>
+<circle cx="990" cy="281" r="20" fill="#003894"/>
+<text x="990" y="289" font-size="22" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">2</text>
+<text x="64" y="351" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">API Token</text>
+<circle cx="232" cy="343" r="13" fill="#ffffff" stroke="#7aa0d8" stroke-width="2"/>
+<text x="232" y="350" font-size="17" fill="#1a73e8" font-weight="700" text-anchor="middle" xml:space="preserve">?</text>
+<rect x="260" y="320" width="700" height="46" rx="0" fill="#ffffff" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="276" y="351" font-size="22" fill="#595757" font-weight="400" text-anchor="start" xml:space="preserve">完了表示の API Token を貼り付ける</text>
+<circle cx="990" cy="343" r="20" fill="#003894"/>
+<text x="990" y="351" font-size="22" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">3</text>
+<text x="64" y="406" font-size="18" fill="#6e6e6e" font-weight="400" text-anchor="start" xml:space="preserve">Jenkins URL は普段ブラウザで開くトップ URL（例: http://localhost:8086/）。</text>
+<text x="64" y="432" font-size="18" fill="#6e6e6e" font-weight="400" text-anchor="start" xml:space="preserve">API Token は 右上のユーザー名 → Configure → API Token → Add new Token で発行。</text>
+<text x="64" y="460" font-size="18" fill="#003894" font-weight="700" text-anchor="start" xml:space="preserve">↑ 画面のヒント文。この手順では完了表示の URL と API Token を使う</text>
+<rect x="260" y="484" width="160" height="52" rx="0" fill="#dce8f6" stroke="#b8cde8" stroke-width="1"/>
+<text x="340" y="518" font-size="22" fill="#231815" font-weight="400" text-anchor="middle" xml:space="preserve">接続テスト</text>
+<circle cx="452" cy="510" r="20" fill="#003894"/>
+<text x="452" y="518" font-size="22" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">4</text>
+<line x1="482" y1="510" x2="1094" y2="510" stroke="#003894" stroke-width="4" marker-end="url(#arrow)"/>
+<rect x="1100" y="360" width="470" height="210" rx="0" fill="#ffffff" stroke="#c8c8c8" stroke-width="2"/>
+<rect x="1100" y="360" width="470" height="42" rx="0" fill="#f3f3f3" stroke="none" stroke-width="2"/>
+<text x="1118" y="389" font-size="19" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">接続成功</text>
+<circle cx="1150" cy="458" r="24" fill="#1a73e8"/>
+<text x="1150" y="468" font-size="28" fill="#ffffff" font-weight="700" text-anchor="middle" xml:space="preserve">i</text>
+<text x="1188" y="466" font-size="22" fill="#231815" font-weight="400" text-anchor="start" xml:space="preserve">Jenkins への接続に成功しました。</text>
+<rect x="1440" y="510" width="106" height="42" rx="0" fill="#f3f3f3" stroke="#9a9a9a" stroke-width="1"/>
+<text x="1493" y="538" font-size="20" fill="#231815" font-weight="400" text-anchor="middle" xml:space="preserve">OK</text>
+<text x="1100" y="330" font-size="23" fill="#003894" font-weight="700" text-anchor="start" xml:space="preserve">このメッセージが出れば接続テストは成功</text>
+</svg>
