@@ -21,3 +21,5 @@ cisetup/_build_revision.py
 
 # 同一リモートの入れ子クローン（プロジェクト本体ではない）
 ci-setup/
+CISetup/cisetup.secrets.local.json
+CISetup/cisetup.local.json
