@@ -159,17 +159,77 @@ def test_scan_dotnet_wrong_version(monkeypatch):
     monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
     results = environment_scan.scan()
     by_name = {r.name: r for r in results}
-    assert not by_name[".NET SDK 8"].found
-    assert "6.0.400" in by_name[".NET SDK 8"].detail
-    assert by_name["Jenkins サービス（この PC）"].found  # STOPPED でも検出扱い
+    assert not by_name[".NET SDK 8.0"].found
+    assert "6.0.400" in by_name[".NET SDK 8.0"].detail
+    assert by_name["Jenkins（この PC）"].found  # STOPPED でも検出扱い
+
+
+def test_scan_finds_script_jenkins_war(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "win32")
+    table = {
+        "sc": (1, "", ""),
+        "powershell": (0, "4242\n", ""),
+    }
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
+    result = environment_scan._check_jenkins_service()
+    assert result.found
+    assert "jenkins.war" in result.detail
+
+
+def test_scan_finds_script_task_when_process_stopped(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "win32")
+    table = {
+        "sc": (1, "", ""),
+        "powershell": (0, "", ""),
+        "schtasks": (0, "TaskName: \\CISetup Jenkins", ""),
+    }
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
+    result = environment_scan._check_jenkins_service()
+    assert result.found
+    assert "停止" in result.detail
+
+
+def test_scan_jenkins_missing_on_windows(monkeypatch):
+    monkeypatch.setattr(environment_scan.sys, "platform", "win32")
+    table = {
+        "sc": (1060, "", ""),
+        "powershell": (0, "", ""),
+        "schtasks": (1, "", "ERROR: The system cannot find the file specified."),
+    }
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
+    result = environment_scan._check_jenkins_service()
+    assert not result.found
+    assert "見つかりません" in result.detail
 
 
 def test_scan_dotnet_no_sdk(monkeypatch):
     table = {"dotnet": (0, "", "")}
     monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
     results = environment_scan.scan()
-    dotnet = next(r for r in results if r.name == ".NET SDK 8")
+    dotnet = next(r for r in results if r.name == ".NET SDK 8.0")
     assert "SDK が見つかりません" in dotnet.detail
+
+
+def test_scan_dotnet_channel_and_exact(monkeypatch):
+    table = {"dotnet": (0, "8.0.100 [C:\\sdk]\n9.0.200 [C:\\sdk]\n", "")}
+    monkeypatch.setattr(subprocess, "run", _fake_run_factory(table))
+    channel = environment_scan.scan(dotnet_sdk="9.0")
+    dotnet = next(r for r in channel if r.name == ".NET SDK 9.0")
+    assert dotnet.found
+    assert dotnet.detail == "検出: 9.0.200"
+    assert dotnet.download_url.endswith("/9.0")
+
+    exact = environment_scan.scan(dotnet_sdk="8.0.428")
+    pinned = next(r for r in exact if r.name == ".NET SDK 8.0.428")
+    assert not pinned.found
+    assert "8.0.100" in pinned.detail
+
+    try:
+        environment_scan.scan(dotnet_sdk="latest")
+    except ValueError as exc:
+        assert "8.0" in str(exc)
+    else:
+        raise AssertionError("不正な指定は拒否する")
 
 
 def test_scan_handles_missing_commands(monkeypatch):
