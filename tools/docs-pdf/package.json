@@ -1,0 +1,13 @@
+{
+  "name": "cisetup-docs-pdf",
+  "private": true,
+  "description": "配布 zip に入れる手順書の PDF を作る（tools/Build-DocsPdf.ps1 から使う）",
+  "scripts": {
+    "build": "node md2pdf.js"
+  },
+  "dependencies": {
+    "@marp-team/marp-cli": "^4.5.1",
+    "markdown-it": "^14.3.3",
+    "mermaid": "^11.17.2"
+  }
+}

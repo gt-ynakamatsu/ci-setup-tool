@@ -1,39 +1,31 @@
-# CISetup Configure
+# CISetup
 
-社内 CI（Jenkins / Git / Teams / ファイルサーバー）の設定を行うツールです。
-**Python のインストールは不要** です。
+社内 CI（Jenkins / Git / Teams / ファイルサーバー）を、画面の操作で設定するツールです。
+**Python のインストールは不要**です。
 
-## いちばん簡単な使い方
+## 使い方
 
 1. この zip をフォルダに展開します。
 2. **`CISetup.exe`** をダブルクリックします。
-3. 画面の案内にしたがって設定し、保存します。
+3. 画面の案内にしたがって入力し、保存します。
+
+各項目の意味は、画面に表示されます。
 
 ## 同梱物
 
 | ファイル | 内容 |
 |----------|------|
-| `CISetup.exe` | 本体。ダブルクリックで設定 GUI が起動します |
-| `Setup-Project.bat` | プロジェクトに CI ファイルを配置してから GUI を開くショートカット |
-| `docs\` | 操作・CI 構築の手順書 |
-
-## プロジェクトへの初回セットアップ
-
-対象プロジェクトのフォルダに CI ファイルを配置したい場合は、次のどちらかを使います。
-
-- `Setup-Project.bat` をダブルクリックし、案内にしたがってプロジェクトフォルダを指定する
-- またはコマンドで指定する:
-
-```
-CISetup.exe --open    "C:\path\to\YourProject"
-CISetup.exe --bootstrap "C:\path\to\YourProject"
-```
-
-- `--open` … フォルダを開いて GUI を起動
-- `--bootstrap` … GUI を出さずに CI ファイルだけ配置
+| `CISetup.exe` | 本体。ダブルクリックで設定画面が開きます |
+| `README.md` | このファイル |
+| `docs\` | 画面の操作、CI の構築手順、Jenkins サーバーのセットアップ手順（PDF） |
+| `tools\Setup-JenkinsServer.ps1` | 未導入の Windows サーバーへ Jenkins を入れるスクリプト |
+| `Setup-Project.bat` | プロジェクトフォルダを選んでから画面を開く補助です。通常は `CISetup.exe` だけで足ります |
 
 ## 困ったとき
 
-- exe が起動しない: 別フォルダ（社内共有でないローカル）に展開して再実行してください。
-- 設定項目の意味: GUI 内の各項目に説明があります。詳しくは `docs\GUI.md` を参照してください。
-- CI の構築手順全体: `docs\CI-GUIDE.md` を参照してください。
+- exe が起動しない: 社内の共有フォルダではなく、自分の PC 上のフォルダに展開してから開いてください。
+- 画面の項目の意味: `docs\GUI.pdf`
+- Jenkins やファイルサーバーを含めた構築手順: `docs\CI-GUIDE.pdf`
+- 全体をスライドで見たいとき: `docs\CISetup-CI-Guide.pdf`
+- 未導入の Windows サーバーへ Jenkins を入れるとき: `docs\JENKINS-SERVER-SETUP-version3.2.pdf` と `tools\Setup-JenkinsServer.ps1`
+- MSI 版、または別 PC をエージェントにするとき: `docs\JENKINS-SERVER-SETUP-MANUAL-version1.2.pdf`
